@@ -200,7 +200,9 @@ fn install(binary: &Path, source: Option<&Path>, cwd: &Path) -> Result<()> {
     let root = root
         .to_str()
         .ok_or_else(|| integration("Codex marketplace path is not valid UTF-8"))?;
-    require_success(binary, &["plugin", "marketplace", "add", root])?;
+    if replace_stale_marketplace(binary, root)? {
+        require_success(binary, &["plugin", "marketplace", "add", root])?;
+    }
     require_success(binary, &["plugin", "add", SELECTOR])?;
     if let Err(error) = activate(binary, cwd) {
         return match require_success(binary, &["plugin", "remove", SELECTOR]) {
@@ -211,6 +213,37 @@ fn install(binary: &Path, source: Option<&Path>, cwd: &Path) -> Result<()> {
         };
     }
     Ok(())
+}
+
+fn replace_stale_marketplace(binary: &Path, root: &str) -> Result<bool> {
+    let path = config_path()?;
+    let config = match std::fs::read_to_string(path) {
+        Ok(config) => config,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+        Err(error) => return Err(integration(error.to_string())),
+    };
+    let config = config
+        .parse::<DocumentMut>()
+        .map_err(|error| integration(error.to_string()))?;
+    let Some(existing) = config
+        .get("marketplaces")
+        .and_then(|item| item.get("patronus-local"))
+        .and_then(|item| item.get("source"))
+        .and_then(Item::as_str)
+    else {
+        return Ok(true);
+    };
+    if Path::new(existing) == Path::new(root) {
+        return Ok(false);
+    }
+    if configured_state().is_some_and(|state| state.0) {
+        require_success(binary, &["plugin", "remove", SELECTOR])?;
+    }
+    require_success(
+        binary,
+        &["plugin", "marketplace", "remove", "patronus-local"],
+    )?;
+    Ok(true)
 }
 
 fn activate(binary: &Path, cwd: &Path) -> Result<()> {
