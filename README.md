@@ -8,9 +8,30 @@
   Local-first security checks for AI agent chats, repositories, files and tools.
 </p>
 
-Patronus installs a small CLI and optional plugins for Codex, Claude Code and DeepSeek Harness. The plugins inspect external text before it reaches the model and keep dangerous content behind a verifiable receipt.
+Patronus installs a small CLI and optional plugins for Codex, Claude Code and DeepSeek Harness. The plugins inspect external text before it reaches the model; completed findings keep dangerous content behind a verifiable receipt.
 
-> One installer. One guided setup. No repository checkout and no archive paths.
+## Plugins
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="plugins/codex/README.md"><img src="plugins/codex/assets/icon.png" width="72" alt="Patronus for Codex"><br><strong>Codex</strong></a>
+    </td>
+    <td align="center" width="33%">
+      <a href="plugins/claude/README.md"><img src="plugins/claude/assets/icon.png" width="72" alt="Patronus for Claude Code"><br><strong>Claude Code</strong></a>
+    </td>
+    <td align="center" width="33%">
+      <a href="plugins/deepseek/README.md"><img src="plugins/deepseek/assets/icon.png" width="72" alt="Patronus for DeepSeek Harness"><br><strong>DeepSeek Harness</strong></a>
+    </td>
+  </tr>
+  <tr>
+    <td>Native prompt, tool-result and MCP-result hooks.</td>
+    <td>Native lifecycle, prompt and result hooks.</td>
+    <td>Native Cordis request and response gates.</td>
+  </tr>
+</table>
+
+Choose the hosts you use during onboarding. Each plugin page explains its hooks, protected flow and degraded behavior.
 
 ## Install
 

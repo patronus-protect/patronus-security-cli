@@ -18,3 +18,10 @@ test('missing native hook never releases data or reflects arguments', () => {
   assert(!JSON.stringify(response).includes('PRIVATE-CANARY'))
   assert(!JSON.stringify(response).includes('/private/file'))
 })
+
+test('failed static audit fallback is degraded but does not block continuation', () => {
+  const response: any = handleMcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'patronus_scan', arguments: { kind: 'url', path: 'https://example.org/' } } })
+  assert.equal(response.result.isError, false)
+  assert.match(response.result.content[0].text, /protection is degraded/)
+  assert(!JSON.stringify(response).includes('https://example.org/'))
+})

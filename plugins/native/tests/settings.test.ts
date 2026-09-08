@@ -6,7 +6,6 @@ import test from 'node:test'
 import { defaultSettings, hookEnabled, readPluginSettings } from '../../deepseek/src/settings.ts'
 import { handleHook } from '../src/hooks.ts'
 
-const safety = { isQuarantined: async () => false, quarantine: async () => {}, arm: async () => {}, hasPending: async () => false }
 const protocol = async (_config: unknown, _request: unknown, run: () => Promise<any>) => run()
 
 test('settings fail closed on malformed, unknown and symlinked configuration', async () => {
@@ -32,7 +31,7 @@ for (const host of ['codex', 'claude'] as const) {
     const rpc = async (_config: unknown, request: unknown) => { calls.push(request); return { status: 'approved' } }
     const send = (event: string, extra: object) => handleHook(host, event, {
       hook_event_name: event, session_id: 'chat-a', cwd: '/private/tmp', tool_use_id: 'call-a', ...extra,
-    }, {}, rpc, safety, undefined, protocol, () => policy)
+    }, {}, rpc, protocol, () => policy)
     policy.hooks.user_input = false
     assert.deepEqual(await send('UserPromptSubmit', { prompt: 'not scanned' }), {})
     assert.equal(calls.length, 0)
@@ -57,7 +56,7 @@ for (const host of ['codex', 'claude'] as const) {
     assert(hookEnabled(policy, host === 'codex' ? 'claude' : 'codex', 'chat-a', 'user_input'))
     let calls = 0
     const input = { hook_event_name: 'UserPromptSubmit', session_id: 'chat-a', cwd: '/private/tmp', prompt: 'hello' }
-    const send = () => handleHook(host, 'UserPromptSubmit', input, {}, async () => { calls++; return { status: 'approved' } }, safety, undefined, protocol, () => policy)
+    const send = () => handleHook(host, 'UserPromptSubmit', input, {}, async () => { calls++; return { status: 'approved' } }, protocol, () => policy)
     await send()
     assert.equal(calls, 0)
     policy.disabled_chats[host] = []
@@ -66,17 +65,17 @@ for (const host of ['codex', 'claude'] as const) {
   })
 }
 
-test('explicit pause bypasses checks but resume preserves quarantine', async () => {
+test('explicit pause and resume do not carry a session failure', async () => {
   const policy = defaultSettings()
   policy.enabled = false
   const input = { hook_event_name: 'UserPromptSubmit', session_id: 'chat-a', cwd: '/private/tmp', prompt: 'hello' }
   const result = await handleHook('claude', 'UserPromptSubmit', input, {}, async () => assert.fail('must not call scanner'),
-    { ...safety, isQuarantined: async () => true }, undefined, protocol, () => policy)
+    protocol, () => policy)
   assert.deepEqual(result, {})
   policy.enabled = true
-  const resumed = await handleHook('claude', 'UserPromptSubmit', input, {}, async () => assert.fail('must not call scanner'),
-    { ...safety, isQuarantined: async () => true }, undefined, protocol, () => policy)
-  assert.equal((resumed as any).continue, false)
+  const resumed = await handleHook('claude', 'UserPromptSubmit', input, {}, async () => ({ status: 'approved' }),
+    protocol, () => policy)
+  assert.deepEqual(resumed, {})
 })
 
 for (const host of ['codex', 'claude'] as const) {
@@ -91,7 +90,7 @@ for (const host of ['codex', 'claude'] as const) {
     }
     const send = (event: string, extra: object) => handleHook(host, event, {
       hook_event_name: event, session_id: 'native-chat-control', cwd: '/private/tmp', tool_use_id: 'call', ...extra,
-    }, {}, async () => { scans++; return { status: 'approved' } }, safety, undefined, protocol, () => policy, control)
+    }, {}, async () => { scans++; return { status: 'approved' } }, protocol, () => policy, control)
     const off = await send('UserPromptSubmit', { prompt: 'patronus off' })
     assert(JSON.stringify(off).includes('Patronus off'))
     assert.deepEqual(commands, [[host, 'native-chat-control', 'off']])

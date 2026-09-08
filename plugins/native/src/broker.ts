@@ -148,16 +148,6 @@ async function prepareSession(input: BrokerConfig) {
   return { config, id, directory, sessions, capability, repository }
 }
 
-/** Direct durable quarantine: deliberately independent of IPC and scanner readiness. */
-export async function quarantineSession(config: BrokerConfig): Promise<void> {
-  try { const { sessions, id } = await prepareSession(config); sessions.quarantine(id) }
-  catch { throw brokerFailure() }
-}
-
-export async function isSessionQuarantined(config: BrokerConfig): Promise<boolean> {
-  try { const { sessions, id } = await prepareSession(config); return sessions.isQuarantined(id) }
-  catch { return true }
-}
 
 export async function prepareBroker(input: BrokerConfig) {
   const prepared = await prepareSession(input)

@@ -45,7 +45,7 @@ fn setup_is_resumable_and_check_is_real_and_persisted() {
     }
 }
 #[test]
-fn no_interactive_setup_without_terminal_and_no_cloud_fallback() {
+fn no_interactive_setup_and_remote_scans_require_authentication() {
     let root = tempfile::tempdir().unwrap();
     cli(root.path())
         .arg("onboarding")
@@ -57,7 +57,7 @@ fn no_interactive_setup_without_terminal_and_no_cloud_fallback() {
             .args(["scan", kind, "https://example.org/", "--format", "json"])
             .assert()
             .failure()
-            .stderr(predicates::str::contains("require the API"));
+            .stderr(predicates::str::contains("authentication: not signed in"));
     }
     assert!(!root.path().join("auth/credentials.json").exists());
 }

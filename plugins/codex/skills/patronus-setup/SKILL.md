@@ -7,7 +7,7 @@ Resolve the trusted installed `patronus-security-scanner` on PATH, outside the r
 
 Start `patronus-security-scanner onboarding --open` on macOS, or `patronus-security-scanner onboarding` in an interactive terminal elsewhere. The user completes API sign-in/registration in the browser, chooses Local/Hybrid/API, prepares missing local models, sees an injection check and timings, and selects detected hosts for global plugin installation. Never ask for API credentials in chat or pipe answers into setup.
 
-Reuse `~/Library/Application Support/com.patronus.desktop/patronus-ark/models` on macOS. Local requires no account. Hybrid keeps prompts and files local; tool/MCP results up to and including 1024 tokens stay local, larger results use the API. URL/MCP server scans require Hybrid or API. Do not silently switch mode or disable protection.
+Reuse `~/Library/Application Support/com.patronus.desktop/patronus-ark/models` on macOS. Local text/file protection requires no account. Hybrid keeps prompts and files local; tool/MCP results up to and including 1024 tokens stay local, larger results use the API. Explicit URL/MCP server audits always use the API and therefore require API authentication, even in Local mode. Do not silently switch mode or disable protection.
 
 After setup, inspect `patronus-security-scanner onboarding --status --format json` and `patronus-security-scanner integration codex status --format json`. Start a new host session and verify actual hooks are active; a saved benchmark or installation record alone does not prove host protection.
 

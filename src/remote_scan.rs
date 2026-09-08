@@ -2,7 +2,7 @@
 use crate::{
     api_client::error,
     cli::{OutputFormat, RemoteScanArgs},
-    config::{Config, ProviderMode},
+    config::Config,
     error::Result,
 };
 use serde::{Deserialize, Serialize};
@@ -110,9 +110,6 @@ pub fn scan(
     target: &str,
     server: Option<&str>,
 ) -> Result<RemoteReport> {
-    if config.provider.mode == ProviderMode::Local {
-        return Err(error("URL and MCP scans require the API. Run onboarding and explicitly select Hybrid or API."));
-    }
     let target = match kind {
         "url" => https_target(target)?,
         "mcp" => mcp_target(target, server)?,
@@ -327,5 +324,12 @@ mod tests {
                 .approved
         );
         assert!(summarize("url", &["injection".into(), "dlp".into()], &[good]).is_err());
+    }
+
+    #[test]
+    fn local_mode_remote_scans_use_the_api_route() {
+        let config: Config = toml::from_str(crate::config::DEFAULTS).unwrap();
+        let error = scan(&config, "url", "http://example.org", None).unwrap_err();
+        assert!(error.to_string().contains("Expected HTTPS"));
     }
 }

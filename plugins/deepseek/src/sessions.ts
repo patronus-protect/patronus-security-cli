@@ -16,7 +16,6 @@ export class SessionState {
   private readonly runtimes = new Map<string, Promise<SessionRuntime>>()
   private readonly ownedClients = new Map<string, RuntimeClient>()
   private readonly releasing = new Map<string, Promise<void>>()
-  private readonly quarantined = new Set<string>()
   private readonly capabilities = new Map<string, string>()
 
   constructor(private readonly config: LocalClientConfig & { client?: RuntimeClient }) {
@@ -45,24 +44,8 @@ export class SessionState {
   }
 
   assertUsable(id: string | undefined): void {
-    if (!id) throw new Error('Patronus requires native session attribution before model delivery.')
+    if (!id) throw new Error('Patronus requires native session attribution.')
     this.capability(id)
-    if (this.isQuarantined(id)) {
-      throw new Error('Patronus session is quarantined after unsupported host finalization. Its stored history cannot be sent to a model.')
-    }
-  }
-
-  isQuarantined(id: string): boolean {
-    let stored = false
-    try { lstatSync(join(this.directory(id), 'quarantined')); stored = true }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw privateFailure() }
-    return this.quarantined.has(id) || stored
-  }
-
-  quarantine(id: string): void {
-    this.quarantined.add(id)
-    // Synchronous durable write completes before the native result observer returns.
-    this.createPrivateFile(join(this.directory(id), 'quarantined'), 'quarantined\n')
   }
 
   runtime(id: string, signal: AbortSignal): Promise<SessionRuntime> {

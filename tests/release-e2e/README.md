@@ -45,7 +45,7 @@ package registry; scanner processing stays local with L1 and model downloads off
 For one failure, use `--host codex --flow read-redacted` (or `deepseek`). A focused
 run is explicitly marked `releaseGate: false`; it is not a full release verdict.
 
-## Twelve small flows
+## Fourteen small flows
 
 Each of the following runs once per host:
 
@@ -55,8 +55,9 @@ Each of the following runs once per host:
 | `auto-pii` | Read the manifest with a synthetic email. | Only redacted email reaches the model; useful content remains; no manual redaction call. |
 | `pending` | Read with zero response wait, then poll. | Actual pending receipt followed by approved content; no repeated source execution. |
 | `read-redacted` | Read release notes containing an actual prompt-injection instruction, then request redaction. | The complete returned text exactly matches the golden file: only the injection span becomes `[REDACTED]`. Surrounding text, Unicode, numbers and newlines remain unchanged. |
+| `remote-fail-open` | Request a URL audit in Local mode without API authentication, then use the requested source tool. | The packaged CLI reports the unavailable audit, the hook adds degraded context, and the agent still executes the source tool exactly once. |
 | `upgrade` | Install a different previous package/definition, then invoke the public scanner update command. | Current package is restored, changed Codex hook trust is renewed, retrieval works and settings survive. |
-| `outage-recovery` | Make scanner unavailable, then restore it. | No model/source execution during outage; normal read succeeds after recovery. |
+| `outage-recovery` | Make scanner unavailable, then restore it. | The real CLI receives a model-visible inactive warning, keeps the original unscanned result usable, and succeeds normally after recovery. |
 
 The injection flow uses [the original document](fixtures/injection-document.txt)
 and an independent [expected redacted document](fixtures/injection-document.redacted.txt).

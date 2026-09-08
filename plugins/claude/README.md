@@ -1,12 +1,20 @@
-# Patronus Security for Claude Code
+<p align="center">
+  <a href="../../README.md"><img src="assets/icon.png" width="96" alt="Patronus for Claude Code"></a>
+</p>
 
-The easiest installation is the Patronus onboarding flow. It detects Claude Code, downloads this plugin from the matching public release, installs it, and enables its hooks:
+<h1 align="center">Patronus Security for Claude Code</h1>
+
+Patronus adds native security gates to Claude Code chats. It checks external text before the next model turn while keeping the scanner, policy and session state in the separately installed Patronus CLI.
+
+## Install
+
+Select Claude Code during Patronus onboarding. The CLI detects Claude Code, downloads and verifies the matching release asset, registers the plugin and enables its hooks:
 
 ```sh
 patronus-security-scanner onboarding
 ```
 
-If the Patronus CLI is already configured, install only the Claude Code plugin with:
+To add Claude Code later:
 
 ```sh
 patronus-security-scanner integration claude install
@@ -18,8 +26,45 @@ Restart Claude Code after installation. Try:
 
 > Patronus status.
 
-The plugin automatically checks user prompts, hook-visible tool-result text and MCP text blocks before model continuation. Dangerous originals remain unavailable; paths, tool requests, metadata and media bytes are outside this text boundary.
+## What the hooks do
 
-Open `patronus-security-scanner dashboard` to review activity and configuration. A supported Claude Code installation, Node.js 22.19 or newer, and the matching Patronus CLI release are required.
+| Claude Code hook | Patronus behavior |
+| --- | --- |
+| `SessionStart` | Loads the plugin lifecycle for the chat. The scanner starts lazily with the first protected event. |
+| `UserPromptSubmit` | Scans user-authored strings and text blocks before the model continues. |
+| `PreToolUse` | Intercepts only Patronus receipt-status, redaction and explicit scan operations. Ordinary tool requests are not scanned. |
+| `PostToolUse` | Scans supported raw strings, text blocks, terminal output and text-file content returned by tools. |
+| `PostToolUseFailure` | Scans the error text exposed by a failed tool result. |
+| `SessionEnd` | Closes the session runtime and releases private state. |
+
+MCP `content[].text` blocks use the separate MCP-result policy. JSON-looking text stays raw and ordered; images, paths, tool names, arguments, envelope keys, metadata and media bytes are outside the scanner input.
+
+## Runtime flow
+
+1. Claude Code exposes user input or a completed result to the installed hook.
+2. The plugin extracts only the external text covered by the runtime contract.
+3. The trusted Patronus CLI applies the configured policy for that host and surface.
+4. Clean text continues. Findings replace the visible tool output with a bounded receipt or an available redacted result.
+5. Pending results can be checked with the Patronus status tool without running the source action again.
+
+Exact chat messages `patronus off`, `patronus on` and `patronus status` control protection for the current chat. They are recognized only at the user-input boundary.
+
+## Fail-open behavior
+
+Patronus is fail-open when scanning infrastructure is unavailable. Missing authentication, exhausted API usage, scanner startup errors, timeouts or an unavailable API do not prevent the requested tool from running. Claude Code receives the original result together with explicit degraded context and must treat it as unverified. An unavailable scan is never reported as approved.
+
+A completed security finding is different: it is enforced. Prompt findings stop the model turn; result findings replace dangerous text. Fully covered PII/DLP-only results may continue through the separately retrieved masked view.
+
+## Manage the integration
+
+Open `patronus-security-scanner dashboard` to review activity and change policy. Restart Claude Code after installation or an update.
+
+```sh
+patronus-security-scanner integration claude status
+patronus-security-scanner integration claude update
+patronus-security-scanner integration claude uninstall
+```
+
+A supported Claude Code installation, Node.js 22.19 or newer, and the matching Patronus CLI release are required.
 
 Licensed under Apache-2.0. The release archive includes `LICENSE` and `THIRD_PARTY_NOTICES.md`.

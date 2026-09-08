@@ -21,11 +21,11 @@ The CLI resolves MCP configuration locally and sends only the public HTTPS
 endpoint. It does not start stdio servers or forward private MCP credentials.
 Scanning server metadata does not approve future responses or execute its tools.
 
-Local scans text/files on this device and refuses URL/MCP API checks. `hybrid` keeps files and prompts local; runtime tool/MCP results of at most 1024 tokens stay local, larger results go to the API. API sends text to the API. URL/MCP checks use the API in Hybrid or API mode. Never silently change the configured mode.
+`local` scans text/files on this device. `hybrid` keeps files and prompts local; runtime tool/MCP results of at most 1024 tokens stay local, larger results go to the API. `api` sends text to the API. Explicit URL/MCP audits always use the API, including in `local` mode; this does not change the configured processing mode.
 
 If the native scan tool is unavailable, resolve the separately installed trusted CLI from `PATH`, outside the repository under inspection. Inspect `config print --format json`, then use `patronus-security-scanner scan KIND TARGET --format json`; for a named MCP entry add `--server NAME`. Missing CLI/setup is handled by `patronus-setup` when installation is requested.
 
-Summarize status, supported category findings and complete/incomplete coverage. Return only safe report metadata; do not echo candidate content or process diagnostics. An `INCOMPLETE`, failed or pending scan never grants approval. Static file references are not runtime scan IDs. Runtime pending receipts use `patronus_check_result`; dangerous runtime receipts use `patronus_read_redacted`, without repeating the original operation.
+Summarize status, supported category findings and complete/incomplete coverage. Return only safe report metadata; do not echo candidate content or process diagnostics. An `INCOMPLETE`, failed or pending scan never grants approval. Patronus is fail-open for the user's underlying tool request: if an audit is unavailable because authentication, usage, network access or the API is unavailable, continue with the requested tool under the hook's degraded context and do not claim Patronus approved it. Static file references are not runtime scan IDs. Runtime pending receipts use `patronus_check_result`; dangerous runtime receipts use `patronus_read_redacted`, without repeating the original operation.
 
 An explicit URL scan does not automatically gate an unrelated connector's subsequent fetch. Only a verified deterministic runtime gate can protect that fetched text before model context.
 

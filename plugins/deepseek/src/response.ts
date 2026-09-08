@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { PostToolDecision, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { RuntimeClient } from './protocol.ts'
+import { degradedMessage } from './degraded.ts'
 import type { SessionRuntime } from './sessions.ts'
 import { fingerprint, projectResult, isNativeCancellation } from './host.ts'
 import { blocked, receipt } from './receipts.ts'
@@ -16,8 +17,13 @@ export interface Gate {
   signal: AbortSignal
   isOwnTool(exec: ToolExecution): boolean
   sessionFor(exec: ToolExecution): string
-  unsupported(exec: ToolExecution): void
+  warnLater(exec: ToolExecution): void
   events: ProtocolEventSink
+}
+
+function warn(decision: PostToolDecision): PostToolDecision {
+  if (decision.kind !== 'accept') return decision
+  return { ...decision, additionalContexts: [...decision.additionalContexts ?? [], degradedMessage()] }
 }
 
 export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: number): void {
@@ -33,12 +39,18 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
     const started = performance.now()
     let payloadHash = hashProtocolValue('unavailable')
     let session = ''
+    let decision: PostToolDecision | undefined
     try {
-      const decision = await next()
+      decision = await next()
       if (gate.enabledFor?.(exec) === false) { bypassed.add(exec); return decision }
       const envelope = projectResult(result, decision)
       const text = toolResultText(envelope)
-      if (gate.isOwnTool(exec)) return decision
+      if (gate.isOwnTool(exec)) {
+        const value = result.value
+        return exec.name === 'patronus_scan' && typeof value === 'object' && value !== null && !Array.isArray(value) && value.status === 'FAILED'
+          ? warn(decision)
+          : decision
+      }
       if (text.length === 0) return finish(exec, result, decision)
       const payload = textPayload(text)
       payloadHash = hashProtocolValue(payload)
@@ -52,18 +64,22 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
       gate.events.emit({ kind: 'scan_started', direction: 'response', tool: exec.name, session_id: session, scan_id: submission.scan_id, status: submission.status, duration_ms: elapsed(started), payload_hash: payloadHash })
       const scanned = await autoRedact(await waitForScan(client, job, waitMs, signal), () => client!.readRedacted(job!, signal))
       gate.events.emit({ kind: 'scan_completed', direction: 'response', tool: exec.name, session_id: session, scan_id: scanned.scan_id, status: scanned.status, duration_ms: elapsed(started), payload_hash: payloadHash })
-      if (scanned.status === 'approved' && ctx.tools.get(exec.name, exec.agent)?.finalizeContent === undefined) {
+      if (ctx.tools.get(exec.name, exec.agent)?.finalizeContent !== undefined) {
+        bypassed.add(exec)
+        return warn(decision)
+      }
+      if (scanned.status === 'approved') {
         return finish(exec, result, decision)
       }
-      const metadata = receipt(scanned) as Record<string, JsonValue>
-      if (scanned.status === 'approved') {
-        metadata.message = 'The source tool already executed and its scan is approved. Call patronus_check_result with this scan_id to retrieve the result. Do not rerun the source tool.'
+      if (['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'].includes(scanned.status)) {
+        return finish(exec, result, warn(decision))
       }
+      const metadata = receipt(scanned) as Record<string, JsonValue>
       return finish(exec, result, blocked(metadata))
     } catch {
       gate.events.emit({ kind: 'scan_failed', direction: 'response', tool: exec.name, session_id: session || String(exec.agent?.id ?? ''), ...(job ? { scan_id: job.scan_id } : {}), status: 'failed', duration_ms: elapsed(started), payload_hash: payloadHash })
       if (job && client) void client.cancel(job).catch(() => {})
-      return finish(exec, result, blocked(receipt({ scan_id: job?.scan_id ?? '', status: 'failed' })))
+      return finish(exec, result, warn(decision ?? { kind: 'accept' }))
     }
   })
   ctx.on('tools/result', (exec, result) => {
@@ -72,9 +88,7 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
       expected.delete(exec)
       return
     }
-    // The host has no post-finalizer rewrite hook. Stop the next model request
-    // if a finalizer/outer middleware changed the exact projection we checked.
-    if (expected.get(exec) !== fingerprint(result) && !isNativeCancellation(exec, result)) gate.unsupported(exec)
+    if (expected.get(exec) !== fingerprint(result) && !isNativeCancellation(exec, result)) gate.warnLater(exec)
     expected.delete(exec)
   })
 }

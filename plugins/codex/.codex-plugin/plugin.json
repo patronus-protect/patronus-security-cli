@@ -6,8 +6,8 @@
     "name": "Patronus",
     "url": "https://github.com/patronus-protect"
   },
-  "homepage": "https://github.com/patronus-protect/patronus-security-scanner",
-  "repository": "https://github.com/patronus-protect/patronus-security-scanner",
+  "homepage": "https://github.com/patronus-protect/patronus-security-cli",
+  "repository": "https://github.com/patronus-protect/patronus-security-cli",
   "license": "Apache-2.0",
   "keywords": [
     "security",
@@ -27,9 +27,8 @@
     "capabilities": [
       "Read"
     ],
-    "websiteURL": "https://github.com/patronus-protect/patronus-security-scanner",
-    "privacyPolicyURL": "https://github.com/patronus-protect/patronus-security-scanner/blob/main/docs/privacy.md",
-    "termsOfServiceURL": "https://github.com/patronus-protect/patronus-security-scanner/blob/main/docs/terms.md",
+    "websiteURL": "https://github.com/patronus-protect/patronus-security-cli",
+    "privacyPolicyURL": "https://github.com/patronus-protect/patronus-security-cli/blob/main/docs/privacy.md",
     "defaultPrompt": [
       "Scan this repository with Patronus Ark.",
       "Scan this file for prompt injection, DLP, and PII signals.",

@@ -92,12 +92,10 @@ function replaceClaudeResponse(response: unknown, text: string): unknown {
   }
 }
 
-/**
- * Claude 2.1.224. The controller must persist quarantine before returning stop.
- * PostToolUseFailure does not honor continuation stopping in this version:
- * a registered PostToolBatch hook must enforce the persisted quarantine.
- */
 export function mapClaude(event: string, decision: HookDecision, input?: HookInput): object {
+  if (decision.kind === 'warn') return { hookSpecificOutput: {
+    hookEventName: event, additionalContext: decision.text,
+  } }
   if (event === 'PreToolUse') {
     return {
       hookSpecificOutput: {

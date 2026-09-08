@@ -203,11 +203,9 @@ impl Config {
         if self.provider.api_key_env.trim().is_empty() {
             return Err(invalid("provider.api_key_env must not be empty".into()));
         }
-        if self.provider.mode != ProviderMode::Local
-            && self.provider.api_base_url != "https://control.patronus.studio/api/v1"
-        {
+        if self.provider.api_base_url != "https://control.patronus.studio/api/v1" {
             return Err(invalid(
-                "Cloud inference requires https://control.patronus.studio/api/v1".into(),
+                "API requests require https://control.patronus.studio/api/v1".into(),
             ));
         }
         if self.chunking.target_bytes == 0

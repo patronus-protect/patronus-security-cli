@@ -1,7 +1,7 @@
 # Runtime text security contract
 
 Patronus runtime plugins protect **external text before it reaches the agent model**.
-Each enabled surface uses the same text boundary across supported hosts. Users may explicitly disable a surface or pause a chat through the trusted [plugin settings](plugin-configuration.md); disabled surfaces do not grant scan approval. The default enables all three surfaces:
+Each enabled surface uses the same text boundary across supported hosts. Users may explicitly disable a surface or pause a chat through the trusted dashboard or CLI settings; disabled surfaces do not grant scan approval. The default enables all three surfaces:
 
 1. **User Prompt Input** — scan every user-authored text string or text block,
    excluding the `pii` category by default. `analysis.user_prompt_pii` explicitly opts it in; other configured categories remain active.
@@ -19,6 +19,13 @@ These rules are unconditional:
 - Envelope keys, paths, tool names, metadata, media bytes, and tool-call
   arguments are not scanner input.
 - Tool requests are outside this runtime text contract and must not be scanned.
+- Protection is fail-open for tool execution. Missing authentication, exhausted
+  API usage, scanner startup failures, timeouts, and unavailable API responses
+  must not prevent the agent from invoking the requested tool.
+- When Patronus cannot complete a result scan, the original result remains
+  available to the agent together with explicit degraded context. This does
+  not grant approval: the agent must identify the content as unchecked and may
+  continue the user's task with that limitation visible.
 - Multiple text blocks retain their order and are submitted as raw strings;
   non-text blocks neither enter the scanner nor cause adjacent text to be
   skipped.
@@ -63,3 +70,8 @@ five-minute scan budget, covered by the native PreToolUse broker and host budget
 Configuration failures return `configuration_unavailable` without exposing raw
 process diagnostics; expiration remains `timeout`. An installed CLI must support
 the active configuration, including `ark.model_dir` when configured.
+
+Explicit URL/MCP audits use the API in every processing mode. If authentication,
+usage, network access, or the API is unavailable, the CLI audit reports failure.
+The hook must fall open, preserve normal tool execution, and add degraded context;
+an unavailable audit is never approval.

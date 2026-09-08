@@ -87,8 +87,8 @@ test('media-only responses have no external text to scan or replace', () => {
   }
 });
 
-test('PostToolBatch is the final native stop point for a quarantined session', () => {
-  assert.deepEqual(mapClaude('PostToolBatch', { kind: 'stop', text: 'QUARANTINED' }), {
-    continue: false, stopReason: 'QUARANTINED',
+test('warnings add model context without stopping or replacing the result', () => {
+  assert.deepEqual(mapClaude('PostToolUseFailure', { kind: 'warn', text: 'UNTRUSTED' }), {
+    hookSpecificOutput: { hookEventName: 'PostToolUseFailure', additionalContext: 'UNTRUSTED' },
   });
 });

@@ -6,24 +6,23 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
-import { SessionId, type SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { MockAdapter, textResponse, toolCallResponse } from 'harness-test-mock'
 import { expect, it } from 'vitest'
 import { ControlledScanner, createAgent, createHarness, execute, lastReceipt, registerTextTool } from './harness.ts'
 
 const user = (text: string) => createUserMessage({ content: [{ type: 'text' as const, text }], source: { kind: 'user' as const } })
 
-it('keeps a finalizer-contaminated native session quarantined after restore and native fork', async () => {
-  const stateDir = await mkdtemp(join(tmpdir(), 'patronus-quarantine-'))
+it('keeps a finalizer-modified session usable and warns the model', async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), 'patronus-degraded-'))
   const id = SessionId(crypto.randomUUID())
   const canary = 'FINALIZER-UNSCANNED-ORIGINAL'
-  const adapter = new MockAdapter([toolCallResponse('source', 'document', {})])
+  const adapter = new MockAdapter([toolCallResponse('source', 'document', {}), textResponse('continued')])
   const ctx = await createHarness({ async scan(text) {
     return JSON.stringify(text).includes(canary)
       ? { status: 'dangerous', redacted: [{ type: 'text', text: '[REDACTED]' }] }
       : { status: 'approved' }
   } }, adapter, { stateDir })
-  let history: ReturnType<Awaited<ReturnType<typeof createAgent>>['session']['snapshotEvents']>
   try {
     const tool = defineTool({ name: 'document', description: 'Fixture', parameters: {},
       output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
@@ -34,32 +33,13 @@ it('keeps a finalizer-contaminated native session quarantined after restore and 
     const agent = await createAgent(ctx, id)
     agent.followup(user('Read the document.'))
     await agent.whenIdle()
-    history = agent.session.snapshotEvents()
-    expect(adapter.requests).toHaveLength(1)
-    expect(JSON.stringify(history)).toContain(canary)
-    expect(JSON.stringify(adapter.requests)).not.toContain(canary)
-    const fork = await ctx.agents.create({
-      sessionId: SessionId(crypto.randomUUID()), seed: history,
-      meta: { parentSession: id, isSeeded: true }, inheritedEventCount: history.length as SessionLogOffset,
-      agentOptions: { provider: 'probe', model: 'scripted' },
-    })
-    fork.agent.followup(user('Continue from the inherited history.'))
-    await fork.agent.whenIdle()
-    expect(adapter.requests).toHaveLength(1)
-    expect(JSON.stringify(fork.agent.session.snapshotEvents())).toContain('quarantined')
-  } finally { await ctx.fiber.dispose() }
-  const resumedAdapter = new MockAdapter([textResponse('must not see contaminated history')])
-  const resumedCtx = await createHarness({ async scan() { return { status: 'approved' } } }, resumedAdapter, { stateDir })
-  try {
-    const resumed = await resumedCtx.agents.create({ sessionId: id, seed: history!, agentOptions: { provider: 'probe', model: 'scripted' } })
-    resumed.agent.followup(user('Continue.'))
-    await resumed.agent.whenIdle()
-    expect(resumedAdapter.requests).toHaveLength(0)
-    expect(JSON.stringify(resumed.agent.session.snapshotEvents())).toContain('quarantined')
-  } finally { await resumedCtx.fiber.dispose(); await rm(stateDir, { recursive: true, force: true }) }
+    expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[1])).toContain(canary)
+    expect(JSON.stringify(adapter.requests[1])).toContain('No security scan was completed')
+  } finally { await ctx.fiber.dispose(); await rm(stateDir, { recursive: true, force: true }) }
 })
 
-it('does not quarantine a canonical cancellation or stop an independent agent', async () => {
+it('a canonical cancellation does not stop an independent agent', async () => {
   const stateDir = await mkdtemp(join(tmpdir(), 'patronus-cancel-session-'))
   const adapter = new MockAdapter([textResponse('independent'), textResponse('cancelled session recovered')])
   const ctx = await createHarness({ async scan() { return { status: 'approved' } } }, adapter, { stateDir })

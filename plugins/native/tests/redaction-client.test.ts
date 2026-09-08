@@ -47,9 +47,7 @@ for (const host of ['codex', 'claude'] as const) {
       const result = await handleHook(host, 'PreToolUse', {
         hook_event_name: 'PreToolUse', session_id: 'test-session', cwd: '/private/tmp',
         tool_use_id: 'call-1', tool_name: 'mcp__patronus__patronus_read_redacted', tool_input: {scan_id},
-      }, {}, async () => { calls++; return {} }, {
-        async isQuarantined() { return false }, async quarantine() {}, async arm() {}, async hasPending() { return false },
-      })
+      }, {}, async () => { calls++; return {} })
       assert.equal(calls, 0)
       assert.match(JSON.stringify(result), /wrong_id_type/)
       assert.doesNotMatch(JSON.stringify(result), /inactive|integration .* enable/)

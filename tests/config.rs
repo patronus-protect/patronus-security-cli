@@ -11,13 +11,15 @@ fn compiled_defaults_are_valid_and_runnable() {
 }
 
 #[test]
-fn cloud_providers_are_explicit_and_validated() {
+fn api_origin_is_fixed_for_every_processing_mode() {
     let mut config: Config = toml::from_str(DEFAULTS).unwrap();
     config.provider.mode = ProviderMode::Hybrid;
     config.validate().expect("hybrid uses the fixed API origin");
     config.provider.mode = ProviderMode::Api;
     config.validate().expect("API provider is valid");
     config.provider.api_base_url = "https://api.patronus.example".into();
+    assert!(config.validate().is_err());
+    config.provider.mode = ProviderMode::Local;
     assert!(config.validate().is_err());
 }
 

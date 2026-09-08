@@ -18,7 +18,7 @@ export async function deepseekSetup(reportRoot) {
   await mkdir(workspace,{recursive:true})
   const installed = join(home,'profiles/headless/node_modules/@patronus/deepseek-security')
   const resolver = join(root,'resolver.mjs')
-  await writeFile(resolver, `export function resolve(specifier,context,next){if(specifier==='@deepseek-ai/dsh-tools' && context.parentURL?.startsWith(${JSON.stringify(pathToFileURL(installed).href+'/')}))return next(${JSON.stringify(pathToFileURL(join(harness,'packages/core/tools/src/index.ts')).href)},context);return next(specifier,context)}`)
+  await writeFile(resolver, `const sources={'@deepseek-ai/dsh-llm':${JSON.stringify(pathToFileURL(join(harness,'packages/llm/llm/src/index.ts')).href)},'@deepseek-ai/dsh-tools':${JSON.stringify(pathToFileURL(join(harness,'packages/core/tools/src/index.ts')).href)}};export function resolve(specifier,context,next){if(sources[specifier] && context.parentURL?.startsWith(${JSON.stringify(pathToFileURL(installed).href+'/')}))return next(sources[specifier],context);return next(specifier,context)}`)
   const register = join(root,'register.mjs')
   await writeFile(register,`import {register} from 'node:module';register(${JSON.stringify(pathToFileURL(resolver).href)});`)
   const dsh = process.env.PATRONUS_DSH_BIN || join(root,'dsh')
@@ -50,21 +50,23 @@ export async function deepseekSetup(reportRoot) {
 
 export async function deepseekFlow(setup, flow) {
   const {root,home,workspace,dsh,env,installed,tarball,model} = setup
+  const flowEnv = {...env}
+  if (flow === 'remote-fail-open') delete flowEnv.PATRONUS_API_KEY
   const dir = join(root,flow); await mkdir(dir)
   const config = join(dir,'scanner.toml'), document = join(dir,'manifest.toml'), counter=join(dir,'executions')
   const evidence = join(dir,'evidence.json'), requests=join(dir,'requests.json')
   await writeFile(config,scannerConfig)
   await writeFile(document,flow==='read-redacted'?injectionDocument:manifest+(flow==='auto-pii'?`author = "${email}"\n`:''))
-  const patch = executable => [
+  const patch = (executable, degraded = false) => [
     {id:'patronus-security',config:{executable,configPath:config,stateDir:join(dir,'scanner-state'),responseWaitMs:0}},
     {id:'agent-default-model',config:{provider:'release-model',model:'scripted'}},
     {id:'llm-deepseek',disabled:true},{id:'session-title-llm',disabled:true},{id:'typert-loader',disabled:true},
-    {insert:[{id:'release-model',name:model,config:{flow,document,counter,evidence,requests,...(flow==='read-redacted'?{expectedRedacted:injectionRedacted}:{})}}]},
+    {insert:[{id:'release-model',name:model,config:{flow,degraded,document,counter,evidence,requests,...(flow==='read-redacted'?{expectedRedacted:injectionRedacted}:{})}}]},
   ]
   const patchPath=join(home,'profiles/headless/cordis.patch.yml')
   await writeFile(patchPath,JSON.stringify(patch(process.env.PATRONUS_SCANNER_BIN)))
   const execute = async label => {
-    const result = await run(dsh,['--profile','headless','Read the local fixture document.'],{cwd:workspace,env})
+    const result = await run(dsh,['--profile','headless','Read the local fixture document.'],{cwd:workspace,env:flowEnv})
     await writeFile(join(dir,label+'.json'),JSON.stringify(result,null,2))
     return result
   }
@@ -90,10 +92,14 @@ export async function deepseekFlow(setup, flow) {
       await verifySettings()
     }
     if(flow==='outage-recovery') {
-      await writeFile(patchPath,JSON.stringify(patch(join(dir,'absent-scanner'))))
-      await execute('outage')
-      await assert.rejects(readFile(requests),{code:'ENOENT'},'Unavailable scanner allowed model execution')
-      await assert.rejects(readFile(counter),{code:'ENOENT'})
+      await writeFile(patchPath,JSON.stringify(patch(join(dir,'absent-scanner'),true)))
+      const outage=await execute('outage')
+      assert.equal(outage.code,0,outage.stderr)
+      assert(outage.stdout.includes('RELEASE_FLOW_PASSED'),'Degraded CLI task did not finish')
+      const degradedProof=JSON.parse(await readFile(evidence,'utf8'))
+      assert.equal(degradedProof.degradedWarning,true)
+      assert.equal(degradedProof.originalAvailable,true)
+      assert.equal(await readFile(counter,'utf8'),'1')
       await writeFile(patchPath,JSON.stringify(patch(process.env.PATRONUS_SCANNER_BIN)))
     }
     const result=await execute('host')
@@ -101,7 +107,7 @@ export async function deepseekFlow(setup, flow) {
     assert(result.stdout.includes('RELEASE_FLOW_PASSED'),'CLI did not finish the scripted task')
     const proof=JSON.parse(await readFile(evidence,'utf8'))
     assert.equal(proof.completed,true)
-    assert.equal(await readFile(counter,'utf8'),'1')
-    return {...proof,root:dir}
+    assert.equal(await readFile(counter,'utf8'),flow==='outage-recovery'?'11':'1')
+    return {...proof,...(flow==='outage-recovery'?{degradedWarning:true,originalAvailable:true,recovered:true,sourceExecutions:2}:{}),root:dir}
   } catch(error) { error.evidenceRoot=dir; error.message+=`\nDeepSeek evidence: ${dir}`;throw error }
 }

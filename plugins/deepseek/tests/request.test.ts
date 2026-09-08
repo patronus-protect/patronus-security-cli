@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { MockAdapter, toolCallResponse } from 'harness-test-mock'
+import { MockAdapter, textResponse, toolCallResponse } from 'harness-test-mock'
 import { describe, expect, it } from 'vitest'
 import { LocalClient } from '../src/client.ts'
 import { receipt, unavailable } from '../src/receipts.ts'
@@ -78,9 +78,9 @@ describe('external-text boundary', () => {
     } finally { await ctx.fiber.dispose() }
   })
 
-  it('quarantines text inserted after a media-only result was inspected', async () => {
+  it('warns and continues when a finalizer inserts unscanned text', async () => {
     const client = new FakeClient({ async scan() { return { status: 'approved' } } })
-    const adapter = new MockAdapter([toolCallResponse('source', 'late-text', {})])
+    const adapter = new MockAdapter([toolCallResponse('source', 'late-text', {}), textResponse('continued')])
     const ctx = await createHarness(client, adapter)
     const agent = await createAgent(ctx, 'late-text')
     try {
@@ -93,8 +93,9 @@ describe('external-text boundary', () => {
       ctx.tools.register(tool)
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Run the fixture.' }], source: { kind: 'user' } }))
       await agent.whenIdle()
-      expect(adapter.requests).toHaveLength(1)
-      expect(JSON.stringify(adapter.requests)).not.toContain('unscanned late text')
+      expect(adapter.requests).toHaveLength(2)
+      expect(JSON.stringify(adapter.requests[1])).toContain('unscanned late text')
+      expect(JSON.stringify(adapter.requests[1])).toContain('No security scan was completed')
       expect(JSON.stringify(agent.session.snapshotEvents())).toContain('unscanned late text')
       expect(client.submissions.map(item => item.payload)).toEqual(['Run the fixture.'])
     } finally { await ctx.fiber.dispose() }

@@ -53,7 +53,6 @@ test('failed or mismatched redaction preserves the manual retrieval route withou
   }
 })
 
-const safety={async isQuarantined(){return false},async quarantine(){},async arm(){},async hasPending(){return false}}
 const protocol=async(_c:unknown,_r:unknown,run:()=>Promise<any>)=>run()
 for (const host of ['codex','claude'] as const) {
   test(`${host} delivers automatic masked output at the native tool boundary and status retrieval`, async()=>{
@@ -63,7 +62,7 @@ for (const host of ['codex','claude'] as const) {
         hook_event_name:event,session_id:'redaction-test',cwd:'/private/tmp',tool_use_id:'call-1',
         tool_name:event==='PreToolUse'?'mcp__patronus__patronus_check_result':'mcp__fixture__read',
         tool_input:{scan_id:dangerous.scan_id},tool_response:{content:[{type:'text',text:original},{type:'image',data:'MEDIA'}]},
-      },{},async()=>result as any,safety,undefined,protocol)
+      },{},async()=>result as any,protocol)
       assert(!JSON.stringify(value).includes(original))
       assert.match(JSON.stringify(value),/REDACTED/)
       assert.match(JSON.stringify(value),/redacted/)

@@ -7,14 +7,37 @@ import { done, quote } from '../../plugins/codex/tests/host-helper.mjs'
 import { checked, scannerConfig, manifest, marker, email, injection, injectionDocument, injectionRedacted, seedSettings } from './common.mjs'
 
 export async function codexFlow(flow) {
-  let command, counter, phase = 'read', submitted = false
+  let command, counter, phase = 'read', submitted = false, remoteAuditSeen = false
   const states = [], tools = []
   const fixture = await nativeFixture((body, index) => {
     assert(index < 40, 'Retrieval exceeded 40 model calls')
     const visible = JSON.stringify(body.input)
+    const degradedOutage = flow === 'outage-recovery' && phase === 'outage'
     assert(!visible.includes('Patronus native hooks did not handle this call'), 'Native retrieval reached the MCP placeholder')
     assert(!visible.includes(email), 'Original PII reached the model')
     assert(!visible.includes(injection), 'Original injection reached the model')
+    if (degradedOutage) {
+      assert(visible.includes('No security scan was completed'), 'Inactive Patronus warning did not reach the model')
+      if (!submitted) {
+        submitted = true
+        tools.push('degraded-source')
+        return [customCall(body, 'exec', `text(await tools.exec_command({cmd:${JSON.stringify(command)}}));`, 'outage-source')]
+      }
+      assert(visible.includes(marker), 'Original unscanned result did not remain available')
+      states.push('degraded')
+      return [done()]
+    }
+    if (flow === 'remote-fail-open' && !remoteAuditSeen) {
+      if (!submitted) {
+        submitted = true
+        tools.push('patronus_scan')
+        return [customCall(body, 'exec', 'text(await tools.mcp__patronus__patronus_scan({kind:"url",path:"https://example.org/"}));', 'remote-audit')]
+      }
+      assert(visible.includes('protection is degraded') || visible.includes('protection is inactive'), 'Unavailable API audit omitted degraded context')
+      remoteAuditSeen = true
+      tools.push('source')
+      return [customCall(body, 'exec', `text(await tools.exec_command({cmd:${JSON.stringify(command)}}));`, phase + '-source')]
+    }
     if (!submitted) {
       submitted = true
       tools.push('source')
@@ -56,6 +79,7 @@ export async function codexFlow(flow) {
   })
   try {
     fixture.env.PATRONUS_DATA_DIR = join(fixture.root, 'private-data')
+    if (flow === 'remote-fail-open') delete fixture.env.PATRONUS_API_KEY
     await writeFile(fixture.env.PATRONUS_CONFIG, scannerConfig)
     const file = join(fixture.cwd, 'manifest.toml')
     await writeFile(file, flow === 'read-redacted' ? injectionDocument : manifest + (flow === 'auto-pii' ? `author = "${email}"\n` : ''))
@@ -75,21 +99,24 @@ export async function codexFlow(flow) {
     }
     if (flow === 'outage-recovery') {
       fixture.env.PATRONUS_SCANNER_BIN = join(fixture.root, 'absent-scanner')
-      const failed = await fixture.exec('outage', { expectSuccess: false })
-      assert.equal(fixture.server.requests.length, 0, 'Unavailable scanner allowed a model call')
-      assert.equal(await readCounter(counter), '')
-      assert(!failed.stdout.includes(marker))
+      phase = 'outage'
+      await fixture.exec('outage')
+      assert.equal(await readCounter(counter), '1', 'Degraded source action did not execute exactly once')
+      assert(states.includes('degraded'), 'Degraded result was not observed by the model')
       fixture.env.PATRONUS_SCANNER_BIN = process.env.PATRONUS_SCANNER_BIN
       phase = 'recovered'
+      submitted = false
     }
     await fixture.exec(flow)
-    assert.equal(await readCounter(counter), '1', 'Source action must execute exactly once')
+    const sourceExecutions = flow === 'outage-recovery' ? 2 : 1
+    assert.equal(await readCounter(counter), '1'.repeat(sourceExecutions), 'Unexpected source execution count')
+    if (flow === 'remote-fail-open') assert(remoteAuditSeen && tools.includes('patronus_scan') && tools.includes('source'))
     if (flow === 'pending') assert(states.includes('pending') && tools.includes('patronus_check_result'))
     if (flow === 'read-redacted') {
       assert(states.includes('dangerous'))
       assert(tools.includes('patronus_read_redacted'))
     }
-    return { ...(flow === 'read-redacted' ? { exactRedaction: true, unchangedSurroundingContent: true } : {}), root: fixture.root, states, tools, sourceExecutions: 1, modelCalls: fixture.server.requests.length }
+    return { ...(flow === 'read-redacted' ? { exactRedaction: true, unchangedSurroundingContent: true } : {}), ...(flow === 'remote-fail-open' ? { remoteAudit: 'FAILED', degraded: true, failOpen: true } : {}), ...(flow === 'outage-recovery' ? { degradedWarning: true, originalAvailable: true, recovered: true } : {}), root: fixture.root, states, tools, sourceExecutions, modelCalls: fixture.server.requests.length }
   } catch (error) {
     error.evidenceRoot = fixture.root
     error.message += `\nCodex evidence: ${fixture.root}`

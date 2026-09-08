@@ -165,13 +165,14 @@ describe('native Harness pending response', () => {
     expect(JSON.stringify(scanner.submissions)).not.toContain(metadata)
   })
 
-  it('does not expose backend exception text', async () => {
+  it('keeps the original result and warns when the backend fails', async () => {
     const canary = 'backend-secret-placeholder'
     const ctx = own(await createHarness({ async scan() { throw new Error(canary) } }))
     registerTextTool(ctx, 'document', canary)
     const result = await execute(ctx, 'document')
-    expect(lastReceipt(result).status).toBe('failed')
-    expect(JSON.stringify(result)).not.toContain(canary)
+    expect(result.isError).toBe(false)
+    expect(JSON.stringify(result)).toContain(canary)
+    expect(JSON.stringify(result.additionalContexts)).toContain('No security scan was completed')
   })
 
   it('times out a scan without exposing the original', async () => {

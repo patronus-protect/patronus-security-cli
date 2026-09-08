@@ -2,9 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { handleHook as runHook } from '../src/hooks.ts'
 
-const safeSession = { isQuarantined: async () => false, quarantine: async () => {}, arm: async () => {}, hasPending: async () => false }
 const noProtocol = async (_config: unknown, _request: unknown, run: () => Promise<any>) => run()
-const handleHook: typeof runHook = (host, event, value, overrides, rpc, safety = safeSession) => runHook(host, event, value, overrides, rpc, safety, undefined, noProtocol)
+const handleHook: typeof runHook = (host, event, value, overrides, rpc) => runHook(host, event, value, overrides, rpc, noProtocol)
 
 const base = { session_id: 'native-session-731', cwd: '/private/tmp', tool_name: 'Bash', tool_use_id: 'call-731', tool_input: { command: 'true' } }
 const input = (event: string, extra = {}) => ({ ...base, hook_event_name: event, ...extra })
@@ -52,69 +51,52 @@ test('static scope reaches the scanner as an absolute path, without source bytes
   assert.equal(JSON.parse(result.hookSpecificOutput.permissionDecisionReason).approved, true)
 })
 
-test('broker failures and malformed native inputs return fixed output without diagnostic content', async () => {
+test('failed URL audits fall open with degraded context', async () => {
+  const result: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', {
+    tool_name: 'mcp__patronus__patronus_scan', tool_input: { kind: 'url', path: 'https://example.org/' },
+  }), {}, async () => ({ schema: 'patronus.native.static.v1', status: 'FAILED', approved: false, reason: 'scan_unavailable' }))
+  assert.equal(result.hookSpecificOutput.permissionDecision, undefined)
+  assert.match(result.hookSpecificOutput.additionalContext, /continue the task/)
+  assert.match(result.systemMessage, /protection is inactive/)
+})
+
+test('broker failures and malformed native inputs warn without blocking', async () => {
   const result: any = await handleHook('codex', 'PostToolUse', input('PostToolUse', { tool_response: 'SUPPORTED-TEXT-731' }), {}, async () => { throw new Error('PRIVATE-DIAGNOSTIC-731') })
   assert(!JSON.stringify(result).includes('PRIVATE-DIAGNOSTIC-731'))
-  assert.equal(result.decision, 'block')
+  assert.equal(result.decision, undefined)
+  assert.match(result.systemMessage, /protection is inactive/)
   for (const event of ['PreToolUse', 'PostToolUse']) {
     const malformed: any = await handleHook('codex', event, { hook_event_name: 'wrong', session_id: '../foreign' }, {}, async () => { throw Error('Must not call') })
-    assert(event === 'PreToolUse' ? malformed.hookSpecificOutput.permissionDecision === 'deny' : malformed.decision === 'block')
+    assert.equal(malformed.decision, undefined)
+    assert.match(malformed.systemMessage, /protection is inactive/)
   }
 })
 
-test('only unavailable integrations return actionable activation guidance', async () => {
+test('degraded integrations warn the agent and continue', async () => {
   const unavailable: any = await handleHook('codex', 'UserPromptSubmit', input('UserPromptSubmit', { prompt: 'hello' }), {}, async () => ({
     scan_id: '', status: 'unavailable',
   }))
-  const guidance = unavailable.reason
+  const guidance = unavailable.hookSpecificOutput.additionalContext
   assert.match(guidance, /integration codex status --format json/)
   assert.match(guidance, /integration codex enable/)
-  assert.match(guidance, /integration codex disable/)
-  assert.match(guidance, /integration codex uninstall/)
+  assert.match(guidance, /continue the task/)
+  assert.equal(unavailable.decision, undefined)
 
   const failed: any = await handleHook('codex', 'UserPromptSubmit', input('UserPromptSubmit', { prompt: 'hello' }), {}, async () => ({
     scan_id: 'scan-731', status: 'failed',
   }))
-  assert.doesNotMatch(failed.reason, /integration codex enable/)
+  assert.match(failed.hookSpecificOutput.additionalContext, /integration codex enable/)
 })
 
-test('quarantined sessions block subsequent user submissions', async () => {
-  const result: any = await handleHook('codex', 'UserPromptSubmit', input('UserPromptSubmit'), {}, async () => { throw Error('IPC unavailable') }, { ...safeSession, isQuarantined: async () => true })
-  assert.equal(result.decision, 'block')
-})
-
-test('Claude failures persist quarantine without a running broker and stop the following batch', async () => {
-  let quarantined = false
-  let armed = false
-  const safety = { ...safeSession, isQuarantined: async () => quarantined, arm: async () => { armed = true }, quarantine: async () => { quarantined = true } }
+test('Claude failures warn without poisoning later events', async () => {
   const unavailable = async () => { throw Error('IPC unavailable') }
-  const failure: any = await handleHook('claude', 'PostToolUseFailure', input('PostToolUseFailure', { error: 'PRIVATE-ERROR-731' }), {}, unavailable, safety)
-  assert.equal(quarantined, true)
-  assert.equal(armed, true)
+  const failure: any = await handleHook('claude', 'PostToolUseFailure', input('PostToolUseFailure', { error: 'PRIVATE-ERROR-731' }), {}, unavailable)
   assert(!JSON.stringify(failure).includes('PRIVATE-ERROR-731'))
+  assert.match(failure.hookSpecificOutput.additionalContext, /continue the task/)
   for (const event of ['PostToolBatch', 'UserPromptSubmit', 'PreToolUse']) {
-    const stopped: any = await handleHook('claude', event, input(event), {}, unavailable, safety)
-    assert.equal(stopped.continue, false)
+    const continued: any = await handleHook('claude', event, input(event), {}, unavailable)
+    assert.equal(continued.continue, undefined)
   }
-})
-
-test('a started response hook without completion is caught before Claude can continue its batch', async () => {
-  let pending = false, quarantined = false
-  const safety = {
-    isQuarantined: async () => quarantined,
-    quarantine: async () => { quarantined = true },
-    arm: async () => { pending = true },
-    hasPending: async () => pending,
-  }
-  const started = handleHook('claude', 'PostToolUse', input('PostToolUse', { tool_response: {
-    stdout: 'response', stderr: '', interrupted: false, isImage: false,
-  } }), {}, async () => new Promise(() => {}), safety)
-  await new Promise(resolve => setImmediate(resolve))
-  assert.equal(pending, true)
-  const stopped: any = await handleHook('claude', 'PostToolBatch', input('PostToolBatch'), {}, async () => { throw Error('Must not call') }, safety)
-  assert.equal(stopped.continue, false)
-  assert.equal(quarantined, true)
-  void started
 })
 
 test('Claude scans only exact external result text, independent of tool name and adjacent media', async () => {
@@ -126,17 +108,13 @@ test('Claude scans only exact external result text, independent of tool name and
     { response: { type: 'text', file: { filePath: 'PRIVATE-PATH-731', content: 'FILE-731', numLines: 1, startLine: 1, totalLines: 1 } }, expected: 'FILE-731' },
   ]
   for (const { response, expected } of responses) {
-    let armed = false, calls = 0, request: any
+    let calls = 0, request: any
     const result = await handleHook('claude', 'PostToolUse', input('PostToolUse', {
       tool_name: 'ArbitraryExternalTool',
       tool_response: response,
-    }), {}, async (_config, value) => { calls++; request = value; return { status: 'approved' } }, {
-      ...safeSession,
-      arm: async () => { armed = true },
-    })
+    }), {}, async (_config, value) => { calls++; request = value; return { status: 'approved' } })
     assert.deepEqual(result, {})
     assert.equal(calls, 1)
-    assert.equal(armed, true)
     assert.deepEqual(request, { method: 'response', tool: 'ArbitraryExternalTool', callId: 'call-731', payload: expected })
   }
 })
@@ -161,30 +139,23 @@ test('Claude blocks a non-approved user prompt without returning its raw text', 
   assert.match(result.stopReason, /"status":"dangerous"/)
 })
 
-test('Claude scans exact tool failure text and does not quarantine an approved error', async () => {
-  let request: any, quarantined = false, armed = false
+test('Claude scans exact tool failure text and admits an approved error', async () => {
+  let request: any
   const error = 'RAW-FAILURE-TEXT-731'
   const result = await handleHook('claude', 'PostToolUseFailure', input('PostToolUseFailure', {
     tool_name: 'ArbitraryExternalTool', error,
-  }), {}, async (_config, value) => { request = value; return { status: 'approved' } }, {
-    ...safeSession,
-    arm: async () => { armed = true; return 'failure-owner-731' },
-    quarantine: async () => { quarantined = true },
-  })
+  }), {}, async (_config, value) => { request = value; return { status: 'approved' } })
   assert.deepEqual(result, {})
   assert.deepEqual(request, { method: 'response', tool: 'ArbitraryExternalTool', callId: 'call-731', payload: error })
-  assert.equal(armed, true)
-  assert.equal(quarantined, false)
 })
 
 test('Claude ignores result envelopes that contain no external text', async () => {
   for (const response of [undefined, { type: 'image', data: 'IMAGE-731' }, [{ type: 'image', data: 'IMAGE-731' }]]) {
-    let calls = 0, armed = false
+    let calls = 0
     assert.deepEqual(await handleHook('claude', 'PostToolUse', input('PostToolUse', {
       tool_name: 'ArbitraryExternalTool', tool_response: response,
-    }), {}, async () => { calls++; return { status: 'approved' } }, { ...safeSession, arm: async () => { armed = true } }), {})
+    }), {}, async () => { calls++; return { status: 'approved' } }), {})
     assert.equal(calls, 0)
-    assert.equal(armed, false)
   }
 })
 
@@ -195,14 +166,13 @@ test('Codex passes results with no external text without scanning or approval cl
     731,
   ]
   for (const response of responses) {
-    let armed = false, calls = 0
+    let calls = 0
     const result = await handleHook('codex', 'PostToolUse', input('PostToolUse', { tool_response: response }), {}, async () => {
       calls++
       return { status: 'approved' }
-    }, { ...safeSession, arm: async () => { armed = true } })
+    })
     assert.deepEqual(result, {})
     assert.equal(calls, 0)
-    assert.equal(armed, false)
   }
 })
 
@@ -258,14 +228,12 @@ test('deep Claude metadata is ignored while adjacent text still reaches the brok
     [{ type: 'text', text: 'ok' }],
   ]
   for (const response of responses) {
-    let calls = 0, quarantined = false
-    const safety = { ...safeSession, quarantine: async () => { quarantined = true } }
+    let calls = 0
     const result = await handleHook('claude', 'PostToolUse', input('PostToolUse', { tool_name: 'mcp__fixture__read', tool_response: response }), {}, async () => {
       calls++
       return { status: 'approved' }
-    }, safety)
+    })
     assert.deepEqual(result, {})
     assert.equal(calls, 1)
-    assert.equal(quarantined, false)
   }
 })

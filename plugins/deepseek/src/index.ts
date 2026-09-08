@@ -1,7 +1,6 @@
 import { hookEnabled, readPluginSettings } from './settings.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-skill'
 import type { LocalClientConfig, RuntimeClient } from './client.ts'
@@ -40,32 +39,26 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const controller = new AbortController()
   const scanner = new StaticScanner(config, controller.signal, config.staticTimeoutMs)
   const events = config.protocolEvents ?? new ProtocolEvents(config)
+  const degradedSessions = new Set<string>()
   ctx.effect(() => async () => { controller.abort(); await scanner.close(); await sessions.close(); await events.close?.() })
   const sessionId = (exec: ToolExecution): string => {
     if (!exec.agent) throw new Error('Patronus requires a native agent identity.')
     return String(exec.agent.id)
   }
-  const inheritQuarantine = (agent: Agent): void => {
-    const { parentSession, isSeeded } = agent.session.header
-    if (isSeeded && parentSession && sessions.isQuarantined(parentSession)) sessions.quarantine(String(agent.id))
-  }
-  ctx.on('agent/created', ({ agent }) => { inheritQuarantine(agent) })
   ctx.on('agent/disposed', ({ agent }) => sessions.release(String(agent.id)))
   const gate: Gate = {
     signal: controller.signal,
     isOwnTool: () => false,
-    unsupported: exec => { sessions.quarantine(sessionId(exec)) },
+    warnLater: exec => { degradedSessions.add(sessionId(exec)) },
     events,
     enabledFor: exec => {
       const session = sessionId(exec)
       const policy = readPluginSettings()
       if (!policy.enabled || policy.disabled_chats.deepseek.includes(session)) return false
-      sessions.assertUsable(session)
       return hookEnabled(policy, 'deepseek', session, exec.name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')
     },
     sessionFor: exec => sessions.capability(sessionId(exec)),
     runtimeFor: exec => {
-      if (exec.agent) inheritQuarantine(exec.agent)
       return sessions.runtime(sessionId(exec), controller.signal)
     },
   }
@@ -86,5 +79,5 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     content: 'Follow the instructions in a Patronus receipt. A pending response means the source tool already executed; continue independent work and check its scan_id later. Only approved responses expose originals. Dangerous responses expose only a redacted view, when available. Failed or incomplete scans never grant approval. Do not repeat an action merely to recover a withheld result.',
   })
   registerResponseGate(ctx, gate, config.responseWaitMs)
-  registerPromptGate(ctx, sessions, controller.signal, events, config.requestTimeoutMs, session => hookEnabled(readPluginSettings(), 'deepseek', session, 'user_input'), { executable: config.executable, paused: session => { const policy = readPluginSettings(); return !policy.enabled || policy.disabled_chats.deepseek.includes(session) } })
+  registerPromptGate(ctx, sessions, controller.signal, events, config.requestTimeoutMs, session => hookEnabled(readPluginSettings(), 'deepseek', session, 'user_input'), { executable: config.executable, paused: session => { const policy = readPluginSettings(); return !policy.enabled || policy.disabled_chats.deepseek.includes(session) } }, degradedSessions)
 }

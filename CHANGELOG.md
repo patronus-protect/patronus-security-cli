@@ -8,8 +8,9 @@
 - Fix Codex updates from local marketplaces: reinstall the local package and
   refresh hook trust without invoking the Git-only marketplace upgrade command.
 - Add Codex and Claude native hook adapters with a shared local session broker, session-bound
-  pending/status/redacted retrieval, and static scans that return bounded metadata. Keep host-specific
-  replacement and quarantine behavior explicit; scanner execution remains local with Ark 0.1.6.
+  pending/status/redacted retrieval, and static scans that return bounded metadata. Completed findings
+  are enforced while infrastructure failures fall open with explicit degraded context; scanner execution
+  remains local with Ark 0.1.6.
 - Upgrade the local scanner to Ark 0.1.6 and its ORT rc.13 dependency.
 - Add a persistent local stdio runtime and native DeepSeek request/response gates, configurable
   500-ms response waits, and agent polling through pending receipts. Dangerous originals remain

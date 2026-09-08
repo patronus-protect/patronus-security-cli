@@ -46,23 +46,21 @@ test('Read fixture observes the actual installed text output shape', { timeout: 
   process.stdout.write(`proof: ${result.directory}\n`);
 });
 
-test('tool errors quarantine the session and PostToolBatch stops before another model request', { timeout: 40000 }, async () => {
+test('tool errors add an inactive warning and continue to the next model request', { timeout: 40000 }, async () => {
   const result = await runHost({
-    name: 'read-error-quarantine', tool: 'Read', policy: 'error-stop', batch: true,
+    name: 'read-error-degraded', tool: 'Read', policy: 'error-stop', batch: true,
     input: directory => ({ file_path: join(directory, 'missing.txt') }),
   });
   assert.equal(result.timedOut, false, `host timed out: ${result.directory}`);
-  assert.equal(result.messages.length, 1, `raw error reached a later model request: ${result.directory}`);
-  const terminal = result.stdout.trim().split('\n').map(JSON.parse).findLast(event => event.type === 'result');
-  assert.equal(terminal.terminal_reason, 'hook_stopped');
-  await access(join(result.directory, 'quarantined'));
+  assert.equal(result.messages.length, 2, `warning did not preserve the next model request: ${result.directory}`);
+  assert.match(JSON.stringify(result.messages[1]), /No security scan was completed/);
   const events = (await readFile(join(result.directory, 'hooks.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.ok(events.some(event => event.hook_event_name === 'PostToolUseFailure'));
   assert.ok(events.some(event => event.hook_event_name === 'PostToolBatch'));
   process.stdout.write(`proof: ${result.directory}\n`);
 });
 
-test('PostToolUseFailure alone does not enforce continue:false (negative control)', { timeout: 40000 }, async () => {
+test('PostToolUseFailure preserves the original error and adds warning context', { timeout: 40000 }, async () => {
   const result = await runHost({
     name: 'failure-without-batch', tool: 'Read', policy: 'error-stop', batch: false,
     input: directory => ({ file_path: join(directory, 'missing.txt') }),
@@ -73,6 +71,7 @@ test('PostToolUseFailure alone does not enforce continue:false (negative control
   const failure = events.find(event => event.hook_event_name === 'PostToolUseFailure');
   assert.equal(typeof failure.error, 'string');
   assert.ok(result.messages[1].messages.some(message => JSON.stringify(message).includes(failure.error)));
+  assert.match(JSON.stringify(result.messages[1]), /No security scan was completed/);
   process.stdout.write(`negative control: ${result.directory}\n`);
 });
 
@@ -164,44 +163,49 @@ test('shipped plugin configuration discovers hooks and its exact MCP namespace',
   await assert.rejects(access(join(result.directory, 'mcp-executions.jsonl')), { code: 'ENOENT' });
   assert.match(JSON.stringify(result.messages[1]), /PATRONUS_SAFE_BROKER_RESULT/);
   const events = (await readFile(join(result.directory, 'hooks.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
-  for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolBatch']) {
+  const declared = JSON.parse(await readFile(join(result.directory, 'plugin', 'hooks', 'hooks.json'), 'utf8')).hooks;
+  for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse']) {
+    assert.ok(declared[event], `plugin manifest did not declare ${event}`);
+  }
+  for (const event of ['SessionStart', 'UserPromptSubmit', 'PreToolUse']) {
     assert.ok(events.some(input => input.hook_event_name === event), `plugin did not register ${event}`);
   }
   process.stdout.write(`plugin discovery proof: ${result.directory}\n`);
 });
 
-test('quarantine prevents a resumed session from sending stored errors to the model', { timeout: 70000 }, async () => {
+test('a warned error does not poison a resumed session', { timeout: 70000 }, async () => {
   const result = await runHost({
     name: 'error-resume', tool: 'Read', policy: 'error-stop', batch: true, resume: true,
     input: directory => ({ file_path: join(directory, 'missing.txt') }),
   });
   assert.equal(result.timedOut, false);
   assert.equal(result.runs.length, 2);
-  assert.equal(result.messages.length, 1, `resumed quarantine leaked to the model: ${result.directory}`);
+  assert.equal(result.messages.length, 3, `resume did not remain usable: ${result.directory}`);
+  assert.match(JSON.stringify(result.messages[1]), /No security scan was completed/);
   process.stdout.write(`proof: ${result.directory}\n`);
 });
 
-test('unsupported successful Read image result stops before another model request', { timeout: 40000 }, async () => {
+test('unsupported successful Read image result warns and remains available', { timeout: 40000 }, async () => {
   const result = await runHost({
     name: 'unsupported-image', tool: 'Read', policy: 'pending',
     input: directory => ({ file_path: join(directory, 'image.png') }),
   });
   assert.equal(result.timedOut, false);
-  assert.equal(result.messages.length, 1, `unsupported result reached model: ${result.directory}`);
-  await access(join(result.directory, 'quarantined'));
+  assert.equal(result.messages.length, 2, `unsupported result did not continue: ${result.directory}`);
+  assert.match(JSON.stringify(result.messages[1]), /No security scan was completed/);
   const events = (await readFile(join(result.directory, 'hooks.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(events.find(event => event.hook_event_name === 'PostToolUse')?.tool_response.type, 'image');
   process.stdout.write(`proof: ${result.directory}\n`);
 });
 
-test('PostToolBatch catches a timed-out response hook before the next model request', { timeout: 40000 }, async () => {
+test('a timed-out response hook does not make the chat unusable', { timeout: 40000 }, async () => {
   const result = await runHost({
     name: 'post-timeout', tool: 'Read', policy: 'post-timeout', batch: true, postHookTimeout: 1,
     input: (_directory, source) => ({ file_path: source }),
   });
   assert.equal(result.timedOut, false);
-  assert.equal(result.messages.length, 1, `timed-out post hook released raw result: ${result.directory}`);
-  await access(join(result.directory, 'quarantined'));
+  assert.equal(result.messages.length, 2, `timed-out post hook stopped the chat: ${result.directory}`);
+  assert.match(JSON.stringify(result.messages[1]), /RAW_RESPONSE_ONLY_SENTINEL/);
   process.stdout.write(`proof: ${result.directory}\n`);
 });
 

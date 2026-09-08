@@ -58,17 +58,6 @@
         ]
       }
     ],
-    "PostToolBatch": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/patronus.mjs\" hook claude PostToolBatch",
-            "timeout": 90
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "hooks": [

@@ -24,6 +24,10 @@ export function codexExternalTextPayload(event: string, input: HookInput): TextP
 }
 
 export function mapCodex(event: string, decision: HookDecision): object {
+  if (decision.kind === 'warn') return {
+    systemMessage: decision.text,
+    hookSpecificOutput: { hookEventName: event, additionalContext: decision.text },
+  }
   if (event === 'PreToolUse') return { hookSpecificOutput: {
     hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: decision.text,
   } }

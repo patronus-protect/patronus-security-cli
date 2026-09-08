@@ -12,4 +12,4 @@ export interface HookInput {
   error?: string
   [key: string]: unknown
 }
-export type HookDecision = { kind: 'deny' | 'replace' | 'stop'; text: string }
+export type HookDecision = { kind: 'deny' | 'replace' | 'stop' | 'warn'; text: string }

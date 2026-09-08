@@ -10,13 +10,16 @@ for (const wait of ['0','10000']) {
     const privateEmail='test.author@example.com'
     let command
     const statuses=[]
-    const fixture=await nativeFixture((body,index)=>{
-      assert(index<30,'Too many model requests')
+    const fixture=await nativeFixture(async(body,index)=>{
+      assert(index<60,'Too many model requests')
       if(index===1)return [call('exec_command',{cmd:command})]
       assert(!JSON.stringify(body).includes(privateEmail),'Private email reached the model')
       const result=lastReceipt(body)
       statuses.push(result.status)
-      if(result.status==='pending')return [patronusCall(body,'patronus_check_result',{scan_id:result.scan_id},'poll-'+index)]
+      if(result.status==='pending'){
+        await new Promise(resolve=>setTimeout(resolve,200))
+        return [patronusCall(body,'patronus_check_result',{scan_id:result.scan_id},'poll-'+index)]
+      }
       assert.equal(result.status,'redacted')
       assert(JSON.stringify(result.result).includes('0.1.0'))
       assert(JSON.stringify(result.result).includes('[REDACTED]'))

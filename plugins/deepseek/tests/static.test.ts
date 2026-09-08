@@ -154,6 +154,7 @@ it.each(['noise', 'error'])('keeps %s CLI output out of every native model reque
     toolCallResponse('static-failure', 'patronus_scan', { kind: 'file', path: fixture.path }),
     options => {
       expect(JSON.stringify(options)).toContain('FAILED')
+      expect(JSON.stringify(options)).toContain('Patronus protection is inactive')
       expect(JSON.stringify(options)).not.toContain(canary)
       return textResponse('No read approval is available.')
     },

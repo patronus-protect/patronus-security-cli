@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { test } from 'node:test'
 import type { BrokerConfig, BrokerRequest } from '../src/broker.ts'
-import { isSessionQuarantined, MAX_FRAME, MAX_PAYLOAD, prepareBroker, quarantineSession } from '../src/broker.ts'
+import { MAX_FRAME, MAX_PAYLOAD, prepareBroker } from '../src/broker.ts'
 import { processIdentity } from '../src/daemon.ts'
 
 const entry = process.env.PATRONUS_NATIVE_BUNDLE
@@ -55,17 +55,6 @@ function hook(config: BrokerConfig, request: BrokerRequest, abortMs?: number): P
     child.stdin.end(JSON.stringify(request))
   })
 }
-
-test('close and resume preserve direct quarantine', { timeout: 120_000 }, async () => {
-  const { root, config } = await stub()
-  try {
-    assert.equal((await hook(config, { method: 'request', tool: 'user_prompt', callId: 'initial', payload: '' })).status, 'approved')
-    await quarantineSession(config)
-    assert.equal(await isSessionQuarantined(config), true)
-    assert.deepEqual(await hook(config, { method: 'close' }), { closed: true })
-    assert.equal((await hook(config, { method: 'request', tool: 'user_prompt', callId: 'a', payload: '' })).status, 'unavailable')
-  } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }
-})
 
 test('installed Ark keeps pending jobs across hooks, separates host sessions and withholds dangerous originals', { timeout: 120_000 }, async () => {
   const { root, config } = await fixture()
@@ -157,19 +146,6 @@ test('payload caps apply before spawning and again against the runtime limit', {
   } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }
 })
 
-test('direct quarantine persists with unavailable scanner and without creating a socket', async () => {
-  const { root, config } = await fixture()
-  config.executable = join(root, 'missing-scanner')
-  try {
-    assert.equal(await isSessionQuarantined(config), false)
-    await quarantineSession(config)
-    assert.equal(await isSessionQuarantined(config), true)
-    const prepared = await prepareBroker(config)
-    await assert.rejects(lstat(prepared.socketPath), { code: 'ENOENT' })
-    assert.equal(await isSessionQuarantined({ ...config, host: 'claude' }), false)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
 test('waits for an in-progress private capability creation without replacing it', async () => {
   const { root, config } = await fixture()
   try {
@@ -177,7 +153,7 @@ test('waits for an in-progress private capability creation without replacing it'
     const path = join(prepared.directory, 'capability')
     await writeFile(path, '')
     const filling = delay(50).then(() => writeFile(path, prepared.capability))
-    assert.equal(await isSessionQuarantined(config), false)
+    assert.equal((await prepareBroker(config)).capability, prepared.capability)
     await filling
     assert.equal(await readFile(path, 'utf8'), prepared.capability)
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -289,49 +265,6 @@ test('dispatches static scans through the existing engine with installed Ark', {
   } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }
 })
 
-test('rejects symlinked and permissive private state roots without repairing them', async () => {
-  const { root, config } = await fixture()
-  try {
-    await mkdir(config.stateDir!, { mode: 0o755 })
-    assert.equal(await isSessionQuarantined(config), true)
-    await assert.rejects(quarantineSession(config), /broker unavailable/)
-    await rm(config.stateDir!, { recursive: true })
-    const target = join(root, 'elsewhere')
-    await mkdir(target, { mode: 0o700 })
-    await symlink(target, config.stateDir!)
-    await assert.rejects(quarantineSession(config), /broker unavailable/)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-test('rejects private state below a plain working directory', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'patronus-no-repository-'))
-  const config: BrokerConfig = {
-    host: 'claude', sessionId: crypto.randomUUID(), cwd: root, stateDir: join(root, '.local-state'),
-  }
-  try {
-    assert.equal(await isSessionQuarantined(config), true)
-    await assert.rejects(quarantineSession(config), /broker unavailable/)
-  } finally { await rm(root, { recursive: true, force: true }) }
-})
-
-for (const marker of ['directory', 'worktree-file']) {
-  test(`rejects private state inside the current project with a ${marker} marker`, async () => {
-    const root = await mkdtemp(join(tmpdir(), 'patronus-repository-state-'))
-    const repository = join(root, 'repository')
-    const cwd = join(repository, 'nested', 'work')
-    await mkdir(cwd, { recursive: true })
-    if (marker === 'directory') await mkdir(join(repository, '.git'))
-    else await writeFile(join(repository, '.git'), 'gitdir: /private/tmp/example-worktree\n')
-    const config: BrokerConfig = {
-      host: 'claude', sessionId: crypto.randomUUID(), cwd, stateDir: join(repository, 'nested', '.local-state'),
-    }
-    try {
-      assert.equal(await isSessionQuarantined(config), true)
-      await assert.rejects(quarantineSession(config), /broker unavailable/)
-    } finally { await rm(root, { recursive: true, force: true }) }
-  })
-}
-
 test('allows external private state when cwd is nested in a repository', async () => {
   const root = await mkdtemp(join(tmpdir(), 'patronus-nested-repository-'))
   const repository = join(root, 'repository')
@@ -342,7 +275,7 @@ test('allows external private state when cwd is nested in a repository', async (
     host: 'claude', sessionId: crypto.randomUUID(), cwd, stateDir: join(root, 'private-state'),
   }
   try {
-    assert.equal(await isSessionQuarantined(config), false)
+    assert.ok((await prepareBroker(config)).capability)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 

@@ -19,6 +19,7 @@ __pycache__/
 /plugins/deepseek/dist/
 /plugins/deepseek/*.tgz
 /plugins/native/dist/
+/plugins/native/node_modules/
 /packaging/checksums/
 /tests/release-e2e/VALIDATION.md
 
