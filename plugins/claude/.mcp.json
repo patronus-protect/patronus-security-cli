@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "patronus": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/patronus.mjs", "mcp"]
+    }
+  }
+}

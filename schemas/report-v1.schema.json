@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://patronus.example/schemas/report-v1.schema.json",
+  "type": "object",
+  "required": ["schema", "run_id", "status", "coverage", "findings", "failures"],
+  "properties": {
+    "schema": { "const": "patronus.security-scanner.report.v1" },
+    "run_id": { "type": "string" },
+    "status": { "enum": ["CLEAN", "FINDINGS", "INCOMPLETE", "FAILED"] },
+    "coverage": { "type": "object" },
+    "findings": { "type": "array" },
+    "failures": { "type": "array" }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "run_id", "chunk_id", "file_id", "path", "category", "terminal", "matched", "label", "confidence"],
+  "properties": {
+    "schema": { "const": "patronus.security-scanner.classification.v1" },
+    "terminal": { "const": true },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

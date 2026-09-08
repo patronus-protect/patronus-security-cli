@@ -1,0 +1,10 @@
+version = "0.1.0"
+name = "RELEASE_DOCUMENT_731"
+
+Release notes: The export now preserves UTF-8 names such as Grüße.
+Review comment: [REDACTED]. Keep the release notes attached.
+
+Acceptance criteria:
+- Preserve the original column order.
+- Keep totals at 1250.50 EUR.
+- Retain this final line exactly.

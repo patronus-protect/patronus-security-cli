@@ -1,0 +1,254 @@
+[
+  {
+    "id": "ark.injection.cross_tool.override_action",
+    "category": "prompt_injection",
+    "description": "Overrides trusted instructions to force another tool or action",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.leak.hidden_instructions",
+    "category": "prompt_injection",
+    "description": "Requests hidden, system, developer, or initial instructions",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.encoded_instruction",
+    "category": "prompt_injection",
+    "description": "Requests execution of encoded instructions or contains a decoded injection signal",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.escalation.multi_turn",
+    "category": "prompt_injection",
+    "description": "Claims prior agreement or authorization to bypass a control",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.guardrail.tamper",
+    "category": "prompt_injection",
+    "description": "Disables, bypasses, or suppresses a security control",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.tool_output.override",
+    "category": "prompt_injection",
+    "description": "Embeds an instruction override in untrusted tool output",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.hidden_html",
+    "category": "prompt_injection",
+    "description": "Hides an instruction inside HTML comments or non-visible markup",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.unicode_confusable",
+    "category": "prompt_injection",
+    "description": "Uses Unicode confusables to conceal an injection signal",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.zero_width",
+    "category": "prompt_injection",
+    "description": "Uses zero-width characters to conceal an injection signal",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.agentic.control_abuse",
+    "category": "prompt_injection",
+    "description": "Manipulates delegation, identity, authorization, or autonomous control surfaces",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.binary_smuggling",
+    "category": "prompt_injection",
+    "description": "Smuggles an instruction in a binary or metadata payload",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.hierarchy",
+    "category": "prompt_injection",
+    "description": "Invalidates or replaces a prior instruction hierarchy",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.jailbreak.framing",
+    "category": "prompt_injection",
+    "description": "Uses role play, unrestricted personas, or named modes to bypass constraints",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.covert.execution",
+    "category": "prompt_injection",
+    "description": "Requests secret or undisclosed execution",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.boundary.delimiter",
+    "category": "prompt_injection",
+    "description": "Injects model delimiters or a fake system instruction boundary",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.authority.escalation",
+    "category": "prompt_injection",
+    "description": "Claims elevated authority or access to redirect behavior",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.tool_call.injected",
+    "category": "prompt_injection",
+    "description": "Forces an immediate tool invocation or injects a serialized tool call",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.output.forced_marker",
+    "category": "prompt_injection",
+    "description": "Forces disclosure markers, fixed output, or known jailbreak dividers",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.discard_prior",
+    "category": "prompt_injection",
+    "description": "Ignore previous instructions pattern",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.replacement_directive",
+    "category": "prompt_injection",
+    "description": "New instructions declaration",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.boundary.fake_system",
+    "category": "prompt_injection",
+    "description": "Fake system prompt injection",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.obfuscated_discard",
+    "category": "prompt_injection",
+    "description": "Ignore what I said before (incl. typos)",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.steganographic",
+    "category": "prompt_injection",
+    "description": "Acrostic/steganographic instruction",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.decode_request",
+    "category": "prompt_injection",
+    "description": "Encoded message decode request",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.jailbreak.game_framing",
+    "category": "prompt_injection",
+    "description": "Game-based jailbreak opening",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.jailbreak.named_mode",
+    "category": "prompt_injection",
+    "description": "Known jailbreak persona names",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.jailbreak.remove_constraints",
+    "category": "prompt_injection",
+    "description": "Bypass restrictions/safety",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.jailbreak.dual_response",
+    "category": "prompt_injection",
+    "description": "Dual response mode (classic DAN pattern)",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.identity.reassign",
+    "category": "prompt_injection",
+    "description": "Identity reassignment",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.leak.system_instructions",
+    "category": "prompt_injection",
+    "description": "Request to reveal system prompt",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.exfil.external_sink",
+    "category": "prompt_injection",
+    "description": "Send data to external URL/email",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.authority.claim",
+    "category": "prompt_injection",
+    "description": "Claim to be developer/admin",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.exfil.sensitive_path_to_sink",
+    "category": "prompt_injection",
+    "description": "Reads a sensitive credential path and directs its contents to an output or transfer sink",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.exfil.sensitive_path_external_sink_audited",
+    "category": "prompt_injection",
+    "description": "Reads a sensitive credential path and transfers it to an explicit external network destination",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.authority_issued_replacement",
+    "category": "prompt_injection",
+    "description": "Claims that an authority issued replacement instructions and demands an action",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.decode_then_execute",
+    "category": "prompt_injection",
+    "description": "Directs the model to decode an encoded payload and execute or follow it",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.boundary.delimited_replacement_action",
+    "category": "prompt_injection",
+    "description": "Uses a synthetic delimiter boundary before a replacement instruction and action",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.hierarchy_then_direct_action",
+    "category": "prompt_injection",
+    "description": "Discards an instruction-hierarchy constraint and immediately requests a replacement action",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.output.ignore_then_fixed_output",
+    "category": "prompt_injection",
+    "description": "Overrides surrounding instructions and restricts the response to attacker-chosen output",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.leak.system_prompt_extraction",
+    "category": "prompt_injection",
+    "description": "Directly requests disclosure of the assistant's system or initialization instructions",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.authority.fake_system_asset_transfer",
+    "category": "prompt_injection",
+    "description": "Uses a fake system or administrator authority marker to mandate a concrete crypto-asset transfer",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.structure.override_sensitive_disclosure",
+    "category": "prompt_injection",
+    "description": "Structural instruction override and sensitive disclosure",
+    "default_enabled": true
+  }
+]

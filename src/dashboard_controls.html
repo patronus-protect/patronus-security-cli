@@ -1,0 +1,25 @@
+<div class="tab-content policies-content">
+  <div class="panel-head"><div><span class="eyebrow">Plugin protection</span><h2>Policies</h2><p>Choose a plugin and the text it receives.</p></div></div>
+  <p class="server-note">Start <code>patronus-security-scanner dashboard</code> to edit policies.</p>
+  <div class="live-controls" hidden>
+    <div class="control-toolbar"><label>Plugin<select id="policy-host"><option value="claude">Claude</option><option value="codex">Codex</option><option value="deepseek">DeepSeek</option></select></label><label>Text input<select id="policy-surface"><option value="user_input">User Input</option><option value="tool_result">Tool Result</option><option value="mcp_result">MCP Result</option></select></label></div>
+    <section class="panel"><div class="panel-head"><div><h2>Threat assessment</h2><p>Injection and Threat: flag matched L2/L3 results at or above your confidence threshold. L1 rules operate independently.</p></div></div><div id="assessment-rules" class="control-grid"></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>L1 rules</h2><p>Turn individual PII, DLP and Injection detections on or off.</p></div></div>
+    <div class="control-grid"><label>Category<select id="policy-filter"><option value="pii">PII</option><option value="dlp">DLP</option><option value="prompt_injection">Injection</option></select></label><label>Search<input id="policy-search" type="search" placeholder="Find a rule"></label></div>
+    <p class="setting-line" id="rule-count"></p><div id="policy-list"></div></section>
+    <div class="draft-bar"><span id="draft-status">No unsaved changes</span><button class="button secondary" id="discard-policies">Discard</button><button class="button" id="save-policies">Save policies</button></div>
+  </div>
+</div>
+<div class="tab-content settings-content">
+  <p class="server-note">Run <code>patronus-security-scanner dashboard</code> for live settings.</p>
+  <div class="live-controls" hidden>
+    <section class="panel"><div class="panel-head"><div><span class="eyebrow">Inference</span><h2>Choose where checks run</h2><p>Cloud uses your Patronus API account. No automatic fallback.</p></div></div><div class="control-grid"><label>Processing mode<select id="inference-mode"><option value="local">Local — all text stays on this device</option><option value="api">Cloud — check text through the API</option><option value="hybrid">Hybrid — prompts local; tool/MCP results ≤1024 tokens local, otherwise API</option></select></label><div><h3>API account</h3><p>Sign in with <code>patronus-security-scanner auth login</code>, or provide the API key through the configured environment variable.</p></div></div></section>
+    <div class="draft-bar"><span>New settings apply when agent sessions restart.</span><button class="button" id="save-settings">Save settings</button></div>
+    <section class="panel"><div class="panel-head"><div><h2>Integrations</h2><p>Enable, disable, update or uninstall each plugin.</p></div></div><div id="integration-settings"></div></section>
+  </div>
+  <section class="panel"><div class="panel-head"><div><h2>Updates &amp; uninstall</h2><p>Use the package manager that installed the CLI. Plugin releases are managed separately.</p></div></div><div class="settings"><div><h3>CLI</h3><p id="cli-update-status"></p><div class="control-toolbar live-controls" hidden><button class="button" id="update-cli">Update CLI</button><button class="button secondary" id="uninstall-cli">Uninstall CLI</button><button class="button secondary" id="uninstall-all">Uninstall CLI + plugins</button></div><pre>patronus-security-scanner maintenance update
+patronus-security-scanner maintenance uninstall --yes</pre><p>Cargo and standalone installations in ~/.local/bin can update through this button. Public releases must be published first. Reports and settings are preserved.</p></div><div><h3>Plugins</h3><p>Claude and Codex update from their registered marketplace (currently patronus-local). DeepSeek uses its verified public release archive. Each integration above can be disabled or uninstalled independently.</p><pre>patronus-security-scanner integration codex uninstall
+patronus-security-scanner integration claude uninstall
+patronus-security-scanner integration deepseek uninstall</pre></div></div></section>
+</div>
+<div id="control-message" role="status" aria-live="polite" hidden></div>

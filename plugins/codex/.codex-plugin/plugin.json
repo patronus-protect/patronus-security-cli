@@ -1,0 +1,43 @@
+{
+  "name": "patronus-security",
+  "version": "0.1.0",
+  "description": "Local Patronus Ark scans with native Codex request and response hooks.",
+  "author": {
+    "name": "Patronus",
+    "url": "https://github.com/patronus-protect"
+  },
+  "homepage": "https://github.com/patronus-protect/patronus-security-scanner",
+  "repository": "https://github.com/patronus-protect/patronus-security-scanner",
+  "license": "Apache-2.0",
+  "keywords": [
+    "security",
+    "scanner",
+    "prompt-injection",
+    "dlp",
+    "pii"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Patronus Security",
+    "shortDescription": "Local scans and native tool security gates",
+    "longDescription": "Configure local text protection for user input, tool results and MCP results with Patronus Ark. Choose scan categories, levels and L1 detectors, or pause individual chats.",
+    "developerName": "Patronus",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://github.com/patronus-protect/patronus-security-scanner",
+    "privacyPolicyURL": "https://github.com/patronus-protect/patronus-security-scanner/blob/main/docs/privacy.md",
+    "termsOfServiceURL": "https://github.com/patronus-protect/patronus-security-scanner/blob/main/docs/terms.md",
+    "defaultPrompt": [
+      "Scan this repository with Patronus Ark.",
+      "Scan this file for prompt injection, DLP, and PII signals.",
+      "Review the latest Patronus scan report and explain its coverage."
+    ],
+    "brandColor": "#0099FF",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png",
+    "logoDark": "./assets/icon.png"
+  }
+}

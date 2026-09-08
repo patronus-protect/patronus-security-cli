@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "run_id", "status", "scanner_version", "ark_version", "artifact_hashes"],
+  "properties": { "schema": { "const": "patronus.security-scanner.manifest.v1" }, "artifact_hashes": { "type": "object" } }
+}

@@ -1,0 +1,223 @@
+name: Gated release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Version matching Cargo and plugin manifests (without v)
+        required: true
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      DSH_SOURCE_ROOT: ${{ github.workspace }}/.harness
+      PATRONUS_TEST_SCANNER: ${{ github.workspace }}/target/debug/patronus-security-scanner
+      PATRONUS_SCANNER_BIN: ${{ github.workspace }}/target/debug/patronus-security-scanner
+      PATRONUS_TEST_CONFIG: ${{ github.workspace }}/config/defaults.toml
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: 76fda729799fe9b3848dbe2c211d4b231032b81e
+          path: .harness
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --all-targets --all-features
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+        working-directory: .harness
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m unittest discover -s tests -p test_installer.py
+      - run: node plugins/native/scripts/build.mjs
+      - run: git diff --exit-code -- plugins/codex/scripts/patronus.mjs plugins/claude/scripts/patronus.mjs
+      - run: node plugins/native/scripts/test.mjs
+      - run: node plugins/deepseek/scripts/test.mjs
+      - run: node plugins/deepseek/scripts/test.mjs --local
+      - name: Stage DeepSeek release notices
+        run: |
+          cp LICENSE plugins/deepseek/LICENSE
+          cp THIRD_PARTY_NOTICES.md plugins/deepseek/THIRD_PARTY_NOTICES.md
+      - run: npm --prefix plugins/deepseek run test:package
+      - name: Verify tag and manifest versions
+        shell: bash
+        env:
+          RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || github.ref_name }}
+        run: |
+          version="${RELEASE_REF#v}"
+          cargo run --locked --bin package-plugins -- --verify-version "$version"
+
+  build:
+    if: vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    needs: validate
+    strategy:
+      matrix:
+        include:
+          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: macos-13, target: x86_64-apple-darwin }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Verify ONNX Runtime is statically linked (macOS)
+        if: runner.os == 'macOS'
+        run: '! otool -L target/${{ matrix.target }}/release/patronus-security-scanner | grep -i onnxruntime'
+      - name: Verify ONNX Runtime is statically linked (Linux)
+        if: runner.os == 'Linux'
+        run: '! ldd target/${{ matrix.target }}/release/patronus-security-scanner | grep -i onnxruntime'
+      - name: Verify ONNX Runtime is statically linked (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dependencies = (dumpbin /dependents target/${{ matrix.target }}/release/patronus-security-scanner.exe | Out-String)
+          if ($dependencies -match 'onnxruntime') { throw 'ONNX Runtime must be statically linked' }
+      - name: Package plugins (Unix)
+        if: runner.os != 'Windows'
+        run: cargo run --locked --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner ${{ matrix.target }} dist ${{ matrix.target == 'x86_64-unknown-linux-gnu' && '--include-plugins' || '' }}
+      - name: Package plugins (Windows)
+        if: runner.os == 'Windows'
+        run: cargo run --locked --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner.exe ${{ matrix.target }} dist
+      - name: Add standalone installer
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          cp install.sh install.py dist/
+          cargo run --locked --bin package-plugins -- --checksum dist/install.sh dist/install.py
+      - uses: actions/setup-node@v4
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        with:
+          node-version: 22.19.0
+      - name: Package DeepSeek plugin
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        working-directory: plugins/deepseek
+        env:
+          RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || github.ref_name }}
+        run: |
+          version="${RELEASE_REF#v}"
+          npm ci --ignore-scripts
+          cp ../../LICENSE LICENSE
+          cp ../../THIRD_PARTY_NOTICES.md THIRD_PARTY_NOTICES.md
+          tarball=$(npm pack --pack-destination ../../dist --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s)[0].filename))")
+          test "$tarball" = "patronus-deepseek-security-${version}.tgz"
+          cargo run --manifest-path ../../Cargo.toml --locked --bin package-plugins -- --checksum "../../dist/$tarball"
+      - name: SHA-256 checksums (Unix)
+        if: runner.os != 'Windows'
+        run: shasum -a 256 dist/*.zip > dist/SHA256SUMS-${{ matrix.target }}
+      - name: SHA-256 checksums (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Get-FileHash dist/*.zip -Algorithm SHA256 | Format-Table -HideTableHeaders Hash,Path | Out-File dist/SHA256SUMS-${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patronus-security-${{ matrix.target }}
+          path: dist/
+
+  release-e2e:
+    name: Installed Codex, Claude and DeepSeek release flows
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: 76fda729799fe9b3848dbe2c211d4b231032b81e
+          path: .harness
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+        working-directory: .harness
+      - name: Install pinned Codex host
+        env:
+          CODEX_RELEASE_VERSION: ${{ vars.PATRONUS_CODEX_RELEASE_VERSION }}
+        run: |
+          test -n "$CODEX_RELEASE_VERSION" || { echo 'Set PATRONUS_CODEX_RELEASE_VERSION to the deployed host version; no older fallback is allowed.'; exit 1; }
+          npm install --global "@openai/codex@$CODEX_RELEASE_VERSION"
+          echo "PATRONUS_CODEX_EXPECTED_VERSION=$CODEX_RELEASE_VERSION" >> "$GITHUB_ENV"
+      - name: Install pinned Claude Code host
+        env:
+          CLAUDE_RELEASE_VERSION: ${{ vars.PATRONUS_CLAUDE_RELEASE_VERSION }}
+        run: |
+          test -n "$CLAUDE_RELEASE_VERSION" || { echo 'Set PATRONUS_CLAUDE_RELEASE_VERSION to the deployed host version; no older fallback is allowed.'; exit 1; }
+          npm install --global "@anthropic-ai/claude-code@$CLAUDE_RELEASE_VERSION"
+      - name: Install pinned DeepSeek Harness host
+        run: |
+          version=$(node -p "require('./plugins/deepseek/package.json').patronusProbe.dshVersion")
+          npm install --global "@deepseek-ai/dsh@$version"
+      - uses: actions/download-artifact@v4
+        with:
+          name: patronus-security-x86_64-unknown-linux-gnu
+          path: release-artifacts
+      - name: Install packaged release candidates and run the host flows
+        shell: bash
+        run: |
+          mkdir -p release-candidate/cli release-candidate/codex release-candidate/claude
+          unzip 'release-artifacts/patronus-security-scanner-*-x86_64-unknown-linux-gnu.zip' -d release-candidate/cli
+          unzip 'release-artifacts/patronus-security-codex-*.zip' -d release-candidate/codex
+          unzip 'release-artifacts/patronus-security-claude-*.zip' -d release-candidate/claude
+          chmod +x release-candidate/cli/patronus-security-scanner
+          export PATRONUS_SCANNER_BIN="$PWD/release-candidate/cli/patronus-security-scanner"
+          export PATRONUS_CODEX_BIN="$(command -v codex)"
+          export PATRONUS_CODEX_PLUGIN_ROOT="$PWD/release-candidate/codex/plugins/codex"
+          export PATRONUS_CODEX_PLUGIN_BUNDLE="$PATRONUS_CODEX_PLUGIN_ROOT/scripts/patronus.mjs"
+          export PATRONUS_CLAUDE_BINARY="$(command -v claude)"
+          export PATRONUS_CLAUDE_PLUGIN_ROOT="$PWD/release-candidate/claude/plugins/claude"
+          export PATRONUS_DSH_BIN="$(command -v dsh)"
+          export PATRONUS_PROOF_SCANNER="$PATRONUS_SCANNER_BIN"
+          export DSH_SOURCE_ROOT="$PWD/.harness"
+          export PATRONUS_DEEPSEEK_TARBALL="$(realpath release-artifacts/*.tgz)"
+          node tests/release-e2e/run.mjs --out release-e2e-report
+          node tests/release-e2e/codex-subagent.mjs > release-e2e-report/subagent-recovery.log 2>&1
+          node --test plugins/codex/tests/host-contract.test.mjs
+          node --test plugins/claude/tests/claude-host.test.mjs plugins/claude/tests/claude-runtime.test.mjs plugins/claude/tests/chat-control.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-e2e-report
+          path: release-e2e-report/
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    needs: [build, release-e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: patronus-security-*
+          path: dist
+          merge-multiple: true
+      - name: Publish prebuilt CLI and plugin archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/* --verify-tag --generate-notes

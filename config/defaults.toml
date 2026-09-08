@@ -1,0 +1,83 @@
+schema_version = 1
+
+[provider]
+mode = "local"
+api_base_url = "https://control.patronus.studio/api/v1"
+api_key_env = "PATRONUS_API_KEY"
+
+[scan]
+respect_gitignore = true
+respect_ignore_files = true
+include_hidden = false
+follow_symlinks = false
+max_file_bytes = 10485760 # TODO(product): benchmark and tune
+supported_encodings = ["utf-8", "utf-16le-bom", "utf-16be-bom"]
+
+[ignore]
+patterns = [
+  ".git/",
+  ".patronus-security-scanner/output/",
+]
+
+[chunking]
+target_bytes = 65536 # TODO(product): align with Ark benchmark
+overlap_bytes = 2048
+prefer_line_boundaries = true
+
+[ark]
+categories = ["prompt_injection", "dlp", "pii"]
+max_level = "l1" # TODO(product): select release profile
+download_files = false
+queue_capacity = 8
+
+[progress]
+mode = "auto"
+plain_interval_seconds = 5
+eta_min_seconds = 3
+eta_min_bytes = 1048576
+
+[output]
+root = "~/.patronus-security-scanner/output"
+include_chunk_content = false
+include_evidence_text = false
+write_progress_events = false
+
+[support]
+endpoint = "" # TODO(product): insert production endpoint before enabling upload
+default_artifacts = [
+  "manifest.json",
+  "report.json",
+  "effective-config.toml",
+  "failures.jsonl",
+  "classifications.jsonl",
+]
+max_bundle_bytes = 52428800
+
+[runtime]
+response_wait_ms = 500
+request_timeout_ms = 30000
+scan_timeout_ms = 60000
+retention_seconds = 2592000
+max_payload_bytes = 10485760
+max_store_bytes = 536870912
+max_pending_jobs = 64
+
+# Overrides are optional; unspecified categories use ark.max_level.
+[analysis]
+user_prompt_pii = false
+
+[analysis.category_levels]
+# prompt_injection = "l2"
+# pii = "l1"
+# dlp = "l1"
+# threat = "l2" # Threat has no L1 detector in Ark 0.1.6.
+
+[analysis.l1]
+# prompt_injection = true
+# pii = true
+# dlp = true
+
+[analysis.l1_detectors]
+# hidden_html_instruction = true
+# unicode_confusable = true
+# secret_transfer = true

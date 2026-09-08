@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://patronus.studio/schemas/runtime-v1.schema.json",
+  "title": "Patronus local runtime v1 NDJSON frame",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/reply" },
+    { "$ref": "#/$defs/error" }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "session": { "type": "string", "pattern": "^[A-Za-z0-9_-]{32,128}$" },
+    "text_payload": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "method", "params"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "method": { "enum": ["hello", "submit", "check", "read_redacted", "cancel"] },
+        "params": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "const": "hello" } } },
+          "then": { "properties": { "params": { "maxProperties": 0 } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "submit" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/submit" } } }
+        },
+        {
+          "if": { "properties": { "method": { "enum": ["check", "read_redacted", "cancel"] } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/lookup" } } }
+        }
+      ]
+    },
+    "submit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session", "direction", "tool", "call_id", "payload"],
+      "properties": {
+        "session": { "$ref": "#/$defs/session" },
+        "direction": { "enum": ["request", "response"] },
+        "tool": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "call_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "payload": { "$ref": "#/$defs/text_payload" }
+      },
+      "description": "The service additionally enforces byte limits on UTF-8 tool/call IDs and serialized payloads."
+    },
+    "lookup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session", "scan_id"],
+      "properties": {
+        "session": { "$ref": "#/$defs/session" },
+        "scan_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "reply": {
+      "type": "object", "additionalProperties": false, "required": ["id", "result"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "result": { "anyOf": [
+          { "$ref": "#/$defs/hello" },
+          { "$ref": "#/$defs/status" },
+          { "$ref": "#/$defs/redacted" },
+          { "$ref": "#/$defs/unavailable" }
+        ] }
+      }
+    },
+    "error": {
+      "type": "object", "additionalProperties": false, "required": ["id", "error"],
+      "properties": {
+        "id": { "anyOf": [{ "$ref": "#/$defs/id" }, { "const": "" }] },
+        "error": {
+          "type": "object", "additionalProperties": false, "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "const": "Local security scan request could not be completed." }
+          }
+        }
+      }
+    },
+    "hello": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocol_version", "provider", "scanner_version", "ark_version", "ready", "runtime"],
+      "properties": {
+        "protocol_version": { "const": 1 }, "provider": { "const": "local" },
+        "scanner_version": { "type": "string" }, "ark_version": { "type": "string" },
+        "ready": { "type": "boolean" },
+        "runtime": {
+          "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 },
+          "required": ["response_wait_ms", "request_timeout_ms", "scan_timeout_ms", "retention_seconds", "max_payload_bytes", "max_store_bytes", "max_pending_jobs"]
+        }
+      }
+    },
+    "status": {
+      "type": "object", "additionalProperties": false, "required": ["scan_id", "status"],
+      "properties": {
+        "scan_id": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["pending", "approved", "dangerous", "failed", "incomplete", "cancelled", "expired"] },
+        "job_status": { "enum": ["queued", "running", "completed", "failed", "incomplete", "cancelled", "expired"] },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "coverage": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/coverage" }] },
+        "redacted_available": { "type": "boolean" }, "result": { "$ref": "#/$defs/text_payload" }
+      },
+      "if": { "properties": { "status": { "const": "approved" } } },
+      "then": { "properties": { "job_status": { "const": "completed" } } },
+      "else": { "not": { "required": ["result"] } },
+      "description": "Only approved response checks contain result. Request checks and cancellation never contain payloads."
+    },
+    "redacted": {
+      "type": "object", "additionalProperties": false, "required": ["scan_id", "status", "result"],
+      "properties": { "scan_id": { "$ref": "#/$defs/id" }, "status": { "const": "redacted" }, "result": { "$ref": "#/$defs/text_payload" } }
+    },
+    "unavailable": {
+      "type": "object", "additionalProperties": false, "required": ["status"],
+      "properties": { "status": { "const": "unavailable" } }
+    },
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fields_total", "fields_scanned", "bytes_total", "bytes_scanned", "complete"],
+      "properties": {
+        "fields_total": { "type": "integer", "minimum": 0 }, "fields_scanned": { "type": "integer", "minimum": 0 },
+        "bytes_total": { "type": "integer", "minimum": 0 }, "bytes_scanned": { "type": "integer", "minimum": 0 },
+        "complete": { "type": "boolean" }
+      }
+    },
+    "finding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["field_id", "start_byte", "end_byte", "category", "label", "confidence"],
+      "properties": {
+        "field_id": { "type": "integer", "minimum": 0 }, "start_byte": { "type": "integer", "minimum": 0 },
+        "end_byte": { "type": "integer", "minimum": 0 }, "category": { "type": "string" }, "label": { "type": "string" },
+        "level": { "enum": ["l1", "l2", "l3"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

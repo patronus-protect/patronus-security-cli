@@ -1,0 +1,58 @@
+{
+  "name": "@patronus/deepseek-security",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Native DeepSeek Harness request and response gates using the local Patronus Security Scanner",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./skills/*": "./skills/*"
+  },
+  "files": [
+    "dist/index.js",
+    "cordis.patch.yml",
+    "skills/**/*.md",
+    "assets/icon.png",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check:types": "tsc --noEmit",
+    "prepack": "npm run build",
+    "test": "node scripts/test.mjs",
+    "test:package": "node scripts/package-test.mjs",
+    "check:gpt": "node scripts/test.mjs --check-gpt",
+    "login:gpt": "node scripts/test.mjs --login-gpt",
+    "test:gpt": "node scripts/test.mjs --live-gpt"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-agent": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-skill": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-util-values": "0.1.2-rc.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "esbuild": "0.28.1",
+    "js-yaml": "4.2.0",
+    "typescript": "6.0.3"
+  },
+  "patronusProbe": {
+    "harnessCommit": "76fda729799fe9b3848dbe2c211d4b231032b81e",
+    "dshVersion": "0.1.2-rc.1"
+  }
+}

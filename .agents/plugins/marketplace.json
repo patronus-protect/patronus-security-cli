@@ -1,0 +1,20 @@
+{
+  "name": "patronus-local",
+  "interface": {
+    "displayName": "Patronus Local"
+  },
+  "plugins": [
+    {
+      "name": "patronus-security",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

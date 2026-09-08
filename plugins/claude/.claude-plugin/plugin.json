@@ -1,0 +1,9 @@
+{
+  "name": "patronus-security",
+  "description": "Local Patronus native hook prototype and explicit repository scans. Validated text tool results are gated before model continuation.",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Patronus"
+  }
+}

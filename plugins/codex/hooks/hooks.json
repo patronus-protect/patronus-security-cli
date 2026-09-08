@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex PreToolUse", "timeout": 330}]}],
+    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex PostToolUse", "timeout": 80}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex UserPromptSubmit", "timeout": 80}]}],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex SessionStart", "timeout": 80}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex Stop", "timeout": 80}]}]
+  }
+}

@@ -1,0 +1,47 @@
+[package]
+name = "patronus-security-scanner"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Local repository, directory, and file scanner powered by Patronus Ark"
+repository = "https://github.com/patronus-protect/patronus-security-cli"
+default-run = "patronus-security-scanner"
+
+[lib]
+name = "patronus_security_scanner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "patronus-security-scanner"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "0.22"
+blake3 = "1.8"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+clap = { version = "4.5", features = ["derive"] }
+directories = "6.0"
+ignore = "0.4"
+patronus-ark = "=0.1.6"
+rand = "0.9"
+ring = "0.17"
+libc = "0.2"
+rusqlite = { version = "0.37", features = ["bundled"] }
+fs2 = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+toml = "0.9"
+toml_edit = "0.23"
+url = "2.5"
+ureq = { version = "2.12", default-features = false, features = ["json", "tls"] }
+zip = { version = "4.5", default-features = false, features = ["deflate"] }
+tiktoken-rs = "0.12.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.20"

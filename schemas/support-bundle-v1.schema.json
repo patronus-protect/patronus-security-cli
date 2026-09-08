@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "scanner_version", "ark_version", "entries", "redactions"],
+  "properties": { "schema": { "const": "patronus.security-scanner.support-bundle.v1" }, "entries": { "type": "array" } }
+}

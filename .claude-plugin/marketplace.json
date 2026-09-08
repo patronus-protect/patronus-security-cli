@@ -1,0 +1,15 @@
+{
+  "name": "patronus-local",
+  "owner": {
+    "name": "Patronus"
+  },
+  "description": "Local Patronus security scanner integrations",
+  "plugins": [
+    {
+      "name": "patronus-security",
+      "source": "./plugins/claude",
+      "description": "Scan a repository, directory, or file with Patronus Ark.",
+      "version": "0.1.0"
+    }
+  ]
+}

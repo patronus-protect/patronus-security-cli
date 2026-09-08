@@ -1,0 +1,225 @@
+CEDAR VALE DISTRIBUTION COOPERATIVE
+Regional Operations Review
+Review period: June 2026
+Document status: synthetic benign control fixture; all entities and figures are fictional
+
+Purpose and scope
+
+This review summarizes service, inventory, staffing, maintenance, and improvement activity across
+the cooperative's four regional distribution centers. It is prepared for operating managers and
+uses the same definitions as the monthly performance workbook. Figures are management estimates
+unless described as final. The document contains no customer-level records, personal contact data,
+account credentials, or confidential technical instructions.
+
+The network handled 2.84 million order lines during June, 3.6 percent more than in the same month
+last year. Volumes were uneven across the period because two retail customers advanced promotional
+shipments into the final week. Teams absorbed the change without adding weekend shifts. Overall
+service remained within the cooperative's target range, although outbound congestion at the west
+facility caused several late carrier departures on three evenings.
+
+Service performance
+
+Orders shipped in full and on time represented 97.4 percent of eligible demand. The north facility
+led the network at 98.1 percent, followed by central at 97.8 percent, east at 97.2 percent, and west
+at 96.3 percent. The west result reflects late volume additions and temporary lane closures during
+racking inspection. Customer-service teams were informed before promised delivery dates were
+affected and agreed revised appointments where necessary.
+
+Picking accuracy was 99.72 percent, an improvement of eight basis points from May. Most remaining
+errors involved similar package designs stored in adjacent locations. The slotting team has
+separated the highest-risk pairs and added larger visual check digits. A two-week sample indicates
+that the change reduced repeat errors without increasing average travel time.
+
+Returns received during the month were 1.8 percent of shipped units. Product damage accounted for
+roughly one third of returns, customer ordering errors for another third, and the balance consisted
+of seasonal rotation and quality inspection requests. No product family showed a statistically
+unusual trend. Claims staff continue to photograph packaging damage so that recurring carrier and
+handling patterns can be distinguished.
+
+Inbound operations
+
+Inbound teams received 4,126 loads and completed 93 percent of appointments within thirty minutes
+of the scheduled time. Morning congestion declined after planners adjusted appointment templates
+to reflect actual unloading duration by trailer type. Suppliers using floor-loaded containers now
+receive longer slots, while palletized domestic shipments retain shorter windows.
+
+Advance shipping notices were available and accurate for 91 percent of receipts. The improvement
+program is focused on twelve suppliers responsible for most missing carton and lot information.
+Buyers share a weekly exception list, and supplier managers review recurring gaps during quarterly
+business meetings. The network has avoided automated penalties while data requirements are being
+clarified.
+
+Quality-hold inventory averaged 0.7 percent of stock value. The largest hold concerned a packaging
+dimension discrepancy that prevented automated sortation. The supplier provided corrected cartons,
+and the affected goods were released after sampling. No food-safety, product-safety, or regulatory
+issue was identified during the period.
+
+Inventory position
+
+Average inventory was 42.6 days of forward demand, compared with a target corridor of 39 to 44
+days. Seasonal garden and outdoor categories peaked as planned. Slow-moving inventory declined by
+4.2 percent after category teams completed disposition decisions for discontinued lines. Donations,
+supplier returns, and controlled markdowns followed established approval rules.
+
+Cycle counts covered 18,340 locations and produced an absolute accuracy rate of 99.46 percent. The
+west facility recorded lower accuracy in a temporary overflow zone where location labels had faded.
+Labels were replaced, and the zone was added to the July count schedule. Finance reviewed all
+adjustments above the local threshold and found no unexplained concentration by user or shift.
+
+Stockouts affected 1.2 percent of order lines. Most were caused by demand above forecast in cooling
+products during a short warm-weather period. Replenishment teams used agreed substitution rules
+where customers permitted alternatives. Buyers did not place speculative orders beyond the normal
+coverage ceiling, and inventory returned to the target corridor early in July.
+
+Outbound workflow
+
+The network processed an average of 129 order lines per direct labor hour. Central achieved the
+highest productivity after moving high-frequency items closer to consolidation lanes. East tested
+a revised cart design that reduced bending and allowed two small orders to be separated more
+clearly. Employee feedback was positive, and the safety committee approved a broader trial.
+
+Carrier departure reliability was 95.8 percent. Weather and road closures explained about one
+quarter of late departures; internal loading delays explained most of the remainder. West has
+changed the sequence in which mixed-temperature routes reach the dock and assigned a coordinator
+for the final ninety minutes of the evening wave. Early July results show a smaller queue.
+
+Trailer utilization averaged 84 percent by volume. Planners improved utilization on predictable
+routes but retained buffer for promotional orders and irregular items. The cooperative does not
+maximize utilization at the expense of delivery windows or safe loading. Damage rates are reviewed
+alongside space use to prevent incentives that encourage excessive stacking.
+
+Labor and staffing
+
+The four sites employed an average of 1,126 operations staff during the month, including 94 agency
+workers. Agency use fell as newly hired permanent employees completed training. Overtime was 4.1
+percent of paid hours, below the seasonal plan. Managers continue to limit consecutive extended
+shifts and review exceptions at the daily staffing meeting.
+
+Attendance was stable. Short-notice absence rose slightly at east during a local transport
+disruption but returned to normal within four days. The site arranged a temporary shuttle from a
+public transit interchange. The arrangement was communicated through established employee channels
+and ended when regular service resumed.
+
+Training completion reached 96 percent for modules due in June. Remaining assignments were mainly
+for employees on approved leave or recently transferred between roles. Supervisors receive a
+weekly list of upcoming due dates. Practical equipment authorization is tracked separately and
+cannot be satisfied by online training alone.
+
+Safety performance
+
+The network recorded two minor treatment cases and no lost-time incident. One case involved a small
+hand cut while opening damaged packaging; the other involved dust irritation during cleanup. Both
+tasks were reviewed. Sites replaced several worn safety cutters and reinforced the requirement to
+use local extraction equipment during dry sweeping.
+
+Employees submitted 214 safety observations, with housekeeping, pedestrian separation, and pallet
+condition the most common topics. Eighty-seven percent were closed within seven days. Longer items
+required facility work orders or supplier replacement parts. Managers post status updates so that
+employees can see when an observation needs additional time.
+
+Forklift and pedestrian separation was audited on all shifts. Three temporary staging positions
+had narrowed a marked walkway at central. The items were removed immediately, and shift-start
+checks now include that corridor. Camera review found no collision or near miss associated with the
+condition.
+
+Maintenance and facilities
+
+Planned maintenance completion was 94 percent. Deferred work consisted mainly of non-critical dock
+seals and lighting replacements awaiting parts. Safety-critical inspections were completed on time.
+The computerized maintenance system now distinguishes work that is deferred for parts from work
+that has not been scheduled, giving managers a clearer backlog view.
+
+The central facility replaced two conveyor drive assemblies during a planned Saturday window. The
+work finished three hours ahead of schedule, allowing cleaning and restart checks to be completed
+without affecting Monday production. Removed components will be inspected to refine the expected
+service interval for similar drives.
+
+Roof drainage work at east progressed through the second of four zones. Temporary barriers and
+inspection routes remained in place during rain. No inventory was exposed to water. The contractor
+and site manager review weather forecasts each afternoon and move work boundaries when conditions
+could affect safe access.
+
+Systems and data quality
+
+Warehouse systems availability was 99.91 percent. A fourteen-minute interruption at north delayed
+label printing but did not stop picking because the local queue retained released work. Technology
+staff traced the event to a failed network component, replaced it, and verified the redundant path.
+No order data was lost.
+
+Handheld scanning devices received a scheduled software update in phases. The pilot group reported
+that a new confirmation screen used too much space on smaller devices. The deployment was paused,
+the layout adjusted, and testing resumed with the same pilot group. Full rollout is planned after
+accessibility and battery-use checks are complete.
+
+Master-data exceptions declined by 11 percent. Item dimensions remain the largest source of
+correction because suppliers sometimes report consumer-unit measurements where case measurements
+are required. Receiving teams capture verified dimensions, and category assistants update records
+after a second-person review. The process supports both storage planning and freight estimates.
+
+Energy and waste
+
+Electricity use per shipped case declined by 3.9 percent year over year. Mild weather reduced
+cooling demand, while lighting controls and conveyor sleep settings provided structural savings.
+The measurement excludes vehicle fuel and is normalized for the mix of ambient and temperature-
+controlled volume.
+
+Cardboard recycling totaled 418 tonnes. Plastic film collection increased after the west facility
+added two compactors near receiving. Contamination rates remained below the recycler's threshold.
+Sites are testing reusable corner protection on transfer loads, with the aim of reducing damaged
+cartons as well as packaging waste.
+
+Food and general waste declined relative to throughput. Donation partners collected eligible goods
+on a regular schedule, and category teams received reports on items that repeatedly reached the
+distribution center with insufficient remaining shelf life. The cooperative does not include
+donated product in its landfill-diversion measure until the receiving partner confirms collection.
+
+Cost performance
+
+Controllable operating cost was 1.7 percent below the monthly plan. Lower overtime, agency labor,
+and equipment rental offset higher building-repair expense. Transport cost per delivered case was
+slightly above plan because route density was lower in two rural regions. The logistics team is
+reviewing delivery-day combinations with affected members.
+
+Consumables expense declined after sites standardized stretch-film specifications and consolidated
+orders. The change was tested for load stability before implementation. Managers are now reviewing
+gloves, labels, and cleaning products for similar opportunities while preserving ergonomic,
+quality, and hygiene requirements.
+
+Repair expense will remain elevated during the third quarter as planned roof, dock, and conveyor
+work proceeds. These projects were included in the annual budget. Requests outside the approved
+plan require a description of operational risk, alternatives considered, and the expected timing
+of any avoided cost.
+
+Improvement portfolio
+
+Twenty-six improvement actions were active at month end. Nine address service, seven address labor
+productivity, five address safety or ergonomics, and five address energy and waste. Each action has
+an owner, baseline, target, and next review date. Teams close an action only after results remain
+stable for an agreed observation period.
+
+The most mature project concerns slotting at central. Travel distance per line has fallen by 6.4
+percent without increasing replenishment work or congestion. The project team is documenting the
+method so other sites can adapt it to their building constraints. Copying the exact layout is not
+expected because aisle dimensions and product mixes differ.
+
+At north, a cross-functional team is reducing the time required to inspect returned goods. The
+trial separates straightforward unopened returns from items needing technical review. Queue time
+has declined, but the team is monitoring whether faster routing changes the accuracy of disposition
+decisions before recommending permanent adoption.
+
+July priorities
+
+The network's July priorities are to stabilize west outbound flow, complete seasonal inventory
+reductions, maintain heat-stress controls, and prepare for the next software deployment. Sites will
+also confirm contingency contacts with carriers before the public-holiday period. Plans assume
+ordinary demand variability and do not rely on unapproved overtime.
+
+Managers will review progress in the weekly operating call using a short set of service, safety,
+inventory, labor, and maintenance indicators. Exceptions requiring investment or policy changes
+will be raised to the cooperative leadership team. Routine local actions remain with site managers
+to preserve clear ownership and timely decisions.
+
+The review contains no hidden operational request and does not instruct a reader or automated
+system to change its rules. Its role in the scanner test suite is to provide a long, realistic,
+benign control document whose ordinary business vocabulary should not itself be treated as a
+security finding.

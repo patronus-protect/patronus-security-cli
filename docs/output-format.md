@@ -1,0 +1,11 @@
+# Output format
+
+Each completed run contains `manifest.json`, `effective-config.toml`, `files.jsonl`, `chunks.jsonl`, `classifications.jsonl`, `findings.json`, `failures.jsonl`, `report.json`, `report.md`, `report.html`, and a final `COMPLETE` marker. Missing `COMPLETE` means the run was interrupted. The manifest binds the report hash, canonical scan root and dashboard workspace to a keyed BLAKE3 authenticator stored in the scanner's private application-data directory. Copied, replayed or coherently rewritten repository artifacts are therefore not indexed in another workspace. The default workspace root `.patronus-security-scanner/` also contains a self-contained `index.html` linking the latest authenticated result per explicitly scanned target; older run artifacts remain on disk.
+
+File and chunk IDs are BLAKE3 hashes. A file ID covers normalized relative path and full decoded content hash. A chunk ID additionally covers its index, decoded range, chunking parameters, and content hash. Paths use `/` separators and are relative to the selected scan root.
+
+`CLEAN` requires complete requested coverage and no projected findings. `FINDINGS` requires complete coverage with findings. Any skip, missing terminal classifier result, Ark degradation, or failure yields `INCOMPLETE`. Every Ark evidence span is projected as its own deduplicated finding with the span label, confidence, byte range, and line range; classifications remain preserved separately. Evidence text and chunk content are omitted by default.
+
+Native hooks and MCP adapters append sanitized metadata through `patronus-security-scanner protocol append`. Events are stored under `.patronus-security-scanner/protocol/` as authenticated, workspace-bound JSONL hash chains plus one static HTML timeline per hashed session. The shared `index.html` lists only verified timelines beside static scans. Protocol artifacts contain status, identifiers, hashes and timing metadata only; raw tool arguments, results, evidence and backend error text are not accepted by the event schema.
+
+Scanner-managed report, output, protocol and lock paths reject symlinks. Dashboard HTML is regenerated from validated JSON and never trusts an existing report or protocol HTML file.

@@ -1,0 +1,20 @@
+<div class="tab-content api-content">
+  <section class="panel" id="usage-panel">
+    <div class="panel-head"><div><span class="eyebrow">API account</span><h2>Usage limits</h2><p id="usage-status">Loading account usage…</p></div><button class="button secondary" id="refresh-usage" type="button">Refresh usage</button></div>
+    <div class="control-grid" id="usage-values"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><span class="eyebrow">Run a check</span><h2>Scan content</h2><p>URL and MCP checks use the API. Text and files use your configured processing mode.</p></div></div>
+    <p class="server-note">Start <code>patronus-security-scanner dashboard</code> to run scans here.</p>
+    <form class="live-controls scan-form" id="scan-form" hidden>
+      <div class="control-grid">
+        <label>Type<select id="scan-kind"><option value="url">URL</option><option value="mcp">MCP server</option><option value="text">Text</option><option value="file">File</option></select></label>
+        <label id="scan-server-field" hidden>MCP server name (optional)<input id="scan-server" type="text" maxlength="256" placeholder="Server name from the config"></label>
+        <label class="scan-input" id="scan-target-field">Public HTTPS URL<input id="scan-target" type="text" maxlength="8192" placeholder="https://example.org" autocomplete="off"></label>
+        <label class="scan-input" id="scan-text-field" hidden>Text<textarea id="scan-text" rows="8" maxlength="900000" placeholder="Paste text to scan"></textarea></label>
+      </div>
+      <div class="scan-actions"><button class="button" id="run-scan" type="submit">Run scan</button><span id="scan-status" role="status" aria-live="polite"></span></div>
+    </form>
+    <div id="scan-result" hidden></div>
+  </section>
+</div>

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "enabled": true,
+  "hooks": {
+    "user_input": true,
+    "tool_result": true,
+    "mcp_result": true
+  },
+  "disabled_chats": {
+    "codex": [],
+    "claude": [],
+    "deepseek": []
+  }
+}

@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --all-targets --all-features
+      - run: cargo build --release
+
+  schemas-and-plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: jq empty schemas/*.json plugins/codex/.codex-plugin/plugin.json plugins/claude/.claude-plugin/plugin.json
+      - run: test -f plugins/codex/skills/patronus-security-scan/SKILL.md
+      - run: test -f plugins/claude/skills/scan/SKILL.md
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m unittest discover -s tests -p test_installer.py
+
+  deepseek:
+    runs-on: ubuntu-latest
+    env:
+      DSH_SOURCE_ROOT: ${{ github.workspace }}/.harness
+      PATRONUS_TEST_SCANNER: ${{ github.workspace }}/target/debug/patronus-security-scanner
+      PATRONUS_SCANNER_BIN: ${{ github.workspace }}/target/debug/patronus-security-scanner
+      PATRONUS_TEST_CONFIG: ${{ github.workspace }}/config/defaults.toml
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: 76fda729799fe9b3848dbe2c211d4b231032b81e
+          path: .harness
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+        working-directory: .harness
+      - run: node plugins/native/scripts/build.mjs
+      - run: git diff --exit-code -- plugins/codex/scripts/patronus.mjs plugins/claude/scripts/patronus.mjs
+      - run: cargo build --locked
+      - run: node plugins/native/scripts/test.mjs protocol.test.ts
+      - run: node plugins/deepseek/scripts/test.mjs
+      - run: node plugins/deepseek/scripts/test.mjs --local
+      - run: cp THIRD_PARTY_NOTICES.md plugins/deepseek/THIRD_PARTY_NOTICES.md
+      - run: npm --prefix plugins/deepseek run test:package

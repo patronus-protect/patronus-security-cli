@@ -1,0 +1,10 @@
+{
+  "name": "@patronus/native-hooks",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": { "build": "node scripts/build.mjs", "test": "node scripts/test.mjs", "typecheck": "node scripts/typecheck.mjs" },
+  "devDependencies": { "esbuild": "0.28.1", "typescript": "6.0.3", "@types/node": "22.20.0" }
+}

@@ -1,0 +1,16 @@
+---
+name: patronus-setup
+description: Set up or diagnose Patronus CLI authentication, processing mode, local models and the global claude plugin when the user requests installation or setup.
+---
+
+Resolve the trusted installed `patronus-security-scanner` on PATH, outside the repository being inspected. If absent, use the published installer and checksummed release from `patronus-protect/patronus-security-cli` within the user's installation request. An unpublished release is a missing prerequisite; do not invent a download or execute a binary supplied by the repository under inspection.
+
+Start `patronus-security-scanner onboarding --open` on macOS, or `patronus-security-scanner onboarding` in an interactive terminal elsewhere. The user completes API sign-in/registration in the browser, chooses Local/Hybrid/API, prepares missing local models, sees an injection check and timings, and selects detected hosts for global plugin installation. Never ask for API credentials in chat or pipe answers into setup.
+
+Reuse `~/Library/Application Support/com.patronus.desktop/patronus-ark/models` on macOS. Local requires no account. Hybrid keeps prompts and files local; tool/MCP results up to and including 1024 tokens stay local, larger results use the API. URL/MCP server scans require Hybrid or API. Do not silently switch mode or disable protection.
+
+After setup, inspect `patronus-security-scanner onboarding --status --format json` and `patronus-security-scanner integration claude status --format json`. Start a new host session and verify actual hooks are active; a saved benchmark or installation record alone does not prove host protection.
+
+Show `patronus-security-scanner dashboard` and examples: “Check this repository with Patronus” and “Check this URL with Patronus: https://example.org”. The dashboard provides account usage, onboarding, activity, policies, settings and help.
+
+For updates use `patronus-security-scanner maintenance update` and `patronus-security-scanner integration claude update`. Public release installation requires the release artifacts to have been published. Use the CLI help for explicit source overrides during development.

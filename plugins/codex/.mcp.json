@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "patronus": {
+      "command": "node",
+      "args": ["scripts/patronus.mjs", "mcp"],
+      "cwd": "."
+    }
+  }
+}
