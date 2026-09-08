@@ -97,15 +97,15 @@ pub struct IntegrationArgs {
     pub host: IntegrationHost,
     #[command(subcommand)]
     pub action: IntegrationAction,
-    /// Marketplace root for Codex/Claude, or package archive for DeepSeek.
-    #[arg(long, global = true)]
+    /// Advanced local marketplace or package override.
+    #[arg(long, global = true, hide = true)]
     pub source: Option<PathBuf>,
-    #[arg(long, global = true, value_enum, default_value = "user")]
+    #[arg(long, global = true, value_enum, default_value = "user", hide = true)]
     pub scope: IntegrationScope,
-    #[arg(long, global = true)]
+    #[arg(long, global = true, hide = true)]
     pub profile: Option<String>,
     /// Preserve host-managed plugin data during uninstall when supported.
-    #[arg(long, global = true)]
+    #[arg(long, global = true, hide = true)]
     pub keep_data: bool,
 }
 
@@ -118,9 +118,9 @@ pub enum IntegrationHost {
 
 #[derive(Debug, Clone, Copy, Subcommand, PartialEq, Eq)]
 pub enum IntegrationAction {
-    /// Update from the configured marketplace (DeepSeek requires --source archive).
+    /// Update from the registered marketplace or verified Patronus release.
     Update,
-    /// Install the plugin from a marketplace or package archive.
+    /// Download, verify and install the plugin for this host.
     Install,
     /// Enable an installed plugin in the selected host.
     Enable,

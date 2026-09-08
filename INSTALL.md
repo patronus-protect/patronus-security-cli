@@ -1,49 +1,46 @@
-# Install Patronus
+# Install Patronus Security
 
-This procedure installs a checksummed prebuilt CLI and immediately starts its
-interactive onboarding. It does not clone the source repository. Onboarding
-configures the scanner, proves the selected protection level with a visible
-injection, and offers plugins for every detected Codex, Claude Code, or `dsh`
-host.
+Patronus installs from a verified public GitHub release. You do not need Git, Cargo, a repository checkout, or a manually extracted plugin archive.
 
-## Standard installation
+## Install and configure
 
-Run this in an interactive macOS or Linux terminal:
+Run in an interactive macOS or Linux terminal:
 
-```console
+```sh
 curl -fsSL https://raw.githubusercontent.com/patronus-protect/patronus-security-cli/main/install.sh | sh
 ```
 
-The installer writes only the executable to `~/.local/bin`, preserves an
-existing installation until all download and health checks pass, and then runs
-`patronus-security-scanner onboarding`. Add `~/.local/bin` to `PATH` if the
-installer reports that it is missing.
+The installer places the CLI in `~/.local/bin`, verifies that it starts, and launches onboarding. In onboarding, choose processing and analysis settings, run the visible safety check, then select the detected Codex, Claude Code or DeepSeek hosts you want to protect. Plugin downloads and installation are automatic.
 
-## Instructions for an agent
+Start a new agent chat when onboarding asks you to. Try:
 
-An agent may execute the installation after the user authorizes writes to
-`~/.local/bin` and the interactive onboarding. It must not invent answers, pipe
-answers into onboarding, request credentials in chat, or execute a scanner from
-the repository being inspected.
+> Check this repository with Patronus.
 
-If the agent cannot attach the installer to an interactive terminal, install
-first and open onboarding visibly on macOS:
+Then open the dashboard:
 
-```console
+```sh
+patronus-security-scanner dashboard
+```
+
+## Let an agent help
+
+An agent may run the installer after the user authorizes installation into `~/.local/bin`. The user must make the interactive onboarding choices and complete browser authentication personally. The agent must never request a token in chat or execute a scanner binary supplied by the repository being inspected.
+
+If the agent cannot attach onboarding to an interactive terminal, it may install first and open setup visibly:
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/patronus-protect/patronus-security-cli/main/install.sh | sh -s -- --no-onboarding
 patronus-security-scanner onboarding --open
 ```
 
-After the user finishes onboarding, the agent verifies configuration and each
-selected integration:
+## Account and reset
 
-```console
-patronus-security-scanner onboarding --status --format json
-patronus-security-scanner integration codex status --format json
-patronus-security-scanner integration claude status --format json
-patronus-security-scanner integration deepseek status --profile headless --format json
+Local checks do not require an account. Use `patronus-security-scanner auth login` for cloud-backed features and `patronus-security-scanner auth logout` to disconnect.
+
+Rerun `patronus-security-scanner onboarding` whenever you want to change setup or add a newly installed agent host. To remove the CLI and all registered plugins:
+
+```sh
+patronus-security-scanner maintenance uninstall --all --yes
 ```
 
-Only query hosts that were selected. A manifest alone is not proof of runtime
-protection; the host must be restarted and its installed-host protection check
-must pass before it is treated as ready.
+Reports, settings and credentials remain on the device unless you remove them separately.

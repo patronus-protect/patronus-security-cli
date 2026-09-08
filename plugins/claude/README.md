@@ -1,34 +1,25 @@
 # Patronus Security for Claude Code
 
-This archive contains the Claude Code plugin only. It does not contain or install the Patronus scanner, Ark assets, or Node.js.
+The easiest installation is the Patronus onboarding flow. It detects Claude Code, downloads this plugin from the matching public release, installs it, and enables its hooks:
 
-## Requirements
-
-- A supported Claude Code installation.
-- Node.js 22.19 or newer.
-- The matching trusted `patronus-security-scanner` release installed separately on an absolute `PATH` entry.
-- An explicit `local`, `api`, or `hybrid` scanner configuration. Prepare L2/L3 assets separately when those levels are enabled.
-
-## Install and verify
-
-Extract the Claude plugin archive, then run:
-
-```console
-patronus-security-scanner integration claude install --source /absolute/path/to/extracted-claude-archive
-patronus-security-scanner integration claude status --format json
+```sh
+patronus-security-scanner onboarding
 ```
 
-Restart Claude Code. Run `/patronus-security:scan repo .` for the first static scan. For a one-off development load, Claude also supports `claude --plugin-dir /absolute/path/to/plugins/claude`; do not combine this plugin with `--strict-mcp-config`, which excludes its MCP configuration.
+If the Patronus CLI is already configured, install only the Claude Code plugin with:
 
-```console
-patronus-security-scanner integration claude disable
-patronus-security-scanner integration claude enable
-patronus-security-scanner integration claude update
-patronus-security-scanner integration claude uninstall
+```sh
+patronus-security-scanner integration claude install
 ```
 
-Use the same `--scope user|project|local` chosen at installation. Uninstall also accepts `--keep-data`. A manifest or tool listing alone does not prove protection; verify installed and enabled hook status after every lifecycle change.
+Restart Claude Code after installation. Try:
 
-The runtime scans the exact user prompt, hook-visible tool-result and tool-error text, and MCP text blocks before model continuation. It does not scan tool requests, paths, tool names, metadata, or media bytes. Dangerous originals remain unavailable; JSON-looking text remains raw text. Host surfaces that do not invoke the hooks are outside this protection boundary. The full contract is `docs/runtime-text-contract.md` in the source repository.
+> Check this repository with Patronus.
 
-Never point `PATRONUS_SCANNER_BIN` at a binary inside the repository being scanned. Licensed under Apache-2.0; see the `LICENSE` file included in this archive.
+> Patronus status.
+
+The plugin automatically checks user prompts, hook-visible tool-result text and MCP text blocks before model continuation. Dangerous originals remain unavailable; paths, tool requests, metadata and media bytes are outside this text boundary.
+
+Open `patronus-security-scanner dashboard` to review activity and configuration. A supported Claude Code installation, Node.js 22.19 or newer, and the matching Patronus CLI release are required.
+
+Licensed under Apache-2.0. The release archive includes `LICENSE` and `THIRD_PARTY_NOTICES.md`.

@@ -17,16 +17,7 @@ pub fn execute(mut args: IntegrationArgs) -> Result<()> {
         && (args.action == IntegrationAction::Install
             || (args.host == IntegrationHost::Deepseek && args.action == IntegrationAction::Update))
     {
-        let marker = if args.host == IntegrationHost::Codex {
-            ".agents/plugins/marketplace.json"
-        } else {
-            ".claude-plugin/marketplace.json"
-        };
-        let local =
-            std::env::current_dir().is_ok_and(|p| p.ancestors().any(|a| a.join(marker).is_file()));
-        if args.host == IntegrationHost::Deepseek || !local {
-            args.source = Some(crate::releases::plugin_source(args.host.as_str())?);
-        }
+        args.source = Some(crate::releases::plugin_source(args.host.as_str())?);
     }
 
     if args.source.is_some()

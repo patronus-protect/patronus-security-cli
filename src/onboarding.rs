@@ -26,8 +26,8 @@ fn fail(message: &str) -> ScannerError {
 }
 pub fn detected_hosts() -> Vec<&'static str> {
     [
-        ("claude", "claude"),
         ("codex", "codex"),
+        ("claude", "claude"),
         ("deepseek", "dsh"),
     ]
     .into_iter()
@@ -194,6 +194,31 @@ fn ask(prompt: &str, default: &str) -> Result<String> {
         answer.into()
     })
 }
+
+fn select_hosts<'a>(answer: &str, detected: &'a [&'a str]) -> Result<Vec<&'a str>> {
+    let answer = answer.trim().to_ascii_lowercase();
+    if answer == "none" {
+        return Ok(Vec::new());
+    }
+    if answer.is_empty() || answer == "all" {
+        return Ok(detected.to_vec());
+    }
+    let requested: Vec<_> = answer
+        .split([',', ' '])
+        .filter(|value| !value.is_empty())
+        .collect();
+    if requested.iter().any(|host| !detected.contains(host)) {
+        return Err(fail(
+            "Choose only detected hosts, separated by commas, or choose all/none.",
+        ));
+    }
+    Ok(detected
+        .iter()
+        .copied()
+        .filter(|host| requested.contains(host))
+        .collect())
+}
+
 pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     if status_only {
         let value = status()?;
@@ -257,25 +282,17 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
         ));
     }
     let hosts = detected_hosts();
-    println!("Detected hosts: {}", hosts.join(", "));
-    for host in hosts {
-        if ask(
-            &format!("Install the global {host} plugin and hooks? (yes/no)"),
-            "yes",
-        )? == "yes"
-        {
-            let source = ask(
-                "Marketplace root / DeepSeek package path (auto for configured release)",
-                "auto",
-            )?;
-            install(
-                host,
-                if source == "auto" {
-                    None
-                } else {
-                    Some(PathBuf::from(source))
-                },
-            )?;
+    if hosts.is_empty() {
+        println!("No supported agent host was detected. You can rerun onboarding after installing Codex, Claude Code or dsh.");
+    } else {
+        println!("Detected agent hosts: {}", hosts.join(", "));
+        let answer = ask(
+            "Install Patronus plugins (comma-separated hosts, or all/none)",
+            "all",
+        )?;
+        for host in select_hosts(&answer, &hosts)? {
+            println!("Installing Patronus for {host} from the verified release…");
+            install(host, None)?;
         }
     }
     println!("\nSetup checks passed. Start a new agent session and approve host hook trust if requested.\nDashboard: patronus-security-scanner dashboard\nTry: ‘Check this repository with Patronus.’\nTry: ‘Check this URL with Patronus: https://example.org’.\nUse patronus on / off / status in the current chat.");
@@ -410,5 +427,17 @@ mod tests {
     fn arbitrary_setup_jobs_are_rejected() {
         assert!(start_job("shell", None, None).is_err());
         assert!(start_job("install", Some("unknown".into()), None).is_err());
+    }
+
+    #[test]
+    fn plugin_selection_accepts_all_none_and_detected_subsets() {
+        let detected = ["codex", "claude", "deepseek"];
+        assert_eq!(select_hosts("all", &detected).unwrap(), detected);
+        assert!(select_hosts("none", &detected).unwrap().is_empty());
+        assert_eq!(
+            select_hosts("deepseek, codex", &detected).unwrap(),
+            ["codex", "deepseek"]
+        );
+        assert!(select_hosts("unknown", &detected).is_err());
     }
 }

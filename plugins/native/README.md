@@ -1,17 +1,9 @@
-# Shared native plugin runtime
+# Patronus native plugin runtime
 
-This directory is the shared source for the Codex and Claude Code runtime adapters. End users should install the host-specific release archive and follow its included README.
+This directory contains the shared implementation used by the Codex and Claude Code plugins. Consumers do not install it directly.
 
-The runtime requires Node.js 22.19 or newer and a separately installed, trusted `patronus-security-scanner`. It rejects repository-local scanner executables and unsafe or incompatible runtime configuration. It scans only the external text defined by `docs/runtime-text-contract.md`; static scans are a separate workflow.
+Install Patronus with `install.sh`, complete `patronus-security-scanner onboarding`, and select the agent hosts you want to protect. The CLI downloads and installs the matching public release automatically.
 
-For maintainers, build and test from the repository root:
+The runtime accepts only the external text defined in `docs/runtime-text-contract.md` and requires a separately installed trusted Patronus CLI. It rejects repository-local scanner executables and incompatible runtime settings.
 
-```console
-node plugins/native/scripts/build.mjs
-node plugins/native/scripts/typecheck.mjs
-node plugins/native/scripts/test.mjs
-```
-
-The build writes the standalone adapter to `plugins/native/dist/patronus.mjs` and the generated host copies. Edit `plugins/native/src`, not the generated bundles. Runtime dependencies are restricted to Node.js built-ins.
-
-Licensed under Apache-2.0; release packages must include the project `LICENSE` file.
+Licensed under Apache-2.0.

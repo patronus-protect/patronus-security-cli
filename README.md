@@ -1,85 +1,105 @@
-# Patronus Security Scanner
+<p align="center">
+  <img src="plugins/codex/assets/icon.png" width="112" alt="Patronus shield">
+</p>
 
-Patronus Security Scanner is a local-first command-line scanner for Git repositories, directories, and individual files. It uses Patronus Ark to classify supported text and source files, records complete coverage separately from findings, and can protect text entering supported AI-agent hosts through optional plugins.
+<h1 align="center">Patronus Security</h1>
 
-Patronus is a content gate, not a general SAST, dependency, CVE, malware, or runtime-behaviour scanner. Ark classifications are probabilistic; a clean result does not prove that content is safe.
+<p align="center">
+  Local-first security checks for AI agent chats, repositories, files and tools.
+</p>
 
-## Requirements
+Patronus installs a small CLI and optional plugins for Codex, Claude Code and DeepSeek Harness. The plugins inspect external text before it reaches the model and keep dangerous content behind a verifiable receipt.
 
-- A prebuilt CLI archive from this repository's GitHub Releases, or Rust/Cargo for a source build.
-- Node.js 22.19 or newer for the Codex, Claude Code, and DeepSeek plugins.
-- Local L1 scanning needs no downloaded model assets. L2/L3 requires assets prepared explicitly with `patronus-security-scanner assets prepare`.
+> One installer. One guided setup. No repository checkout and no archive paths.
 
-Plugin bundles do not contain, download, or silently install the scanner executable. Install the trusted CLI separately and keep it on an absolute `PATH` entry. Never use a scanner binary supplied by the repository being inspected.
+## Install
 
-## Install and set up
+Run this in a macOS or Linux terminal:
 
-The standalone installer needs no repository checkout. It verifies the installer backend and target-specific CLI archive before replacing `~/.local/bin/patronus-security-scanner`, then starts onboarding. The onboarding flow configures processing, runs a visible injection check, and offers to install plugins for detected Codex, Claude Code, and `dsh` hosts.
-
-```console
+```sh
 curl -fsSL https://raw.githubusercontent.com/patronus-protect/patronus-security-cli/main/install.sh | sh
 ```
 
-Use `--no-onboarding` only when installation runs without an interactive terminal. See [INSTALL.md](INSTALL.md) for agent-oriented and private-repository instructions. Rust and Cargo are not needed for a prebuilt release.
+The installer verifies the release, installs `patronus-security-scanner`, and immediately opens onboarding.
 
-To build a checkout instead:
+## Onboarding
 
-```console
-cargo install --locked --path . --bin patronus-security-scanner
+Onboarding guides you through five short choices:
+
+1. Sign in when you want cloud-backed features. Local protection works without an account.
+2. Choose Local, Hybrid or API processing.
+3. Choose the analysis level. L1 needs no model download.
+4. Run a visible injection check.
+5. Select any detected agent hosts. Patronus downloads and installs their plugins automatically.
+
+Run onboarding again at any time:
+
+```sh
+patronus-security-scanner onboarding
 ```
 
-For a source build, confirm the installation and create an explicit configuration:
+If you install another host later, either rerun onboarding or use one direct command:
 
-```console
-patronus-security-scanner --version
-patronus-security-scanner config init --provider local
-patronus-security-scanner config print --format json
+```sh
+patronus-security-scanner integration codex install
+patronus-security-scanner integration claude install
+patronus-security-scanner integration deepseek install
 ```
 
-## First scan
+## Try it in a chat
 
-```console
-patronus-security-scanner scan repo .
-patronus-security-scanner scan directory ./src --max-level l1
-patronus-security-scanner scan file ./README.md --progress off
+Start a new agent chat after onboarding, then ask naturally:
+
+> Check this repository with Patronus.
+
+> Check this file with Patronus: `README.md`
+
+> Check this URL with Patronus: `https://example.org`
+
+> Patronus status.
+
+Runtime protection is automatic. In a supported chat, `patronus on`, `patronus off`, and `patronus status` control or explain protection for that chat.
+
+## Dashboard
+
+Open the local dashboard to review activity, finish setup and adjust protection:
+
+```sh
+patronus-security-scanner dashboard
 ```
 
-Reports default to `~/.patronus-security-scanner/output/<run-id>/`. Machine-readable results go to stdout with `--format json`; progress and diagnostics go to stderr. A result is `CLEAN` only when requested coverage completed with no findings. See [output format](docs/output-format.md).
+The dashboard runs on loopback and stores reports and settings on this device by default.
 
-## Agent plugins
+## Account
 
-Release archives for Codex and Claude Code contain their marketplace manifests and complete plugin directories. The DeepSeek integration is distributed as a `.tgz`. Extract the selected archive and install it with the CLI:
+An account is optional for local checks. Sign in for API processing, account usage, and public URL or MCP-server scans:
 
-```console
-patronus-security-scanner integration codex install --source /path/to/extracted-codex-archive
-patronus-security-scanner integration claude install --source /path/to/extracted-claude-archive
-patronus-security-scanner integration deepseek install --profile headless --source /path/to/patronus-deepseek-security.tgz
+```sh
+patronus-security-scanner auth login
+patronus-security-scanner auth status
+patronus-security-scanner auth logout
 ```
 
-Restart the host, then verify the installed integration:
+The browser provides a one-time code; do not paste API tokens into an agent chat.
 
-```console
-patronus-security-scanner integration codex status --format json
+## Reset or uninstall
+
+Rerun `patronus-security-scanner onboarding` to reset setup choices without losing reports. To remove the CLI and all registered plugins:
+
+```sh
+patronus-security-scanner maintenance uninstall --all --yes
 ```
 
-Replace `codex` with `claude` or `deepseek` as needed. The same command group provides `enable`, `disable`, `update`, and `uninstall`. Host-specific instructions are included in each release archive and in this repository:
+Saved settings, reports and credentials are preserved. Use `patronus-security-scanner auth logout` separately when you also want to disconnect the account.
 
-- [Codex plugin](plugins/codex/README.md)
-- [Claude Code plugin](plugins/claude/README.md)
-- [DeepSeek plugin](plugins/deepseek/README.md)
+## What Patronus covers
 
-An installed manifest or visible MCP tool alone does not prove enforcement. Before relying on a plugin, verify mock visibility, enforcement, and installed-host behaviour. The exact text boundary is defined by the [runtime text contract](docs/runtime-text-contract.md).
+Patronus checks supported text for prompt injection, sensitive data and configured Ark classifications. Plugin protection covers user-prompt text, tool-result text and MCP text blocks. It does not scan tool requests, paths, metadata or media bytes.
 
-## Configuration and data handling
+Patronus is not a general SAST, dependency, CVE, malware or runtime-behaviour scanner. A clean result is useful evidence, not proof that arbitrary software is safe.
 
-`provider.mode` is explicit:
-
-- `local` processes scans on the device.
-- `api` sends scan text to the configured Patronus API.
-- `hybrid` keeps files and user prompts local; runtime tool/MCP results above the configured local threshold use the API.
-
-There is no silent provider fallback. Local model downloads are disabled unless the user explicitly prepares assets or enables downloads. Reports stay on the device by default; source content and raw evidence are omitted from normal report artifacts. See [configuration](docs/configuration.md), [privacy](docs/privacy.md), and the [threat model](docs/threat-model.md).
+For exact behavior, see [configuration](docs/configuration.md), [privacy](docs/privacy.md), the [runtime text contract](docs/runtime-text-contract.md), and the [threat model](docs/threat-model.md).
 
 ## License
 
-Patronus Security Scanner and its first-party plugin code are provided under the Apache License 2.0. See [LICENSE](LICENSE) and [licensing notes](docs/licensing.md). Third-party components and model assets remain subject to their own notices and terms.
+Patronus Security Scanner and its first-party plugins are licensed under [Apache License 2.0](LICENSE). Third-party components and model assets retain their own terms; see [licensing notes](docs/licensing.md) and `THIRD_PARTY_NOTICES.md`.

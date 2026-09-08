@@ -14,7 +14,7 @@ async function loadSetup(){
  $('setup-restart').textContent=setupState.restart_required?'Plugin installation recorded. Start a new agent session and confirm the host reports its hooks active.':'';
  const hosts=$('setup-hosts');hosts.replaceChildren();
  if(!setupState.detected_hosts.length)hosts.append(node('p','No supported host CLI detected on PATH. Install Claude Code, Codex or DeepSeek Harness and refresh.'));
- for(const host of setupState.detected_hosts){const b=button(`Install ${host}`,()=>startSetupJob('install',host));b.disabled=!setupState.configuration_verified;hosts.append(b);}
+ for(const host of setupState.detected_hosts){const b=button(`Protect ${host}`,()=>startSetupJob('install',host));b.disabled=!setupState.configuration_verified;hosts.append(b);}
  showSetupJob(data.job);
 }
 function showCheck(b){$('setup-check-result').textContent=`${b.detected?'Injection detected':'Detection failed — review your enabled rules'} · ${b.provider}`;}
@@ -25,7 +25,7 @@ function showSetupJob(job){
  if(job.state==='running'){for(const b of $('setup-hosts').querySelectorAll('button'))b.disabled=true;setupPoll=setTimeout(()=>loadSetup().catch(e=>message(e.message,true)),1500);}
  if(job.state==='completed'&&job.action==='check')showCheck(job.result);
 }
-async function startSetupJob(action,host){const data={action};if(host){data.host=host;const source=$('setup-source').value.trim();if(source)data.source=source;}showSetupJob(await api('/api/onboarding',data));}
+async function startSetupJob(action,host){const data={action};if(host)data.host=host;showSetupJob(await api('/api/onboarding',data));}
 on('setup-configure','click',async()=>{await api('/api/onboarding',{action:'configure',mode:$('setup-mode').value,level:$('setup-level').value});state=await api('/api/state');draft=clone(state.profiles);renderSettings();renderAssessments();updateDraft();await loadSetup();message('Processing choices saved. Continue with models and the injection check.');});
 on('setup-models','click',()=>startSetupJob('models'));
 on('setup-check','click',()=>startSetupJob('check'));

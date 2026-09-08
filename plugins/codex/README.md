@@ -1,36 +1,25 @@
 # Patronus Security for Codex
 
-This archive contains the Codex plugin only. It does not contain or install the Patronus scanner, Ark assets, or Node.js.
+The easiest installation is the Patronus onboarding flow. It detects Codex, downloads this plugin from the matching public release, installs it, and prepares all required hooks:
 
-## Requirements
-
-- A supported Codex installation.
-- Node.js 22.19 or newer.
-- The matching trusted `patronus-security-scanner` release installed separately on an absolute `PATH` entry.
-- An explicit `local`, `api`, or `hybrid` scanner configuration. Prepare L2/L3 assets separately when those levels are enabled.
-
-## Install and verify
-
-Extract the Codex plugin archive, then run:
-
-```console
-patronus-security-scanner integration codex install --source /absolute/path/to/extracted-codex-archive
-patronus-security-scanner integration codex status --format json
+```sh
+patronus-security-scanner onboarding
 ```
 
-Restart Codex. Ask `Scan this repository with Patronus Ark`, or invoke `$patronus-security-scan` with `repo .`, `directory PATH`, or `file PATH`.
+If the Patronus CLI is already configured, install only the Codex plugin with:
 
-```console
-patronus-security-scanner integration codex disable
-patronus-security-scanner integration codex enable
-patronus-security-scanner integration codex update
-patronus-security-scanner integration codex uninstall
+```sh
+patronus-security-scanner integration codex install
 ```
 
-The plugin includes native hooks, an MCP definition, runtime/static-scan skills, and a bundled JavaScript adapter. A manifest or visible tool does not prove protection. `status` must report the required hooks installed, enabled, reachable, and trusted. Start a new Codex task after lifecycle changes.
+Start a new Codex task after installation. Try:
 
-The runtime scans user-prompt text, tool-result text, and MCP `content[].text` before model continuation. It does not scan tool requests, paths, tool names, metadata, or media bytes. Dangerous originals remain unavailable; pending results use the supplied status workflow. JSON-looking text remains raw text. The full contract is `docs/runtime-text-contract.md` in the source repository.
+> Check this repository with Patronus.
 
-Static repository scans are separate and return bounded coverage/finding metadata without adding source files to model context. Never point `PATRONUS_SCANNER_BIN` at a binary inside the repository being scanned.
+> Patronus status.
 
-Licensed under Apache-2.0; see the `LICENSE` file included in this archive.
+The plugin automatically checks user prompts, tool-result text and MCP text blocks before model continuation. Dangerous originals remain unavailable; paths, tool requests, metadata and media bytes are outside this text boundary.
+
+Open `patronus-security-scanner dashboard` to review activity and configuration. A supported Codex installation, Node.js 22.19 or newer, and the matching Patronus CLI release are required.
+
+Licensed under Apache-2.0. The release archive includes `LICENSE` and `THIRD_PARTY_NOTICES.md`.
