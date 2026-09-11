@@ -1,6 +1,6 @@
 # Licensing
 
-Patronus Security Scanner, its CLI, and the first-party plugins in this
+The Patronus Security CLI and the first-party integrations in this
 repository are distributed under the Apache License 2.0. The complete terms are
 in the repository's `LICENSE` file and accompany release artifacts.
 
@@ -11,6 +11,11 @@ This distribution uses exactly `patronus-ark 0.1.6`, pinned in `Cargo.toml` and
 and has authorized its inclusion in this Apache-2.0 distribution under different
 terms. This authorization applies to this distribution; it does not alter or
 relabel the metadata of the separately published crates.io artifact.
+
+This boundary is checked by `cargo deny check licenses`. The repository's
+`deny.toml` accepts `GPL-3.0-only` only for the exact `patronus-ark` package;
+it does not allow GPL dependencies generally. The CLI package itself
+continues to declare `Apache-2.0` in `Cargo.toml`.
 
 Third-party components remain under their respective licenses. In particular,
 the embedded Manrope and Inter font subsets retain their SIL Open Font License

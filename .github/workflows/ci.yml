@@ -5,6 +5,14 @@ on:
   pull_request:
 
 jobs:
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-deny --locked --version 0.20.2
+      - run: cargo deny check licenses
+
   test:
     strategy:
       matrix:
@@ -16,8 +24,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-targets --all-features
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-targets --all-features
       - run: cargo build --release
 
   schemas-and-plugins:
@@ -60,7 +68,8 @@ jobs:
       - run: node plugins/native/scripts/build.mjs
       - run: git diff --exit-code -- plugins/codex/scripts/patronus.mjs plugins/claude/scripts/patronus.mjs
       - run: cargo build --locked
-      - run: node plugins/native/scripts/test.mjs protocol.test.ts
+      - run: node plugins/native/scripts/typecheck.mjs
+      - run: node plugins/native/scripts/test.mjs
       - run: node plugins/deepseek/scripts/test.mjs
       - run: node plugins/deepseek/scripts/test.mjs --local
       - run: cp THIRD_PARTY_NOTICES.md plugins/deepseek/THIRD_PARTY_NOTICES.md

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add an automated Cargo license policy that keeps Patronus Security under
+  Apache-2.0 while explicitly approving the first-party GPL-3.0-only
+  `patronus-ark` dependency.
 - Gate releases on twelve installed-host E2E flows for Codex and DeepSeek, with
   artifact hashes, model-visible evidence, upgrade and scanner-recovery checks.
   Keep the suite opt-in outside release publishing.
