@@ -3,12 +3,12 @@
   "owner": {
     "name": "Patronus"
   },
-  "description": "Local Patronus security scanner integrations",
+  "description": "Patronus Security integrations for AI agents",
   "plugins": [
     {
       "name": "patronus-security",
       "source": "./plugins/claude",
-      "description": "Scan a repository, directory, or file with Patronus Ark.",
+      "description": "Patronus Runtime Protection and explicit security scans for Claude Code.",
       "version": "0.1.0"
     }
   ]

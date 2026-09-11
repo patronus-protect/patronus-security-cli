@@ -2,7 +2,13 @@
 set -eu
 
 repository=${PATRONUS_GITHUB_REPOSITORY:-patronus-protect/patronus-security-cli}
-base_url=${PATRONUS_INSTALLER_BASE_URL:-https://github.com/$repository/releases/latest/download}
+version=${PATRONUS_VERSION:-0.1.0}
+version=${version#v}
+case "$version" in
+  *[!0-9A-Za-z.-]*|'') echo "Invalid release version" >&2; exit 1 ;;
+esac
+[ "${#version}" -le 64 ] || { echo "Invalid release version" >&2; exit 1; }
+base_url=${PATRONUS_INSTALLER_BASE_URL:-https://github.com/$repository/releases/download/v$version}
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/patronus-installer.XXXXXX")
 trap 'rm -rf "$work_dir"' 0 HUP INT TERM
 
@@ -33,4 +39,4 @@ else
 fi
 [ "$actual" = "$expected" ] || { echo "Installer checksum mismatch" >&2; exit 1; }
 
-python3 "$work_dir/install.py" "$@"
+python3 "$work_dir/install.py" "$@" --version "$version"

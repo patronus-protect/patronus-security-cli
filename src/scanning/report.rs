@@ -321,7 +321,7 @@ pub fn exit_code(status: ScanStatus, fail_on: FailOn) -> i32 {
 
 pub fn markdown(report: &Report) -> String {
     let mut output = format!(
-        "# Patronus Security Scanner Report\n\n## {:?}\n\n{}\n\n",
+        "# Patronus Security Report\n\n## {:?}\n\n{}\n\n",
         report.status,
         escape_markdown(&report.conclusion)
     );

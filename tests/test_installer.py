@@ -27,7 +27,13 @@ class InstallerTest(unittest.TestCase):
             (root / 'install.py.sha256').write_text(hashlib.sha256(backend.read_bytes()).hexdigest())
             environment = {**os.environ, 'PATRONUS_INSTALLER_BASE_URL': root.as_uri(), 'MARKER': str(marker)}
             subprocess.run(['sh', str(INSTALL_SH), '--no-onboarding'], check=True, env=environment)
-            self.assertEqual(marker.read_text(), '--no-onboarding')
+            self.assertEqual(marker.read_text(), '--no-onboarding --version 0.1.0')
+
+    def test_shell_entrypoint_rejects_an_invalid_release_version(self):
+        environment = {**os.environ, 'PATRONUS_VERSION': '../unexpected'}
+        completed = subprocess.run(['sh', str(INSTALL_SH), '--no-onboarding'], env=environment, capture_output=True, text=True)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn('Invalid release version', completed.stderr)
 
     def test_linux_arm64_is_not_advertised_without_a_release_target(self):
         with patch.object(platform, 'system', return_value='Linux'), patch.object(platform, 'machine', return_value='aarch64'):
@@ -43,12 +49,19 @@ class InstallerTest(unittest.TestCase):
         base = f'https://github.com/{installer.REPOSITORY}/releases/download/v0.1.0/'
         release = {'tag_name': 'v0.1.0', 'assets': [{'name': f, 'browser_download_url': base + f} for f in [name, name + '.sha256']]}
         def fetch(url, limit):
-            if url.endswith('/latest'): return json.dumps(release).encode()
+            if url.endswith('/releases/tags/v0.1.0'): return json.dumps(release).encode()
             if url.endswith('.sha256'): return (('0' * 64) if mismatch else hashlib.sha256(payload).hexdigest()).encode()
             return payload
         argv = ['install.py'] if onboarding else ['install.py', '--no-onboarding']
         with patch.object(installer.Path, 'home', return_value=home), patch.object(installer, 'fetch', side_effect=fetch), patch.object(installer, 'platform_target', return_value='aarch64-apple-darwin'), patch.object(installer.sys, 'argv', argv), patch.object(installer.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'version') if health_fails else None), patch('builtins.print'):
             installer.main()
+
+    def test_remote_install_rejects_mismatched_release_metadata(self):
+        release = {'tag_name': 'v0.1.1', 'assets': []}
+        argv = ['install.py', '--version', '0.1.0', '--no-onboarding']
+        with patch.object(installer.sys, 'argv', argv), patch.object(installer, 'fetch', return_value=json.dumps(release).encode()):
+            with self.assertRaisesRegex(ValueError, 'Release version mismatch'):
+                installer.main()
 
     def test_verified_release_replaces_existing_cli(self):
         with tempfile.TemporaryDirectory() as root:

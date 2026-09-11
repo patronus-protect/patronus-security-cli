@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a verified public Patronus CLI release (standard-library Python only)."""
+"""Install a verified public Patronus Security CLI release (standard-library Python only)."""
 import argparse
 import hashlib
 import io
@@ -14,6 +14,7 @@ import urllib.request
 import zipfile
 
 REPOSITORY = "patronus-protect/patronus-security-cli"
+INSTALLER_VERSION = "0.1.0"
 
 def fetch(url, limit):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "patronus-installer"}
@@ -43,16 +44,19 @@ def main():
     parser.add_argument("--version", help=argparse.SUPPRESS)
     parser.add_argument("--install-dir", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
-    release = None
     if args.archive:
         if not args.checksum or not args.version:
             raise ValueError("Local installation requires --archive, --checksum and --version")
         version = args.version.removeprefix("v")
     else:
-        release = json.loads(fetch(f"https://api.github.com/repos/{REPOSITORY}/releases/latest", 1024 * 1024))
-        version = release["tag_name"].removeprefix("v")
+        version = (args.version or INSTALLER_VERSION).removeprefix("v")
     if not version or len(version) > 64 or any(not (c.isascii() and (c.isalnum() or c in ".-")) for c in version):
         raise ValueError("Invalid release version")
+    release = None
+    if not args.archive:
+        release = json.loads(fetch(f"https://api.github.com/repos/{REPOSITORY}/releases/tags/v{version}", 1024 * 1024))
+        if release["tag_name"] != f"v{version}":
+            raise ValueError("Release version mismatch")
     name = f"patronus-security-scanner-{version}-{platform_target()}.zip"
     if args.archive:
         if args.archive.name != name or args.archive.stat().st_size > 250 * 1024 * 1024 or args.checksum.stat().st_size > 4096:

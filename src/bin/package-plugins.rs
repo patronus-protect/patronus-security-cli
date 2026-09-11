@@ -151,6 +151,14 @@ fn verify_versions(expected: &str) -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
+    for (path, marker) in [
+        ("install.py", format!("INSTALLER_VERSION = \"{expected}\"")),
+        ("install.sh", format!("PATRONUS_VERSION:-{expected}")),
+    ] {
+        if !std::fs::read_to_string(path)?.contains(&marker) {
+            return Err(format!("{path} does not target release {expected}").into());
+        }
+    }
     Ok(())
 }
 

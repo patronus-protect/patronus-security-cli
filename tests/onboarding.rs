@@ -53,11 +53,18 @@ fn no_interactive_setup_and_remote_scans_require_authentication() {
         .failure()
         .stderr(predicates::str::contains("interactive terminal"));
     for kind in ["url", "mcp"] {
-        cli(root.path())
+        let output = cli(root.path())
             .args(["scan", kind, "https://example.org/", "--format", "json"])
             .assert()
             .failure()
-            .stderr(predicates::str::contains("authentication: not signed in"));
+            .get_output()
+            .stdout
+            .clone();
+        let output: Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(output["schema"], "patronus.remote.scan.error.v1");
+        assert_eq!(output["kind"], kind);
+        assert_eq!(output["provider"], "api");
+        assert_eq!(output["reason"], "authentication_missing");
     }
     assert!(!root.path().join("auth/credentials.json").exists());
 }

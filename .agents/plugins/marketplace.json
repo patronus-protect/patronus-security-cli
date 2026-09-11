@@ -1,7 +1,7 @@
 {
   "name": "patronus-local",
   "interface": {
-    "displayName": "Patronus Local"
+    "displayName": "Patronus Security"
   },
   "plugins": [
     {
