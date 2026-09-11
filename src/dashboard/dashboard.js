@@ -30,8 +30,7 @@ function renderAssessments(){
   enabled.addEventListener('change',()=>{rule.enabled=enabled.checked;updateDraft();});label.append(enabled,document.createTextNode(` ${title}`));box.append(label);
   const levelLabel=node('label','Analysis'),level=node('select');level.setAttribute('aria-label',`${title} analysis`);
   for(const [value,text] of [['l2','L2'],['l3','L2 + L3']]){const option=node('option',text);option.value=value;level.append(option);}level.value=rule.max_level;level.addEventListener('change',()=>{rule.max_level=level.value;updateDraft();});levelLabel.append(level);box.append(levelLabel);
-  const confidenceLabel=node('label','Flag from confidence (%)'),confidence=node('input');confidence.type='number';confidence.min='0';confidence.max='100';confidence.step='1';confidence.value=String(Math.round(rule.min_confidence*100));confidence.setAttribute('aria-label',`${title} minimum confidence`);
-  confidence.addEventListener('input',()=>{if(!confidence.validity.valid||confidence.value==='')return;rule.min_confidence=Number(confidence.value)/100;updateDraft();});confidenceLabel.append(confidence);box.append(confidenceLabel);grid.append(box);
+  grid.append(box);
  }
 }
 for(const id of ['policy-host','policy-surface'])on(id,'change',()=>{renderAssessments();updateDraft();});

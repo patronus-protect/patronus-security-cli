@@ -11,7 +11,10 @@ pub const SURFACES: [&str; 3] = ["user_input", "tool_result", "mcp_result"];
 pub struct Assessment {
     pub enabled: bool,
     pub max_level: String,
-    pub min_confidence: f64,
+    /// Accepted only to migrate older configurations. Ark owns classifier
+    /// thresholds, so this value is never serialized or applied.
+    #[serde(default, skip_serializing)]
+    pub min_confidence: Option<f64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,10 +39,11 @@ impl Profile {
         }
         for assessment in [&self.injection, &self.threat] {
             if !["l2", "l3"].contains(&assessment.max_level.as_str())
-                || !assessment.min_confidence.is_finite()
-                || !(0.0..=1.0).contains(&assessment.min_confidence)
+                || assessment
+                    .min_confidence
+                    .is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value))
             {
-                return Err("Assessment requires L2 or L3 and confidence between 0 and 1".into());
+                return Err("Assessment requires L2 or L3".into());
             }
         }
         Ok(())
@@ -58,7 +62,7 @@ impl Profile {
             Assessment {
                 enabled: category_enabled(category) && level != "l1",
                 max_level: if level == "l1" { "l2" } else { level }.into(),
-                min_confidence: *config.analysis.confidence.get(category).unwrap_or(&0.5),
+                min_confidence: None,
             }
         };
         Self {
@@ -122,10 +126,6 @@ impl Profile {
                     .analysis
                     .category_levels
                     .insert(category.into(), rule.max_level.clone());
-                config
-                    .analysis
-                    .confidence
-                    .insert(category.into(), rule.min_confidence);
             }
         }
         config
@@ -149,21 +149,31 @@ pub fn resolved(config: &Config) -> BTreeMap<String, Profile> {
         .collect()
 }
 
-/// Confidence rules apply only to matched L2/L3 Injection and Threat output.
-/// L1 detections and PII/DLP results retain their scanner semantics.
-pub fn assess(
-    mut outcome: crate::ark::AnalysisOutcome,
-    thresholds: &BTreeMap<String, f64>,
-) -> crate::ark::AnalysisOutcome {
+/// Scoped model policies consume Ark's calibrated candidate decision. The
+/// scanner never applies a second confidence threshold.
+pub fn assess(mut outcome: crate::ark::AnalysisOutcome) -> crate::ark::AnalysisOutcome {
     for result in &mut outcome.classifications {
-        if ["l2", "l3"].contains(&result.level.as_str())
-            && ["prompt_injection", "threat"].contains(&result.category.as_str())
-            && thresholds
-                .get(&result.category)
-                .is_some_and(|threshold| result.confidence < *threshold)
+        if !["l2", "l3"].contains(&result.level.as_str())
+            || !["prompt_injection", "threat"].contains(&result.category.as_str())
         {
-            result.matched = false;
-            result.evidence.clear();
+            continue;
+        }
+        let Some(candidate) = result
+            .decision
+            .as_ref()
+            .and_then(|decision| decision.get("decision_candidate"))
+            .and_then(|candidate| {
+                serde_json::from_value::<patronus_ark::DecisionCandidate>(candidate.clone()).ok()
+            })
+        else {
+            continue;
+        };
+        result.source = candidate.source;
+        result.label = candidate.class_name;
+        result.confidence = candidate.confidence.clamp(0.0, 1.0);
+        result.matched = candidate.accepted;
+        if !result.matched {
+            result.evidence.clear()
         }
     }
     outcome

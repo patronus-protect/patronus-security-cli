@@ -3,7 +3,7 @@
   <p class="server-note">Start <code>patronus-security-scanner dashboard</code> to edit policies.</p>
   <div class="live-controls" hidden>
     <div class="control-toolbar"><label>Plugin<select id="policy-host"><option value="claude">Claude</option><option value="codex">Codex</option><option value="deepseek">DeepSeek</option></select></label><label>Text input<select id="policy-surface"><option value="user_input">User Input</option><option value="tool_result">Tool Result</option><option value="mcp_result">MCP Result</option></select></label></div>
-    <section class="panel"><div class="panel-head"><div><h2>Threat assessment</h2><p>Injection and Threat: flag matched L2/L3 results at or above your confidence threshold. L1 rules operate independently.</p></div></div><div id="assessment-rules" class="control-grid"></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Threat assessment</h2><p>Injection and Threat use Ark's calibrated L2/L3 decisions. L1 rules operate independently.</p></div></div><div id="assessment-rules" class="control-grid"></div></section>
     <section class="panel"><div class="panel-head"><div><h2>L1 rules</h2><p>Turn individual PII, DLP and Injection detections on or off.</p></div></div>
     <div class="control-grid"><label>Category<select id="policy-filter"><option value="pii">PII</option><option value="dlp">DLP</option><option value="prompt_injection">Injection</option></select></label><label>Search<input id="policy-search" type="search" placeholder="Find a rule"></label></div>
     <p class="setting-line" id="rule-count"></p><div id="policy-list"></div></section>

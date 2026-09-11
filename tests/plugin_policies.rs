@@ -64,29 +64,40 @@ fn classification(category: &str, level: &str, confidence: f64) -> FinalClassifi
     }
 }
 #[test]
-fn confidence_boundary_only_filters_injection_and_threat_models() {
-    let thresholds = [("prompt_injection".into(), 0.8), ("threat".into(), 0.8)].into();
+fn scoped_model_policy_uses_arks_decision_candidate_without_rethresholding() {
+    let mut rejected = classification("prompt_injection", "l2", 0.99);
+    rejected.decision = Some(serde_json::json!({
+        "final_result": {"class_name": "benign", "confidence": 0.0, "source": "default"},
+        "decision_candidate": {
+            "source": "l2", "class_name": "injection", "confidence": 0.97,
+            "acceptance_threshold": 0.99, "accepted": false, "evidence": null
+        }
+    }));
+    let mut accepted = classification("threat", "l3", 0.1);
+    accepted.decision = Some(serde_json::json!({
+        "final_result": {"class_name": "malware", "confidence": 0.91, "source": "l3"},
+        "decision_candidate": {
+            "source": "l3", "class_name": "malware", "confidence": 0.91,
+            "acceptance_threshold": 0.9, "accepted": true, "evidence": null
+        }
+    }));
     let outcome = AnalysisOutcome {
-        classifications: vec![
-            classification("prompt_injection", "l1", 0.7),
-            classification("prompt_injection", "l2", 0.79),
-            classification("prompt_injection", "l3", 0.8),
-            classification("threat", "l2", 0.79),
-            classification("threat", "l3", 0.9),
-            classification("pii", "l2", 0.1),
-            classification("dlp", "l3", 0.1),
-        ],
+        classifications: vec![rejected, accepted, classification("pii", "l2", 0.1)],
         failures: vec!["incomplete model".into()],
         degraded: true,
     };
-    let result = plugin_policies::assess(outcome, &thresholds);
+    let result = plugin_policies::assess(outcome);
     assert_eq!(
         result
             .classifications
             .iter()
-            .map(|c| c.matched)
+            .map(|c| (c.matched, c.label.as_str(), c.confidence, c.source.as_str()))
             .collect::<Vec<_>>(),
-        vec![true, false, true, false, true, true, true]
+        vec![
+            (false, "injection", 0.97, "l2"),
+            (true, "malware", 0.91, "l3"),
+            (true, "unsafe", 0.1, "fixture"),
+        ]
     );
     assert!(result.degraded);
     assert_eq!(result.failures.len(), 1);
@@ -95,9 +106,9 @@ fn confidence_boundary_only_filters_injection_and_threat_models() {
 fn profiles_reject_unknown_scope_rule_and_invalid_confidence() {
     let mut config: Config = toml::from_str(DEFAULTS).unwrap();
     let mut profile = Profile::current(&config, "tool_result");
-    profile.threat.min_confidence = 1.1;
+    profile.threat.min_confidence = Some(1.1);
     assert!(profile.validate().is_err());
-    profile.threat.min_confidence = 0.8;
+    profile.threat.min_confidence = None;
     profile.l1_rules.insert("not-a-rule".into(), true);
     assert!(profile.validate().is_err());
     config
@@ -109,11 +120,14 @@ fn profiles_reject_unknown_scope_rule_and_invalid_confidence() {
 #[test]
 fn frozen_config_preserves_boolean_rules_with_secret_names() {
     let mut config: Config = toml::from_str(DEFAULTS).unwrap();
-    config.plugin_policies.insert(
-        "codex.tool_result".into(),
-        Profile::current(&config, "tool_result"),
-    );
-    let restored: Config = toml::from_str(&config.redacted_toml().unwrap()).unwrap();
+    let mut profile = Profile::current(&config, "tool_result");
+    profile.injection.min_confidence = Some(0.73);
+    config
+        .plugin_policies
+        .insert("codex.tool_result".into(), profile);
+    let serialized = config.redacted_toml().unwrap();
+    assert!(!serialized.contains("min_confidence"));
+    let restored: Config = toml::from_str(&serialized).unwrap();
     assert_eq!(
         restored.plugin_policies["codex.tool_result"].l1_rules,
         config.plugin_policies["codex.tool_result"].l1_rules

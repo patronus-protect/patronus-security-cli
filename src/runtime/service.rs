@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 
 // Bump when approval semantics change, independently of the wire protocol.
 // Version 6 binds plugin text surfaces and confidence policies to durable jobs.
-const ANALYSIS_POLICY_VERSION: u32 = 8;
+const ANALYSIS_POLICY_VERSION: u32 = 9;
 
 pub struct Runtime {
     store: Arc<Mutex<Store>>,

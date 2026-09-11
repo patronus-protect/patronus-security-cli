@@ -282,17 +282,24 @@ impl Store {
     pub fn claim_next(&mut self, config_hash: &str) -> RuntimeResult<Option<JobWork>> {
         self.cleanup()?;
         let tx = sql(self.db.transaction())?;
-        let next: Option<(String, String, i64, String, Option<String>)> = sql(tx.query_row(
-            "SELECT scan_id,payload_hash,deadline_ms,direction,policy_scope FROM jobs WHERE status='queued' AND config_hash=?1 ORDER BY created_ms,rowid LIMIT 1",
-            [config_hash], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        let next: Option<(String, String, i64, i64, String, Option<String>)> = sql(tx.query_row(
+            "SELECT scan_id,payload_hash,deadline_ms,created_ms,direction,policy_scope FROM jobs WHERE status='queued' AND config_hash=?1 ORDER BY created_ms,rowid LIMIT 1",
+            [config_hash], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
         ).optional())?;
-        if let Some((id, hash, deadline_ms, direction, policy_scope)) = next {
+        if let Some((id, hash, accepted_deadline_ms, created_ms, direction, policy_scope)) = next {
             let direction = match direction.as_str() {
                 "request" => Direction::Request,
                 "response" => Direction::Response,
                 _ => return Err("invalid stored scan direction".into()),
             };
-            sql(tx.execute("UPDATE jobs SET status='running' WHERE scan_id=?1", [&id]))?;
+            // Queue contention must not consume the analyzer's execution budget.
+            // Preserve the accepted budget, but start it when the worker claims
+            // the job. Invalid non-positive budgets are expired by cleanup().
+            let deadline_ms = now().saturating_add(accepted_deadline_ms - created_ms);
+            sql(tx.execute(
+                "UPDATE jobs SET status='running',deadline_ms=?2 WHERE scan_id=?1",
+                params![id, deadline_ms],
+            ))?;
             sql(tx.commit())?;
             match self.read_payload(&id, "original", &hash) {
                 Ok(payload) => Ok(Some(JobWork {
@@ -616,7 +623,10 @@ impl Store {
 
     pub fn cleanup(&mut self) -> RuntimeResult<()> {
         let now = now();
-        sql(self.db.execute("UPDATE jobs SET status='expired' WHERE deadline_ms<=?1 AND status IN ('queued','running')", [now]))?;
+        sql(self.db.execute(
+            "UPDATE jobs SET status='expired' WHERE (status='running' AND deadline_ms<=?1) OR (status='queued' AND deadline_ms<=created_ms)",
+            [now],
+        ))?;
         let expired: Vec<String> = {
             let mut stmt = sql(self
                 .db
@@ -649,7 +659,11 @@ impl Store {
     }
 
     pub fn pending_count(&self) -> RuntimeResult<usize> {
-        sql(self.db.query_row("SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running') AND deadline_ms>?1 AND expires_ms>?1", [now()], |r| r.get(0)))
+        sql(self.db.query_row(
+            "SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running') AND expires_ms>?1",
+            [now()],
+            |r| r.get(0),
+        ))
     }
 
     fn lookup(&self, id: &str, owner: &str) -> RuntimeResult<Option<StoredJob>> {

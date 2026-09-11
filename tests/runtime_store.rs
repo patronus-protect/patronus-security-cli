@@ -180,6 +180,23 @@ fn expired_work_is_never_claimed_or_released() {
 }
 
 #[test]
+fn queued_work_receives_its_full_execution_budget_when_claimed() {
+    let (temp, mut store) = setup();
+    let id = store.enqueue(job(json!("queued"))).unwrap();
+    let db = rusqlite::Connection::open(temp.path().join("store/jobs.sqlite3")).unwrap();
+    db.execute(
+        "UPDATE jobs SET created_ms=0,deadline_ms=60000 WHERE scan_id=?1",
+        [&id],
+    )
+    .unwrap();
+
+    assert_eq!(store.pending_count().unwrap(), 1);
+    let claimed = store.claim_next("config-a").unwrap().unwrap();
+    assert_eq!(claimed.scan_id, id);
+    assert!(claimed.deadline_ms >= now() + 59_000);
+}
+
+#[test]
 fn restart_requeues_only_unfinished_jobs_with_the_same_configuration() {
     let (temp, mut store) = setup();
     let running = store.enqueue(job(json!("running"))).unwrap();

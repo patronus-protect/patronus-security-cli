@@ -106,16 +106,10 @@ impl ContentAnalyzer for Inference {
         Ok(())
     }
     fn analyze(&self, input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
-        Ok(crate::plugin_policies::assess(
-            self.analyze_text(input)?,
-            &self.config.analysis.confidence,
-        ))
+        self.analyze_text(input)
     }
     fn analyze_user_prompt(&self, input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
-        Ok(crate::plugin_policies::assess(
-            self.analyze_prompt(input)?,
-            &self.config.analysis.confidence,
-        ))
+        self.analyze_prompt(input)
     }
     fn analyze_scoped(&self, input: ChunkInput<'_>, scope: &str) -> Result<AnalysisOutcome> {
         if !crate::plugin_policies::valid_scope(scope) {
@@ -156,7 +150,11 @@ impl ContentAnalyzer for Inference {
             model_config
                 .ark
                 .categories
-                .retain(|c| model_config.analysis.confidence.contains_key(c));
+                .retain(|category| match category.as_str() {
+                    "injection" | "prompt_injection" => profile.injection.enabled,
+                    "threat" => profile.threat.enabled,
+                    _ => false,
+                });
             let models = if model_config.ark.categories.is_empty() {
                 None
             } else {
@@ -179,7 +177,7 @@ impl ContentAnalyzer for Inference {
         };
         let mut outcome = scan(l1, input.clone())?;
         if let Some(models) = models {
-            let assessed = scan(models, input)?;
+            let assessed = crate::plugin_policies::assess(scan(models, input)?);
             outcome.classifications.extend(assessed.classifications);
             outcome.failures.extend(assessed.failures);
             outcome.degraded |= assessed.degraded;

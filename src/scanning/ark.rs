@@ -312,26 +312,26 @@ impl ArkAnalyzer {
                 ));
                 continue;
             };
-            // Cached model results can omit decision metadata. It must not
-            // make a lower-level no-match outrank the model classification.
             let result = candidates
                 .into_iter()
                 .max_by(|left, right| {
+                    let (left_label, left_confidence, _) = authoritative_result(left);
+                    let (right_label, right_confidence, _) = authoritative_result(right);
                     (
                         level_rank(&left.level),
-                        !is_benign(&left.class_name),
+                        !is_benign(&left_label),
                         left.decision.is_some(),
                     )
                         .cmp(&(
                             level_rank(&right.level),
-                            !is_benign(&right.class_name),
+                            !is_benign(&right_label),
                             right.decision.is_some(),
                         ))
-                        .then_with(|| left.confidence.total_cmp(&right.confidence))
+                        .then_with(|| left_confidence.total_cmp(&right_confidence))
                         .then_with(|| left.model.cmp(&right.model))
                 })
                 .expect("non-empty candidates");
-            let evidence = result
+            let mut evidence: Vec<Evidence> = result
                 .evidence_spans
                 .iter()
                 .map(|span| Evidence {
@@ -351,11 +351,15 @@ impl ArkAnalyzer {
                     text: self.include_evidence_text.then(|| span.text.clone()),
                 })
                 .collect();
+            let (label, confidence, source) = authoritative_result(&result);
             let decision = result
                 .decision
                 .as_ref()
                 .and_then(|value| serde_json::to_value(value).ok());
-            let matched = !is_benign(&result.class_name);
+            let matched = !is_benign(&label);
+            if !matched {
+                evidence.clear();
+            }
             classifications.push(FinalClassification {
                 schema: "patronus.security-scanner.classification.v1",
                 run_id: input.run_id.into(),
@@ -363,12 +367,12 @@ impl ArkAnalyzer {
                 file_id: input.file_id.into(),
                 path: input.path.into(),
                 category: normalized,
-                source: result.model,
+                source,
                 level: result.level.to_ascii_lowercase(),
                 terminal: true,
                 matched,
-                label: result.class_name,
-                confidence: result.confidence.clamp(0.0, 1.0),
+                label,
+                confidence,
                 decision,
                 evidence,
                 duration_ms: result.duration_ms.max(0.0).round() as u64,
@@ -381,6 +385,27 @@ impl ArkAnalyzer {
             degraded,
         })
     }
+}
+
+fn authoritative_result(result: &patronus_ark::SecurityScanResult) -> (String, f64, String) {
+    result
+        .decision
+        .as_ref()
+        .map(|decision| {
+            let final_result = &decision.final_result;
+            (
+                final_result.class_name.clone(),
+                final_result.confidence.clamp(0.0, 1.0),
+                final_result.source.clone(),
+            )
+        })
+        .unwrap_or_else(|| {
+            (
+                result.class_name.clone(),
+                result.confidence.clamp(0.0, 1.0),
+                result.model.clone(),
+            )
+        })
 }
 
 fn parse_level(value: &str) -> Result<SecurityLevel> {
@@ -450,5 +475,44 @@ fn completion_failures(completion: SecurityRequestCompletion) -> (Vec<String>, b
                 .collect(),
             true,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn decision_final_result_overrides_raw_classifier_fields() {
+        let decision = serde_json::from_value(json!({
+            "schema_version": "1",
+            "final_result": {"class_name": "benign", "confidence": 0.0, "source": "default"},
+            "decision_candidate": {
+                "source": "l2", "class_name": "injection", "confidence": 0.97,
+                "acceptance_threshold": 0.99, "accepted": false, "evidence": null
+            },
+            "recommendation": {"accepted": false, "final_arbitration": "default", "operating_point": "best_f1", "acceptance_threshold": 0.99},
+            "candidates": [],
+            "terminality": {"completion": "complete", "degraded": false, "degradation_reason": null},
+            "provenance": {"ark_version": "0.1.6", "schema_version": "1", "model": "fixture"}
+        })).unwrap();
+        let result = patronus_ark::SecurityScanResult {
+            category: "injection".into(),
+            class_name: "injection".into(),
+            confidence: 0.97,
+            level: "L2".into(),
+            model: "raw-model".into(),
+            duration_ms: 0.0,
+            layers: vec![],
+            internal_l2_chunk_outputs: vec![],
+            evidence_spans: vec![],
+            label_scores: vec![],
+            decision: Some(decision),
+        };
+        assert_eq!(
+            authoritative_result(&result),
+            ("benign".into(), 0.0, "default".into())
+        );
     }
 }
