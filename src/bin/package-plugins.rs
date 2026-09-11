@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for license in ["Inter-OFL.txt", "Manrope-OFL.txt"] {
         add_file(
             &mut archive,
-            &Path::new("src/assets").join(license),
+            &Path::new("src/dashboard/assets").join(license),
             &Path::new("licenses").join(license),
             false,
         )?;

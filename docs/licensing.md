@@ -14,4 +14,4 @@ relabel the metadata of the separately published crates.io artifact.
 
 Third-party components remain under their respective licenses. In particular,
 the embedded Manrope and Inter font subsets retain their SIL Open Font License
-notices in `src/assets/Manrope-OFL.txt` and `src/assets/Inter-OFL.txt`.
+notices in `src/dashboard/assets/Manrope-OFL.txt` and `src/dashboard/assets/Inter-OFL.txt`.

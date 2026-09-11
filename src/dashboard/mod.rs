@@ -621,7 +621,7 @@ fn page(title: &str, body: &str) -> String {
 fn page_with_account(title: &str, body: &str, root: Option<&Path>) -> String {
     use base64::Engine;
     let encode = |bytes: &[u8]| base64::engine::general_purpose::STANDARD.encode(bytes);
-    let icon = encode(include_bytes!("../plugins/codex/assets/icon.png"));
+    let icon = encode(include_bytes!("../../plugins/codex/assets/icon.png"));
     let fonts = format!("@font-face{{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;src:url(data:font/woff2;base64,{}) format('woff2')}}@font-face{{font-family:Manrope;font-style:normal;font-weight:200 800;font-display:swap;src:url(data:font/woff2;base64,{}) format('woff2')}}", encode(include_bytes!("assets/inter-latin.woff2")), encode(include_bytes!("assets/manrope-latin.woff2")));
     let account = root.and_then(|path| crate::auth::status(path).ok());
     let account_label = if account
@@ -735,3 +735,5 @@ fn remote_scan_rows(root: &Path) -> String {
         rows
     }
 }
+pub(crate) mod auth;
+pub mod server;

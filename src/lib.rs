@@ -1,35 +1,25 @@
-pub mod analysis_config;
-pub mod api_client;
-pub mod ark;
 mod atomic_file;
 pub mod auth;
-pub mod chunk;
 pub mod cli;
 pub mod config;
-pub mod content;
 pub mod dashboard;
-mod dashboard_auth;
-pub mod dashboard_server;
-pub mod discovery;
+pub mod distribution;
 pub mod error;
-pub mod inference;
 pub mod integrations;
 pub mod local_settings;
-pub mod maintenance;
-pub mod model_assets;
-pub mod onboarding;
-pub mod output;
 pub mod plugin_policies;
 pub mod plugin_settings;
-pub mod policy;
-pub mod progress;
 mod protocol_event;
-pub mod releases;
-pub mod remote_scan;
-pub mod report;
 pub mod runtime;
-pub mod support;
-pub mod target;
+pub mod scanning;
+
+pub(crate) use dashboard::auth as dashboard_auth;
+pub use dashboard::server as dashboard_server;
+pub use distribution::{maintenance, model_assets, onboarding, releases, support};
+pub use scanning::{
+    analysis_config, api_client, ark, chunk, content, discovery, inference, output, policy,
+    progress, remote_scan, report, target,
+};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const ARK_VERSION: &str = "0.1.6";
