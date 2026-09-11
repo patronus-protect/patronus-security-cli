@@ -176,3 +176,15 @@ describe('inactive integration recovery receipt', () => {
     expect(receipt({ scan_id: 'scan', status })).not.toHaveProperty('recovery')
   })
 })
+
+describe('pending queue receipt', () => {
+  it('distinguishes scanner queue backpressure from failure or expiry', () => {
+    expect(receipt({ scan_id: 'scan', status: 'pending', job_status: 'queued' })).toMatchObject({
+      status: 'pending',
+      job_status: 'queued',
+      wait_reason: 'scanner_queue',
+      next_tool: 'patronus_check_result',
+    })
+    expect(receipt({ scan_id: 'scan', status: 'pending', job_status: 'queued' }).message).toContain('not a scan failure or expiry')
+  })
+})

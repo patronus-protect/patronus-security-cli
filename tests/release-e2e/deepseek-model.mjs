@@ -13,7 +13,10 @@ export function apply(ctx, config) {
   ctx.tools.register(defineTool({
     name: 'release_read_document', description: 'Read the local release fixture document.', parameters: {},
     output: { schema: { type: 'string' }, render: (_args, text) => [{ type: 'text', text }] },
-    execute() { reads++; appendFileSync(config.counter, '1'); return readFileSync(config.document, 'utf8') },
+    execute() {
+      reads++; appendFileSync(config.counter, '1')
+      return readFileSync(config.flow === 'queue-backlog' && reads === 1 ? config.blocker : config.document, 'utf8')
+    },
   }))
   const visit = value => {
     if (!value || typeof value !== 'object') return
@@ -57,6 +60,10 @@ export function apply(ctx, config) {
         tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return
       }
       if (calls === 1) { tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return }
+      if (config.flow === 'queue-backlog' && reads === 1) {
+        tools.push('queue-blocker')
+        yield* toolCallResponse('queued-read', 'release_read_document', {}); return
+      }
       if (config.flow === 'read-redacted') {
         receipt = undefined
         visit(options.messages)
@@ -67,6 +74,12 @@ export function apply(ctx, config) {
       states.push(receipt.status)
       if (receipt.status === 'pending') {
         assert(!visible.includes('RELEASE_DOCUMENT_731'), 'Original content reached the model before approval')
+        if (config.flow === 'queue-backlog') {
+          assert.equal(receipt.job_status, 'queued')
+          assert.equal(receipt.wait_reason, 'scanner_queue')
+          assert.equal(receipt.next_tool, 'patronus_check_result')
+          assert.match(receipt.message, /not a scan failure or expiry/)
+        }
         tools.push('patronus_check_result'); await delay(30)
         yield* toolCallResponse('check-' + calls, 'patronus_check_result', { scan_id: receipt.scan_id }); return
       }
@@ -86,8 +99,8 @@ export function apply(ctx, config) {
         assert(tools.includes('patronus_read_redacted'))
         assert.equal(receipt.result, config.expectedRedacted, 'Redaction must change only the injection span')
       }
-      assert.equal(reads, 1)
-      writeFileSync(config.evidence, JSON.stringify({ ...(config.flow === 'read-redacted' ? { exactRedaction: true, unchangedSurroundingContent: true } : {}), ...(config.flow === 'remote-fail-open' ? { remoteAudit: 'FAILED', degraded: true, failOpen: true } : {}), states, tools, sourceExecutions: reads, modelCalls: calls, completed: true }))
+      assert.equal(reads, config.flow === 'queue-backlog' ? 2 : 1)
+      writeFileSync(config.evidence, JSON.stringify({ ...(config.flow === 'queue-backlog' ? { queueBackpressureVisible: true } : {}), ...(config.flow === 'read-redacted' ? { exactRedaction: true, unchangedSurroundingContent: true } : {}), ...(config.flow === 'remote-fail-open' ? { remoteAudit: 'FAILED', degraded: true, failOpen: true } : {}), states, tools, sourceExecutions: reads, modelCalls: calls, completed: true }))
       yield* textResponse('RELEASE_FLOW_PASSED')
     }
   }

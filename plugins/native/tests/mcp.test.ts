@@ -10,6 +10,10 @@ test('MCP exposes only scan/status/redacted tools without model-supplied session
     assert(!JSON.stringify(tool.inputSchema).includes('session'))
     assert(!JSON.stringify(tool.inputSchema).includes('capability'))
   }
+  const redacted = response.result.tools.find((tool: any) => tool.name === 'patronus_read_redacted')
+  assert.equal(redacted.inputSchema.required, undefined)
+  const scan = response.result.tools.find((tool: any) => tool.name === 'patronus_scan')
+  assert.match(scan.description, /URL and MCP-server audits currently always use the Patronus Security API/)
 })
 
 test('missing native hook never releases data or reflects arguments', () => {

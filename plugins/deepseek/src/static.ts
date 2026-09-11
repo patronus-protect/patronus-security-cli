@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstat, mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { lstat, mkdir, mkdtemp, open, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { patronusRoot } from './settings.ts'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -15,6 +16,12 @@ const record = (value: unknown): value is Record<string, unknown> => typeof valu
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0
 const failure = () => new Error('Patronus static scan unavailable.')
 const failed = (reason = 'scan_unavailable'): JsonValue => ({ schema: SCHEMA, status: 'FAILED', approved: false, reason })
+const invalidReference = (code: string, message: string): JsonValue => ({ status: 'invalid_reference', code, expected: 'static_file_id', message })
+type StaticReference = { path: string; fingerprint: string }
+
+function fingerprint(value: Awaited<ReturnType<typeof lstat>>): string {
+  return [value.dev, value.ino, value.size, value.mtimeMs].join(':')
+}
 
 /** The CLI prints its complete effective config. Freeze it so repository settings
  * cannot enable downloads, change provider, or retain evidence during this scan. */
@@ -79,7 +86,7 @@ function run(executable: string, args: string[], cwd: string, limit: number, sig
 }
 
 /** Explicit projection: no report prose, paths, labels, evidence, or unknown fields. */
-function summary(value: unknown, code: number, kind: string, provider: string): JsonValue {
+function summary(value: unknown, code: number, kind: string, provider: string, staticRedaction: boolean): JsonValue {
   if (!record(value) || value.schema !== 'patronus.security-scanner.report.v1' || value.target_kind !== kind ||
       typeof value.status !== 'string' || !['CLEAN', 'FINDINGS', 'INCOMPLETE', 'FAILED'].includes(value.status) ||
       !record(value.coverage) || !Array.isArray(value.findings) ||
@@ -111,22 +118,39 @@ function summary(value: unknown, code: number, kind: string, provider: string): 
     }
   })
   const status = !coverage.complete && value.status === 'CLEAN' ? 'INCOMPLETE' : value.status as string
+  const redacted = staticRedaction && findings.length > 0
   return {
     schema: SCHEMA, status, approved: status === 'CLEAN' && coverage.complete === true,
     provider, kind, categories: value.ark_categories as string[], max_level: value.ark_max_level as string,
     coverage, findings_count: value.findings.length, findings, findings_truncated: value.findings.length > MAX_FINDINGS,
-    reference_kind: 'static_file', runtime_result_available: false,
+    reference_kind: 'static_file', runtime_result_available: false, redacted_available: redacted,
+    next_tool: redacted ? 'patronus_read_redacted' : null,
+    message: redacted
+      ? 'To read a masked document, call patronus_read_redacted once with a finding file_id. Static file_id values are not runtime scan_id values.'
+      : 'This static audit has no retrievable runtime result. Do not call patronus_check_result.',
   }
 }
 
 /** One bounded static invocation per plugin; source bytes are read only by the CLI. */
 export class StaticScanner {
   private active?: Promise<JsonValue>
-  constructor(private readonly config: LocalClientConfig, private readonly signal: AbortSignal, private readonly timeoutMs = 300_000) {}
+  private readonly references = new Map<string, StaticReference>()
+  constructor(
+    private readonly config: LocalClientConfig,
+    private readonly signal: AbortSignal,
+    private readonly timeoutMs = 300_000,
+    private readonly staticRedaction = false,
+  ) {}
 
   scan(input: unknown, signal: AbortSignal): Promise<JsonValue> {
     if (this.active) return Promise.resolve(failed('busy'))
     this.active = this.perform(input, signal).finally(() => { this.active = undefined })
+    return this.active
+  }
+
+  readRedacted(fileId: string, signal: AbortSignal): Promise<JsonValue> {
+    if (this.active) return Promise.resolve(failed('busy'))
+    this.active = this.performRead(fileId, signal).finally(() => { this.active = undefined })
     return this.active
   }
 
@@ -149,6 +173,10 @@ export class StaticScanner {
     if(input.server !== undefined)args.push('--server',String(input.server))
     args.push('--',input.path)
     const {code,value} = await run(executable,args,cwd,MAX_REPORT_BYTES,signal)
+    const remoteFailures = ['authentication_missing','usage_limit_reached','remote_api_unavailable','remote_scan_timeout','configuration_unavailable','invalid_target','remote_scan_failed']
+    if (record(value) && value.schema === 'patronus.remote.scan.error.v1' && value.kind === input.kind && value.provider === 'api' &&
+        value.status === 'FAILED' && value.approved === false && value.complete === false && code === 4 &&
+        typeof value.reason === 'string' && remoteFailures.includes(value.reason)) return failed(value.reason)
     if(!record(value) || value.schema!=='patronus.remote.scan.v1' || value.kind!==input.kind || value.provider!=='api' ||
       value.complete!==true || typeof value.approved!=='boolean' || typeof value.status!=='string' || !['CLEAN','FINDINGS'].includes(value.status) ||
       (value.approved ? code!==0 || value.status!=='CLEAN' : code!==1 || value.status!=='FINDINGS') ||
@@ -160,10 +188,67 @@ export class StaticScanner {
     })
     if(value.approved !== (value.findings.length===0))throw failure()
     return {schema:'patronus.remote.scan.v1',kind:String(input.kind),provider:'api',status:String(value.status),approved:value.approved,complete:true,
-      categories:value.categories as string[],findings,findings_count:value.findings.length,findings_truncated:value.findings.length>MAX_FINDINGS,jobs:value.jobs,duration_ms:value.duration_ms,runtime_result_available:false}
+      categories:value.categories as string[],findings,findings_count:value.findings.length,findings_truncated:value.findings.length>MAX_FINDINGS,jobs:value.jobs,duration_ms:value.duration_ms,
+      runtime_result_available:false,redacted_available:false,next_tool:null,message:'Remote audit results contain metadata only. Do not call patronus_check_result or patronus_read_redacted.'}
   }
 
-  private async perform(input: unknown, callerSignal: AbortSignal): Promise<JsonValue> {
+  private async registerReferences(value: unknown, target: string, kind: string, projected: JsonValue): Promise<void> {
+    if (!record(value) || !Array.isArray(value.findings) || !record(projected) || !Array.isArray(projected.findings)) return
+    const root = kind === 'file' ? resolve(target) : await realpath(target)
+    for (let index = 0; index < Math.min(value.findings.length, projected.findings.length); index++) {
+      const source = value.findings[index], finding = projected.findings[index]
+      if (!record(source) || typeof source.path !== 'string' || !record(finding) || typeof finding.file_id !== 'string') continue
+      const path = kind === 'file' ? root : resolve(root, source.path)
+      const within = relative(root, path)
+      if (kind !== 'file' && (within === '..' || within.startsWith(`..${sep}`) || isAbsolute(within))) continue
+      const info = await lstat(path)
+      if (!info.isFile() || info.isSymbolicLink()) continue
+      this.references.set(finding.file_id, { path, fingerprint: fingerprint(info) })
+    }
+  }
+
+  private async performRead(fileId: string, callerSignal: AbortSignal): Promise<JsonValue> {
+    const reference = this.references.get(fileId)
+    if (!reference) return invalidReference('scan_not_available', 'Use a file_id returned by a static finding in this session.')
+    let scratch: string | undefined
+    try {
+      const before = await lstat(reference.path)
+      if (!before.isFile() || before.isSymbolicLink() || fingerprint(before) !== reference.fingerprint) {
+        return invalidReference('source_changed', 'The source changed after its static audit. Run patronus_scan again before requesting a redacted read.')
+      }
+      const source = await open(reference.path, constants.O_RDONLY | constants.O_NOFOLLOW)
+      let content: Buffer
+      try {
+        content = await source.readFile()
+        if (fingerprint(await source.stat()) !== reference.fingerprint) return invalidReference('source_changed', 'The source changed while it was being read. Run patronus_scan again.')
+      } finally { await source.close() }
+      const root = patronusRoot()
+      await mkdir(join(root, 'tmp'), { recursive: true, mode: 0o700 })
+      scratch = await mkdtemp(join(root, 'tmp', 'redacted-'))
+      const snapshot = join(scratch, 'document.txt')
+      await writeFile(snapshot, content, { mode: 0o600, flag: 'wx' })
+      const result = await this.perform({ kind: 'file', path: snapshot }, callerSignal, false)
+      if (!record(result) || result.status !== 'FINDINGS' || !Array.isArray(result.findings) || result.findings_truncated !== false || !record(result.coverage) || result.coverage.complete !== true) {
+        return invalidReference('rescan_not_safe', 'Patronus could not reproduce complete findings on a private snapshot, so no document was released.')
+      }
+      const lines = new TextDecoder('utf-8', { fatal: true }).decode(content).split(/(?<=\n)/)
+      const masked = new Set<number>()
+      for (const finding of result.findings) {
+        if (!record(finding) || !count(finding.line_start) || !count(finding.line_end) || finding.line_start < 1 || finding.line_end < finding.line_start) {
+          return invalidReference('rescan_not_safe', 'Patronus returned invalid redaction spans, so no document was released.')
+        }
+        for (let line = finding.line_start; line <= finding.line_end; line++) masked.add(line - 1)
+      }
+      for (const line of masked) {
+        if (line >= lines.length) return invalidReference('rescan_not_safe', 'Patronus returned out-of-range redaction spans, so no document was released.')
+        lines[line] = `[REDACTED]${lines[line]!.endsWith('\n') ? '\n' : ''}`
+      }
+      return { status: 'redacted', reference_kind: 'static_file', file_id: fileId, result: lines.join(''), message: 'Use this masked static document. The original remains withheld.' }
+    } catch { return invalidReference('read_unavailable', 'Patronus could not safely read and rescan this static document.') }
+    finally { if (scratch) await rm(scratch, { recursive: true, force: true }).catch(() => {}) }
+  }
+
+  private async perform(input: unknown, callerSignal: AbortSignal, register = true): Promise<JsonValue> {
     let scratch: string | undefined
     let phase = 'scan_unavailable'
     const timeout = AbortSignal.timeout(this.timeoutMs)
@@ -221,7 +306,9 @@ export class StaticScanner {
         'scan', input.kind as string, '--no-repo-config', '--config', configPath, '--output', output,
         '--format', 'json', '--progress', 'off', '--color', 'never', '--fail-on', 'incomplete', '--', target,
       ], scratch, MAX_REPORT_BYTES, signal)
-      return summary(result.value, result.code, input.kind as string, printed.value.provider.mode === 'api' ? 'api' : 'local')
+      const projected = summary(result.value, result.code, input.kind as string, printed.value.provider.mode === 'api' ? 'api' : 'local', this.staticRedaction)
+      if (register) await this.registerReferences(result.value, target, input.kind as string, projected)
+      return projected
     } catch { return failed(timeout.aborted ? 'timeout' : signal.aborted ? 'aborted' : phase) }
     finally {
       if (scratch) {

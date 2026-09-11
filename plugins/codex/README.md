@@ -4,7 +4,7 @@
 
 <h1 align="center">Patronus Security for Codex</h1>
 
-Patronus adds native security gates to Codex chats. It checks external text before the next model turn while keeping the scanner, policy and session state in the separately installed Patronus CLI.
+Patronus Runtime Protection adds native security gates to Codex chats. It checks external text before the next model turn while keeping the scanner, policy and session state in the separately installed Patronus Security CLI.
 
 ## Install
 
@@ -42,7 +42,7 @@ Text blocks remain in their original order. JSON-looking text is scanned as raw 
 
 1. Codex exposes user input or a completed tool result to the installed hook.
 2. The plugin extracts only the external text covered by the runtime contract.
-3. The trusted Patronus CLI applies the configured policy for that host and surface.
+3. The trusted Patronus Security CLI applies the configured policy for that host and surface.
 4. Clean text continues. Findings produce a bounded receipt or an available redacted result instead of exposing a dangerous original.
 5. Pending results can be checked with the Patronus status tool without running the source action again.
 
@@ -64,6 +64,6 @@ patronus-security-scanner integration codex update
 patronus-security-scanner integration codex uninstall
 ```
 
-A supported Codex installation, Node.js 22.19 or newer, and the matching Patronus CLI release are required.
+A supported Codex installation, Node.js 22.19 or newer, and the matching Patronus Security CLI release are required.
 
 Licensed under Apache-2.0. The release archive includes `LICENSE` and `THIRD_PARTY_NOTICES.md`.

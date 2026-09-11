@@ -1,4 +1,4 @@
-/** Static document IDs and runtime job IDs are different capabilities. Never guess a mapping. */
+/** Static document IDs and runtime job IDs use different argument fields. */
 export function invalidScanReference(scanId: unknown) {
   const file = typeof scanId === 'string' && /^(?:file_)?[a-f0-9]{64}$/.test(scanId)
   if (!file && typeof scanId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(scanId)) return undefined
@@ -7,7 +7,7 @@ export function invalidScanReference(scanId: unknown) {
     code: file ? 'wrong_id_type' : 'invalid_scan_id',
     expected: 'runtime_scan_id',
     message: file
-      ? 'This is a static file_id, not a runtime scan_id. Static scan findings do not create a retrievable runtime result. Use the scan_id from a pending or dangerous tool-result receipt. Do not retry this file_id or disable the integration.'
+      ? 'This is a static file_id, not a runtime scan_id. Call patronus_read_redacted once with the file_id argument instead of scan_id.'
       : 'Use the exact scan_id from the Patronus tool-result receipt. No scan was retrieved; this does not indicate a scanner outage.',
   }
 }

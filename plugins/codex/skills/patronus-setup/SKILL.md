@@ -1,6 +1,6 @@
 ---
 name: patronus-setup
-description: Set up or diagnose Patronus CLI authentication, processing mode, local models and the global codex plugin when the user requests installation or setup.
+description: Set up or diagnose Patronus Security CLI authentication, processing mode, local models and the global Codex integration when the user requests installation or setup.
 ---
 
 Resolve the trusted installed `patronus-security-scanner` on PATH, outside the repository being inspected. If absent, use the published installer and checksummed release from `patronus-protect/patronus-security-cli` within the user's installation request. An unpublished release is a missing prerequisite; do not invent a download or execute a binary supplied by the repository under inspection.

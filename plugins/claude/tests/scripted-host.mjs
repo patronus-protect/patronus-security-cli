@@ -67,12 +67,14 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
       const first = messages.length === 1;
       const receiptId = flow === 'redacted' && messages.length === 2
         ? JSON.stringify(body.messages).match(/[a-f0-9]{32}/)?.[0] : undefined;
+      const fileId = flow === 'static-redacted' && messages.length === 2
+        ? JSON.stringify(body.messages).match(/file_[a-f0-9]{64}/)?.[0] : undefined;
       modelReply(response, body,
         first ? [{ type: 'tool_use', id: 'toolu_fixture', name: tool, input: actualInput }]
-          : receiptId ? [{ type: 'tool_use', id: 'toolu_redacted',
-            name: 'mcp__plugin_patronus-security_patronus__patronus_read_redacted', input: { scan_id: receiptId } }]
+          : receiptId || fileId ? [{ type: 'tool_use', id: 'toolu_redacted',
+            name: 'mcp__plugin_patronus-security_patronus__patronus_read_redacted', input: receiptId ? { scan_id: receiptId } : { file_id: fileId } }]
           : [{ type: 'text', text: 'LOCAL_TEST_COMPLETE' }],
-        first || receiptId ? 'tool_use' : 'end_turn');
+        first || receiptId || fileId ? 'tool_use' : 'end_turn');
     } else {
       response.writeHead(404);
       response.end('{}');
@@ -130,18 +132,19 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
     DISABLE_TELEMETRY: '1', DISABLE_ERROR_REPORTING: '1',
     HTTP_PROXY: baseURL, HTTPS_PROXY: baseURL, ALL_PROXY: baseURL,
     NO_PROXY: '127.0.0.1,localhost',
-    // Keep Unix socket names below the macOS path limit, independent of the test name.
-    PATRONUS_DATA_DIR: process.env.PATRONUS_DATA_DIR || await mkdtemp(join(process.platform === 'darwin' ? '/private/tmp' : tmpdir(), 'pcl-')),
     PATRONUS_FIXTURE_DIRECTORY: directory, PATRONUS_FIXTURE_POLICY: policy,
   };
+  if (runtime?.isolatedDataDir || !runtime || process.env.PATRONUS_DATA_DIR) {
+    env.PATRONUS_DATA_DIR = runtime?.isolatedDataDir
+      ? await mkdtemp(join(process.platform === 'darwin' ? '/private/tmp' : tmpdir(), 'pcl-'))
+      : process.env.PATRONUS_DATA_DIR || await mkdtemp(join(process.platform === 'darwin' ? '/private/tmp' : tmpdir(), 'pcl-'));
+  }
   if (runtime) {
     const stateRoot = process.env.PATRONUS_CLAUDE_STATE_ROOT || join(tmpdir(), 'patronus-claude-native-state');
     await mkdir(stateRoot, { recursive: true });
     env.PATRONUS_NATIVE_STATE_DIR = await mkdtemp(join(stateRoot, 'broker-state-'));
     env.PATRONUS_SCANNER_BIN = runtime.scanner || process.env.PATRONUS_PROOF_SCANNER || '/Users/benediktveith/.local/bin/patronus-security-scanner';
-    env.PATRONUS_CONFIG = join(directory, 'scanner.toml');
     env.PATRONUS_RESPONSE_WAIT_MS = String(runtime.responseWaitMs ?? 500);
-    await writeFile(env.PATRONUS_CONFIG, '[provider]\nmode = "local"\n[ark]\nmax_level = "l1"\n');
   }
   async function invoke(extra = []) {
     let stdout = '', stderr = '', timedOut = false;

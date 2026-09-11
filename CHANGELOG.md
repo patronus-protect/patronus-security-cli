@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add shared Rust, TypeScript, and Python Scan API clients, persistent anonymous
+  URL-scan identities, and explicit `scan file --anonymous-api` document uploads.
+- Organize Rust modules by domain while retaining existing public module aliases.
+- Start queued scan execution budgets when a worker claims the job and expose
+  queue state in runtime receipts. Use Ark's calibrated model decisions while
+  preserving same-level DLP findings; retire plugin confidence overrides.
+- Add rescanned static-file redaction, withholding results when findings are
+  truncated, and preserve pending MCP protection through host content finalizers.
+- Pin installers to a versioned release and stop installation instructions on
+  checksum mismatch. Bound TypeScript API response bodies during streaming.
 - Add an automated Cargo license policy that keeps Patronus Security under
   Apache-2.0 while explicitly approving the first-party GPL-3.0-only
   `patronus-ark` dependency.

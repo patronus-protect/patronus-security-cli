@@ -1,4 +1,4 @@
-import { access, mkdir, rm } from 'node:fs/promises'
+import { access, mkdir, rm, writeFile } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { expect, it } from 'vitest'
@@ -9,6 +9,51 @@ import { FakeClient } from './fake-client.ts'
 import { canary, fakeCli, finding, report } from './static-fixture.ts'
 
 const signal = () => new AbortController().signal
+
+it('withholds a redacted document when its rescan findings were truncated', async () => {
+  const fixture = await fakeCli('normal', { status: 'FINDINGS', findings: Array(51).fill(finding) })
+  const scanner = new StaticScanner(fixture, signal(), 300_000, true)
+  try {
+    const scanned: any = await scanner.scan({ kind: 'file', path: fixture.path }, signal())
+    expect(scanned.findings_truncated).toBe(true)
+    const redacted: any = await scanner.readRedacted(scanned.findings[0].file_id, signal())
+    expect(redacted).toMatchObject({ status: 'invalid_reference', code: 'rescan_not_safe' })
+    expect(redacted).not.toHaveProperty('result')
+  } finally { await rm(fixture.root, { recursive: true, force: true }) }
+})
+
+it('returns a rescanned masked document for a static file_id and rejects stale sources', async () => {
+  const fixture = await fakeCli('normal', { status: 'FINDINGS', findings: [finding] })
+  const scanner = new StaticScanner(fixture, signal(), 300_000, true)
+  try {
+    const scanned: any = await scanner.scan({ kind: 'file', path: fixture.path }, signal())
+    expect(scanned).toMatchObject({ status: 'FINDINGS', redacted_available: true, next_tool: 'patronus_read_redacted' })
+    const fileId = scanned.findings[0].file_id
+    const redacted: any = await scanner.readRedacted(fileId, signal())
+    expect(redacted).toMatchObject({ status: 'redacted', reference_kind: 'static_file', file_id: fileId })
+    expect(redacted.result).toBe('[REDACTED]')
+    expect(JSON.stringify(redacted)).not.toContain(canary)
+
+    const rescanned: any = await scanner.scan({ kind: 'file', path: fixture.path }, signal())
+    await writeFile(fixture.path, `${canary}\nchanged`)
+    expect(await scanner.readRedacted(rescanned.findings[0].file_id, signal())).toMatchObject({ status: 'invalid_reference', code: 'source_changed' })
+  } finally { await rm(fixture.root, { recursive: true, force: true }) }
+})
+
+it('reads a static file_id through the registered redaction tool', async () => {
+  const fixture = await fakeCli('normal', { status: 'FINDINGS', findings: [finding] })
+  const client = new FakeClient({ async scan() { return { status: 'approved' } } })
+  const ctx = await createHarness(client, undefined, { executable: fixture.executable, configPath: fixture.configPath })
+  try {
+    const scanned: any = (await execute(ctx, 'patronus_scan', { kind: 'file', path: fixture.path })).value
+    expect(scanned).toMatchObject({ status: 'FINDINGS', redacted_available: true, next_tool: 'patronus_read_redacted' })
+    const fileId = scanned.findings[0].file_id
+    const redacted: any = (await execute(ctx, 'patronus_read_redacted', { file_id: fileId })).value
+    expect(redacted).toMatchObject({ status: 'redacted', reference_kind: 'static_file', file_id: fileId })
+    expect(redacted.result).toBe('[REDACTED]')
+    expect(JSON.stringify(redacted)).not.toContain(canary)
+  } finally { await ctx.fiber.dispose(); await rm(fixture.root, { recursive: true, force: true }) }
+})
 
 it.each(['file_' + 'a'.repeat(64), 'a'.repeat(64)])('rejects static reference %s before runtime retrieval', async scan_id => {
   const client = new FakeClient({ async scan() { return { status: 'approved' } } })

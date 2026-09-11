@@ -7,7 +7,7 @@ import { done, quote } from '../../plugins/codex/tests/host-helper.mjs'
 import { checked, scannerConfig, manifest, marker, email, injection, injectionDocument, injectionRedacted, seedSettings } from './common.mjs'
 
 export async function codexFlow(flow) {
-  let command, counter, phase = 'read', submitted = false, remoteAuditSeen = false
+  let command, blockerCommand, counter, phase = 'read', submitted = false, remoteAuditSeen = false
   const states = [], tools = []
   const fixture = await nativeFixture((body, index) => {
     assert(index < 40, 'Retrieval exceeded 40 model calls')
@@ -41,14 +41,28 @@ export async function codexFlow(flow) {
     if (!submitted) {
       submitted = true
       tools.push('source')
+      if (flow === 'queue-backlog') {
+        tools.push('queue-blocker')
+        return [
+          customCall(body, 'exec', `text(await tools.exec_command({cmd:${JSON.stringify(blockerCommand)}}));`, 'queue-blocker'),
+          customCall(body, 'exec', `text(await tools.exec_command({cmd:${JSON.stringify(command)}}));`, 'queue-source'),
+        ]
+      }
       return [customCall(body, 'exec', `text(await tools.exec_command({cmd:${JSON.stringify(command)}}));`, phase + '-source')]
     }
     const receipt = lastReceipt(body)
     states.push(receipt.status)
     if (receipt.status === 'pending') {
       assert(!visible.includes(marker), 'Original content reached the model before approval')
+      if (flow === 'queue-backlog') {
+        assert.equal(receipt.job_status, 'queued')
+        assert.equal(receipt.wait_reason, 'scanner_queue')
+        assert.equal(receipt.next_tool, 'patronus_check_result')
+        assert.match(receipt.message, /not a scan failure or expiry/)
+      }
       tools.push('patronus_check_result')
-      return [customCall(body, 'exec', `text(await tools.mcp__patronus__patronus_check_result({scan_id:${JSON.stringify(receipt.scan_id)}}));`, 'check-' + index)]
+      const pause = flow === 'queue-backlog' ? 'await new Promise(resolve=>setTimeout(resolve,50));' : ''
+      return [customCall(body, 'exec', `${pause}text(await tools.mcp__patronus__patronus_check_result({scan_id:${JSON.stringify(receipt.scan_id)}}));`, 'check-' + index)]
     }
     if (receipt.status === 'dangerous' && flow === 'read-redacted') {
       tools.push('patronus_read_redacted')
@@ -80,11 +94,16 @@ export async function codexFlow(flow) {
   try {
     fixture.env.PATRONUS_DATA_DIR = join(fixture.root, 'private-data')
     if (flow === 'remote-fail-open') delete fixture.env.PATRONUS_API_KEY
-    await writeFile(fixture.env.PATRONUS_CONFIG, scannerConfig)
+    await writeFile(fixture.env.PATRONUS_CONFIG, scannerConfig + (flow === 'queue-backlog'
+      ? '[chunking]\ntarget_bytes=4\noverlap_bytes=0\nprefer_line_boundaries=false\n'
+      : ''))
     const file = join(fixture.cwd, 'manifest.toml')
     await writeFile(file, flow === 'read-redacted' ? injectionDocument : manifest + (flow === 'auto-pii' ? `author = "${email}"\n` : ''))
+    const blocker = join(fixture.cwd, 'queue-blocker.txt')
+    if (flow === 'queue-backlog') await writeFile(blocker, 'benign queue blocker\n'.repeat(64))
     counter = join(fixture.cwd, 'executions')
     command = `${quote(process.execPath)} -e ${quote(`const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(counter)},'1');process.stdout.write(fs.readFileSync(${JSON.stringify(file)}));`)}`
+    blockerCommand = `${quote(process.execPath)} -e ${quote(`const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(counter)},'1');process.stdout.write(fs.readFileSync(${JSON.stringify(blocker)}));`)}`
     const options = { cwd: fixture.cwd, env: { ...fixture.env, PATRONUS_CODEX_BIN: process.env.PATRONUS_CODEX_BIN } }
     if (flow === 'upgrade') {
       for (const path of ['hooks/hooks.json','.codex-plugin/plugin.json']) await copyFile(join(process.env.PATRONUS_CODEX_PLUGIN_ROOT,path),join(fixture.destination,path))
@@ -108,15 +127,16 @@ export async function codexFlow(flow) {
       submitted = false
     }
     await fixture.exec(flow)
-    const sourceExecutions = flow === 'outage-recovery' ? 2 : 1
+    const sourceExecutions = flow === 'outage-recovery' || flow === 'queue-backlog' ? 2 : 1
     assert.equal(await readCounter(counter), '1'.repeat(sourceExecutions), 'Unexpected source execution count')
     if (flow === 'remote-fail-open') assert(remoteAuditSeen && tools.includes('patronus_scan') && tools.includes('source'))
     if (flow === 'pending') assert(states.includes('pending') && tools.includes('patronus_check_result'))
+    if (flow === 'queue-backlog') assert(states.includes('pending') && tools.includes('patronus_check_result'))
     if (flow === 'read-redacted') {
       assert(states.includes('dangerous'))
       assert(tools.includes('patronus_read_redacted'))
     }
-    return { ...(flow === 'read-redacted' ? { exactRedaction: true, unchangedSurroundingContent: true } : {}), ...(flow === 'remote-fail-open' ? { remoteAudit: 'FAILED', degraded: true, failOpen: true } : {}), ...(flow === 'outage-recovery' ? { degradedWarning: true, originalAvailable: true, recovered: true } : {}), root: fixture.root, states, tools, sourceExecutions, modelCalls: fixture.server.requests.length }
+    return { ...(flow === 'queue-backlog' ? { queueBackpressureVisible: true } : {}), ...(flow === 'read-redacted' ? { exactRedaction: true, unchangedSurroundingContent: true } : {}), ...(flow === 'remote-fail-open' ? { remoteAudit: 'FAILED', degraded: true, failOpen: true } : {}), ...(flow === 'outage-recovery' ? { degradedWarning: true, originalAvailable: true, recovered: true } : {}), root: fixture.root, states, tools, sourceExecutions, modelCalls: fixture.server.requests.length }
   } catch (error) {
     error.evidenceRoot = fixture.root
     error.message += `\nCodex evidence: ${fixture.root}`

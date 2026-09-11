@@ -5,7 +5,7 @@ description: Handle Patronus runtime receipts and continue with approved or reda
 
 Use the native `patronus` MCP tools when this plugin's trusted hooks are active.
 
-With active, trusted runtime hooks, read files through the protected tool path. The hook scans the returned text before it reaches the model; do not require a separate static scan before every read. Static scans are explicit audits, return metadata only, and do not supply runtime scan IDs or redacted file content. A static finding is not a reason to abandon a read through the protected runtime boundary.
+With active, trusted runtime hooks, read files through the protected tool path. The hook scans the returned text before it reaches the model; do not require a separate static scan before every read. Static scans are explicit audits and do not supply runtime scan IDs. When a static finding reports redaction is available, `patronus_read_redacted` can retrieve a masked document using its `file_id`; never pass that value as `scan_id`.
 
 Never infer a static repository scan from the current working directory or from an
 ordinary read. Unchanged runtime text is identified by its payload hash and may

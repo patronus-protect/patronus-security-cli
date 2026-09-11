@@ -49,9 +49,10 @@ function details(request: BrokerRequest) {
   if (request.method === 'request' || request.method === 'response') {
     return { direction: request.method, tool: request.tool, payload: request.payload }
   }
-  if (request.method === 'static') return { direction: 'static' as const, tool: 'patronus_scan', payload: { kind: request.kind, path: request.path } }
+  if (request.method === 'static') return { direction: 'static' as const, tool: 'patronus_scan', payload: { kind: request.kind, path: request.path, ...(request.server === undefined ? {} : { server: request.server }) } }
   if (request.method === 'check') return { direction: 'status' as const, tool: 'patronus_check_result', payload: { scan_id: request.scanId } }
   if (request.method === 'read_redacted') return { direction: 'status' as const, tool: 'patronus_read_redacted', payload: { scan_id: request.scanId } }
+  if (request.method === 'read_static_redacted') return { direction: 'status' as const, tool: 'patronus_read_redacted', payload: { file_id: request.fileId } }
   return undefined
 }
 

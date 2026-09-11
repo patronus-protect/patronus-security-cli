@@ -12,6 +12,9 @@ function securityContext(text: string): string | undefined {
     if (receipt.status === 'unavailable') {
       return 'Patronus is the installed local security controller for this session. The preceding receipt reports that its scanner is unavailable. Its status and repair commands diagnose the local integration; its disable and uninstall commands explicitly turn the integration off.'
     }
+    if (receipt.status === 'pending' && receipt.wait_reason === 'scanner_queue' && typeof receipt.message === 'string') {
+      return receipt.message
+    }
   } catch { /* Non-receipt decisions need no agent instruction. */ }
 }
 
@@ -29,30 +32,30 @@ function visibleToolResult(text: string): string {
 function textBlocks(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.flatMap(block =>
-    record(block) && block.type === 'text' && typeof block.text === 'string' ? [block.text] : [],
+    record(block) && block.type === 'text' && typeof block.text === 'string' && block.text.length > 0 ? [block.text] : [],
   )
 }
 
 /** Raw external text exposed by the pinned Claude hook contract. */
 export function claudeExternalText(event: string, input: HookInput): string[] {
   if (event === 'UserPromptSubmit') {
-    if (typeof input.prompt === 'string') return [input.prompt]
+    if (typeof input.prompt === 'string') return input.prompt.length > 0 ? [input.prompt] : []
     if (Array.isArray(input.prompt)) return textBlocks(input.prompt)
     return record(input.prompt) ? textBlocks(input.prompt.content) : []
   }
-  if (event === 'PostToolUseFailure') return typeof input.error === 'string' ? [input.error] : []
+  if (event === 'PostToolUseFailure') return typeof input.error === 'string' && input.error.length > 0 ? [input.error] : []
   if (event !== 'PostToolUse') return []
   const response = input.tool_response
-  if (typeof response === 'string') return [response]
+  if (typeof response === 'string') return response.length > 0 ? [response] : []
   if (Array.isArray(response)) return textBlocks(response)
   if (!record(response)) return []
   if (Array.isArray(response.content)) return textBlocks(response.content)
   if (typeof response.stdout === 'string' || typeof response.stderr === 'string') {
-    return [response.stdout, response.stderr].filter((value): value is string => typeof value === 'string')
+    return [response.stdout, response.stderr].filter((value): value is string => typeof value === 'string' && value.length > 0)
   }
-  if (response.type === 'text' && typeof response.text === 'string') return [response.text]
+  if (response.type === 'text' && typeof response.text === 'string') return response.text.length > 0 ? [response.text] : []
   const file = response.type === 'text' ? response.file : undefined
-  return record(file) && typeof file.content === 'string' ? [file.content] : []
+  return record(file) && typeof file.content === 'string' && file.content.length > 0 ? [file.content] : []
 }
 
 export function claudeExternalTextPayload(event: string, input: HookInput): TextPayload | undefined {

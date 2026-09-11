@@ -63,14 +63,15 @@ test('installed Ark keeps pending jobs across hooks, separates host sessions and
     const payload = 'A tree grows in the garden. BROKERBENIGNCANARY731.'
     const pending = await hook(config, { method: 'response', tool: 'read_file', callId: 'safe', payload })
     assert.equal(pending.status, 'pending')
+    assert.equal(pending.job_status, 'queued')
     assert(!JSON.stringify(pending).includes('BROKERBENIGNCANARY731'))
     assert.equal((await hook(other, { method: 'check', scanId: pending.scan_id })).code, 'scan_not_available')
     await hook(config, { method: 'close' })
     let checked: any
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 300; i++) {
       checked = await hook(config, { method: 'check', scanId: pending.scan_id })
       if (checked.status !== 'pending') break
-      await delay(50)
+      await delay(100)
     }
     assert.equal(checked.status, 'approved')
     assert.deepEqual(checked.result, payload)
@@ -79,11 +80,11 @@ test('installed Ark keeps pending jobs across hooks, separates host sessions and
     assert.equal(blocked.status, 'dangerous')
     assert(!JSON.stringify(blocked).includes(dangerous))
     const withheld = await hook(config, { method: 'response', tool: 'document', callId: 'dangerous', payload: dangerous })
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 300; i++) {
       checked = await hook(config, { method: 'check', scanId: withheld.scan_id })
       assert(!JSON.stringify(checked).includes(dangerous))
       if (checked.status !== 'pending') break
-      await delay(50)
+      await delay(100)
     }
     assert.equal(checked.status, 'dangerous')
     assert.equal(checked.result, undefined)

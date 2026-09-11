@@ -24,6 +24,27 @@ function inactiveMessage(host: Host): string {
   return `Patronus protection is inactive for this content. No security scan was completed; treat the original content as untrusted and continue the task. Check: ${base} status --format json. Repair: ${base} enable.`
 }
 
+function staticFailureMessage(result: Record<string, unknown>): string {
+  const messages: Record<string, string> = {
+    authentication_missing: 'The Patronus remote audit could not authenticate. Run patronus-security-scanner auth login, then retry the explicitly requested audit.',
+    usage_limit_reached: 'The Patronus remote audit API usage limit was reached. Treat the target as unverified and retry after the usage window resets.',
+    remote_api_unavailable: 'The Patronus remote audit API is unavailable. Treat the target as unverified and retry later.',
+    remote_scan_timeout: 'The Patronus remote audit timed out. Treat the target as unverified and retry later.',
+    invalid_target: 'Patronus rejected the remote audit target. Use a public HTTPS URL or a supported MCP configuration and retry.',
+    remote_scan_failed: 'The Patronus remote audit failed without approval. Treat the target as unverified and retry after checking authentication and connectivity.',
+    configuration_unavailable: 'Patronus could not load a valid scanner configuration. Treat the target as unverified and run patronus-security-scanner config print --format json.',
+    busy: 'Another Patronus static audit is already running in this session. Treat this target as unverified and retry after it completes.',
+    aborted: 'The Patronus static audit was cancelled before completion. Treat the target as unverified.',
+    timeout: 'The Patronus static audit timed out. Treat the target as unverified and retry with a smaller scope.',
+  }
+  return messages[String(result.reason)] ?? 'Patronus could not complete the static audit. Treat the target as unverified and continue the task under that limitation; the Claude integration itself may still be active.'
+}
+
+function invalidArguments(required: string[], missing: string[] = required): JsonValue {
+  return { status: 'invalid_arguments', code: missing.length ? 'missing_required_arguments' : 'invalid_arguments', required, missing,
+    next_tool: null, message: `Call the same Patronus tool once with exactly these required arguments: ${required.join(', ')}.` }
+}
+
 const degraded = new Set(['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
 
 function visibleResult(result: ScanResult, host: Host, direction: 'request' | 'response' = 'response'): JsonValue {
@@ -49,7 +70,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     const input = value as unknown as HookInput
     const config: BrokerConfig = { ...overrides, host, sessionId: input.session_id, cwd: input.cwd }
     const scan = (request: Parameters<typeof rpc>[1]) => protocol(config!, request, () => rpc(config!, request))
-    if (event === 'SessionEnd' || event === 'Stop') { await scan({ method: 'close' }); return {} }
+    if (event === 'SessionEnd' || event === 'Stop') { await rpc(config, { method: 'close' }).catch(() => ({ closed: false })); return {} }
     if (event === 'UserPromptSubmit') {
       const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
       const action = chatCommand(payload)
@@ -84,25 +105,38 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     const operation = ownOperation(host, input.tool_name)
     if (event === 'PreToolUse' && operation) {
       const args = input.tool_input
-      if (!record(args)) return deny()
+      if (!record(args)) return deny(JSON.stringify(invalidArguments(operation === 'static' ? ['kind', 'path'] : operation === 'read_redacted' ? ['scan_id or file_id'] : ['scan_id'])))
       let result: JsonValue
       if (operation === 'static') {
-        if (Object.keys(args).some(key => !['kind', 'path', 'server'].includes(key)) || typeof args.kind !== 'string' ||
-            !['repo', 'directory', 'file', 'url', 'mcp'].includes(args.kind) || typeof args.path !== 'string' || !args.path || args.path.includes('\0')) return deny()
-        if (args.server !== undefined && (args.kind !== 'mcp' || typeof args.server !== 'string' || !args.server || args.server.length > 256)) return deny()
-        const target = args.kind === 'url' || args.kind === 'mcp' && args.path.startsWith('https://') ? args.path : resolve(input.cwd, args.path)
-        result = await scan({ method: 'static', kind: args.kind as 'repo' | 'directory' | 'file' | 'url' | 'mcp', path: target, ...(args.server === undefined ? {} : {server: args.server as string}) })
-        if (record(result) && result.status === 'FAILED') return warn()
+        const missing = ['kind', 'path'].filter(key => typeof args[key] !== 'string' || !args[key])
+        if (missing.length) return deny(JSON.stringify(invalidArguments(['kind', 'path'], missing)))
+        if (Object.keys(args).some(key => !['kind', 'path', 'server'].includes(key)) ||
+            !['repo', 'directory', 'file', 'url', 'mcp'].includes(args.kind as string) || (args.path as string).includes('\0')) return deny(JSON.stringify(invalidArguments(['kind', 'path'], [])))
+        if (args.server !== undefined && (args.kind !== 'mcp' || typeof args.server !== 'string' || !args.server || args.server.length > 256)) return deny(JSON.stringify(invalidArguments(['kind', 'path'], [])))
+        const kind = args.kind as 'repo' | 'directory' | 'file' | 'url' | 'mcp'
+        const path = args.path as string
+        const target = kind === 'url' || kind === 'mcp' && path.startsWith('https://') ? path : resolve(input.cwd, path)
+        result = await scan({ method: 'static', kind, path: target, ...(args.server === undefined ? {} : {server: args.server as string}) })
+        if (record(result) && result.status === 'FAILED') return map({ kind: 'warn', text: staticFailureMessage(result) })
       } else {
-        if (Object.keys(args).some(key => key !== 'scan_id') || !id(args.scan_id)) return deny()
-        const invalid = invalidScanReference(args.scan_id)
-        if (invalid) return deny(JSON.stringify(invalid))
-        result = await scan({ method: operation as 'check' | 'read_redacted', scanId: args.scan_id })
+        const keys = Object.keys(args)
+        const scanId = typeof args.scan_id === 'string' ? args.scan_id : ''
+        const staticRead = operation === 'read_redacted' && keys.length === 1 && typeof args.file_id === 'string' && /^file_[a-f0-9]{64}$/.test(args.file_id)
+        const runtimeRead = keys.length === 1 && id(scanId)
+        if (staticRead) result = await scan({ method: 'read_static_redacted', fileId: args.file_id as string })
+        else {
+          if (!runtimeRead) return deny(JSON.stringify(invalidArguments(operation === 'read_redacted' ? ['scan_id or file_id'] : ['scan_id'])))
+          const invalid = invalidScanReference(scanId)
+          if (invalid) return deny(JSON.stringify(invalid))
+          result = await scan({ method: operation as 'check' | 'read_redacted', scanId })
+        }
       }
       // Return a safe result as deny feedback; the placeholder never executes and
       // no hidden session token is inserted into model-visible tool arguments.
       const visible = record(result) && result.status === 'unavailable'
         ? { ...result, message: inactiveMessage(host) }
+        : operation === 'check' && record(result) && result.status === 'pending'
+          ? visibleResult(result as unknown as ScanResult, host)
         : result
       return map({ kind: 'deny', text: JSON.stringify(visible) })
     }

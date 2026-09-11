@@ -1,4 +1,4 @@
 interface:
   display_name: "Patronus Security Scan"
-  short_description: "Scan local source content with Patronus Ark"
-  default_prompt: "Scan this repository with Patronus Ark and summarize status, findings, coverage, and the report path."
+  short_description: "Scan source content with Patronus Security"
+  default_prompt: "Scan this repository with Patronus Security and summarize status, findings, coverage, and the report path."

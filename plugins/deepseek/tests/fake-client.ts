@@ -17,7 +17,7 @@ export class FakeClient implements RuntimeClient {
     this.submissions.push(structuredClone(input))
     const scan_id = crypto.randomUUID()
     const job: { session: string; state: ScanResult; redacted?: JsonValue } = {
-      session: input.session, state: { scan_id, status: 'pending' },
+      session: input.session, state: { scan_id, status: 'pending', job_status: 'queued' },
     }
     this.jobs.set(scan_id, job)
     const timer = setTimeout(() => { if (job.state.status === 'pending') job.state = { scan_id, status: 'failed' } }, this.timeout)

@@ -29,7 +29,13 @@ export function receipt(result: ScanResult, direction: 'request' | 'response' = 
   } else if (direction === 'request') {
     metadata.message = 'The user prompt did not receive complete security approval and was not sent to the model.'
   } else if (result.status === 'pending') {
-    metadata.message = 'The source tool already executed; its result is withheld. Continue any independent work from the user task, then call patronus_check_result with this scan_id. If still pending, check again later. Use the original only after approval. Do not rerun the source tool.'
+    metadata.next_tool = 'patronus_check_result'
+    if (result.job_status === 'queued') {
+      metadata.wait_reason = 'scanner_queue'
+      metadata.message = 'The source tool already executed once and its result is waiting in the Patronus scan queue because scanner capacity is busy. This is queue backpressure, not a scan failure or expiry. Keep this scan_id and call patronus_check_result later; do not rerun the source tool.'
+    } else {
+      metadata.message = 'The source tool already executed; its result is withheld. Continue any independent work, then call patronus_check_result with this scan_id. If still pending, call patronus_check_result again directly; do not use Bash, Monitor, or another source tool merely to wait. Use the original only after approval. Do not rerun the source tool.'
+    }
   } else if (result.status === 'dangerous') {
     metadata.message = result.redacted_available
       ? 'The source tool already executed. Its original is permanently withheld. Call patronus_read_redacted with this scan_id to obtain the redacted result. Do not rerun the source tool.'

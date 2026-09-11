@@ -59,9 +59,10 @@ it('gates native user prompts and tool results using the real local scanner proc
     if (sent.isError) {
       const pending = lastReceipt(sent)
       expect(pending.status).toBe('pending')
-      const checked = lastReceipt(await checkUntilDone(ctx, pending.scan_id)) as ReturnType<typeof lastReceipt> & { result: ToolExecutionResult }
+      const checked = lastReceipt(await checkUntilDone(ctx, pending.scan_id)) as ReturnType<typeof lastReceipt> & { result: string }
       expect(checked.status).toBe('approved')
-      sent = checked.result
+      // Runtime retrieval returns the scanned text, without the tool envelope.
+      sent = { ...sent, value: checked.result }
     }
     expect(sent.value).toBe('Completed.')
     expect(calls).toBe(1)

@@ -37,7 +37,10 @@ describe('native Harness pending response', () => {
         return toolCallResponse('poll-1', 'patronus_check_result', { scan_id: id })
       },
       options => {
-        expect(lastReceipt(options.messages)).toMatchObject({ status: 'pending', scan_id: id })
+        expect(lastReceipt(options.messages)).toMatchObject({
+          status: 'pending', scan_id: id, job_status: 'queued',
+          wait_reason: 'scanner_queue', next_tool: 'patronus_check_result',
+        })
         expect(JSON.stringify(options)).not.toContain(canary)
         scanner.complete({ status: 'approved' })
         return toolCallResponse('poll-2', 'patronus_check_result', { scan_id: id })

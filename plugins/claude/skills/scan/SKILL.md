@@ -17,6 +17,8 @@ prompt/tool/MCP result boundary.
 - MCP configuration: `{"kind":"mcp","path":"/absolute/config.json","server":"selected-name"}`. JSON `mcpServers` and TOML `mcp_servers` are supported. Select a name when several servers exist.
 
 For that explicit audit, do not pre-read candidate files or fetch URLs yourself.
+Pass a user-supplied relative or absolute path directly to `patronus_scan`; do not
+locate, normalize, inspect, or validate it with Read, Bash, Glob, or Grep first.
 The CLI resolves MCP configuration locally and sends only the public HTTPS
 endpoint. It does not start stdio servers or forward private MCP credentials.
 Scanning server metadata does not approve future responses or execute its tools.
@@ -25,7 +27,7 @@ Scanning server metadata does not approve future responses or execute its tools.
 
 If the native scan tool is unavailable, resolve the separately installed trusted CLI from `PATH`, outside the repository under inspection. Inspect `config print --format json`, then use `patronus-security-scanner scan KIND TARGET --format json`; for a named MCP entry add `--server NAME`. Missing CLI/setup is handled by `patronus-setup` when installation is requested.
 
-Summarize status, supported category findings and complete/incomplete coverage. Return only safe report metadata; do not echo candidate content or process diagnostics. An `INCOMPLETE`, failed or pending scan never grants approval. Patronus is fail-open for the user's underlying tool request: if an audit is unavailable because authentication, usage, network access or the API is unavailable, continue with the requested tool under the hook's degraded context and do not claim Patronus approved it. Static file references are not runtime scan IDs. Runtime pending receipts use `patronus_check_result`; dangerous runtime receipts use `patronus_read_redacted`, without repeating the original operation.
+Summarize status, supported category findings and complete/incomplete coverage. Return only safe report metadata; do not echo candidate content or process diagnostics. An `INCOMPLETE`, failed or pending scan never grants approval. Patronus is fail-open for the user's underlying tool request: if an audit is unavailable because authentication, usage, network access or the API is unavailable, continue with the requested tool under the hook's degraded context and do not claim Patronus approved it. To read a masked document from a static finding, call `patronus_read_redacted` once with its `file_id`. Runtime pending receipts use `patronus_check_result` with `scan_id`; dangerous runtime receipts use `patronus_read_redacted` with `scan_id`, without repeating the original operation.
 
 An explicit URL scan does not automatically gate an unrelated connector's subsequent fetch. Only a verified deterministic runtime gate can protect that fetched text before model context.
 

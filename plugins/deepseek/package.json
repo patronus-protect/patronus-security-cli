@@ -2,7 +2,7 @@
   "name": "@patronus/deepseek-security",
   "version": "0.1.0",
   "type": "module",
-  "description": "Native DeepSeek Harness request and response gates using the local Patronus Security Scanner",
+  "description": "Patronus Runtime Protection and explicit security scans for DeepSeek Harness",
   "license": "Apache-2.0",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

@@ -37,7 +37,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   }
   const sessions = new SessionState(config)
   const controller = new AbortController()
-  const scanner = new StaticScanner(config, controller.signal, config.staticTimeoutMs)
+  const scanner = new StaticScanner(config, controller.signal, config.staticTimeoutMs, true)
   const events = config.protocolEvents ?? new ProtocolEvents(config)
   const degradedSessions = new Set<string>()
   ctx.effect(() => async () => { controller.abort(); await scanner.close(); await sessions.close(); await events.close?.() })

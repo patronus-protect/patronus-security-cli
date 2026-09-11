@@ -4,7 +4,7 @@
 
 <h1 align="center">Patronus Security for DeepSeek Harness</h1>
 
-Patronus integrates with the native Cordis lifecycle in DeepSeek Harness. Each Harness agent gets its own authenticated local scanner session; the plugin never bundles or downloads a replacement scanner.
+Patronus Runtime Protection integrates with the native Cordis lifecycle in DeepSeek Harness. Each Harness agent gets its own authenticated local scanner session; the integration never bundles or downloads a replacement CLI.
 
 ## Install
 
@@ -71,6 +71,6 @@ patronus-security-scanner integration deepseek update
 patronus-security-scanner integration deepseek uninstall
 ```
 
-Node.js 22.19 or newer, the pinned `dsh` release and the matching Patronus CLI release are required.
+Node.js 22.19 or newer, the pinned `dsh` release and the matching Patronus Security CLI release are required.
 
 Licensed under Apache-2.0. The package includes `LICENSE` and `THIRD_PARTY_NOTICES.md`.

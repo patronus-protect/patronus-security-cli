@@ -3,10 +3,10 @@
 Patronus runtime plugins protect **external text before it reaches the agent model**.
 Each enabled surface uses the same text boundary across supported hosts. Users may explicitly disable a surface or pause a chat through the trusted dashboard or CLI settings; disabled surfaces do not grant scan approval. The default enables all three surfaces:
 
-1. **User Prompt Input** — scan every user-authored text string or text block,
+1. **User Prompt Input** — scan every non-empty user-authored text string or text block,
    excluding the `pii` category by default. `analysis.user_prompt_pii` explicitly opts it in; other configured categories remain active.
-2. **Tool Results** — scan every externally returned text string or text block.
-3. **MCP Results** — scan every `content[].text` block returned by an MCP tool.
+2. **Tool Results** — scan every non-empty externally returned text string or text block.
+3. **MCP Results** — scan every non-empty `content[].text` block returned by an MCP tool.
 
 These rules are unconditional:
 
@@ -26,7 +26,7 @@ These rules are unconditional:
   available to the agent together with explicit degraded context. This does
   not grant approval: the agent must identify the content as unchecked and may
   continue the user's task with that limitation visible.
-- Multiple text blocks retain their order and are submitted as raw strings;
+- Multiple non-empty text blocks retain their order and are submitted as raw strings;
   non-text blocks neither enter the scanner nor cause adjacent text to be
   skipped.
 - If a host exposes an external result as one raw string projection instead of
@@ -65,13 +65,19 @@ injection findings do not qualify for automatic privacy redaction. The same
 behavior applies to the DeepSeek response gate and status tool. User prompts
 retain their existing policy.
 
+Pending responses expose their current `job_status`. A queued response also
+includes `wait_reason=scanner_queue` and `next_tool=patronus_check_result` with
+explicit guidance that queue backpressure is neither failure nor expiry. Agents
+must retain the scan ID and poll later; they must not rerun the source tool.
+
 Static audits run independently of runtime worker startup and have a bounded
 five-minute scan budget, covered by the native PreToolUse broker and host budgets.
 Configuration failures return `configuration_unavailable` without exposing raw
 process diagnostics; expiration remains `timeout`. An installed CLI must support
 the active configuration, including `ark.model_dir` when configured.
 
-Explicit URL/MCP audits use the API in every processing mode. If authentication,
-usage, network access, or the API is unavailable, the CLI audit reports failure.
+Explicit URL/MCP audits use the API in every processing mode. URLs can use the
+rate-limited anonymous identity; MCP audits remain authenticated. If quota,
+authentication, network access, or the API is unavailable, the CLI audit reports failure.
 The hook must fall open, preserve normal tool execution, and add degraded context;
 an unavailable audit is never approval.

@@ -62,12 +62,10 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
       const submission = await client.submit({ session, direction: 'response', policy_scope: exec.name.startsWith('mcp__') ? 'deepseek.mcp_result' : 'deepseek.tool_result', tool: exec.name, call_id: String(exec.callId), payload }, signal)
       job = { session, scan_id: submission.scan_id }
       gate.events.emit({ kind: 'scan_started', direction: 'response', tool: exec.name, session_id: session, scan_id: submission.scan_id, status: submission.status, duration_ms: elapsed(started), payload_hash: payloadHash })
-      const scanned = await autoRedact(await waitForScan(client, job, waitMs, signal), () => client!.readRedacted(job!, signal))
+      let pending = await waitForScan(client, job, waitMs, signal)
+      if (pending.status === 'pending' && pending.job_status === undefined) pending = { ...pending, job_status: 'queued' }
+      const scanned = await autoRedact(pending, () => client!.readRedacted(job!, signal))
       gate.events.emit({ kind: 'scan_completed', direction: 'response', tool: exec.name, session_id: session, scan_id: scanned.scan_id, status: scanned.status, duration_ms: elapsed(started), payload_hash: payloadHash })
-      if (ctx.tools.get(exec.name, exec.agent)?.finalizeContent !== undefined) {
-        bypassed.add(exec)
-        return warn(decision)
-      }
       if (scanned.status === 'approved') {
         return finish(exec, result, decision)
       }

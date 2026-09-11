@@ -45,7 +45,7 @@ package registry; scanner processing stays local with L1 and model downloads off
 For one failure, use `--host codex --flow read-redacted` (or `deepseek`). A focused
 run is explicitly marked `releaseGate: false`; it is not a full release verdict.
 
-## Fourteen small flows
+## Sixteen small flows
 
 Each of the following runs once per host:
 
@@ -54,6 +54,7 @@ Each of the following runs once per host:
 | `safe-read` | Read a tiny manifest. | Version/document marker reaches the model; source executes once. |
 | `auto-pii` | Read the manifest with a synthetic email. | Only redacted email reaches the model; useful content remains; no manual redaction call. |
 | `pending` | Read with zero response wait, then poll. | Actual pending receipt followed by approved content; no repeated source execution. |
+| `queue-backlog` | Read with zero response wait while the result is still queued. | The agent receives `job_status=queued`, `wait_reason=scanner_queue`, and the exact polling tool instead of treating the result as failed or expired. |
 | `read-redacted` | Read release notes containing an actual prompt-injection instruction, then request redaction. | The complete returned text exactly matches the golden file: only the injection span becomes `[REDACTED]`. Surrounding text, Unicode, numbers and newlines remain unchanged. |
 | `remote-fail-open` | Request a URL audit in Local mode without API authentication, then use the requested source tool. | The packaged CLI reports the unavailable audit, the hook adds degraded context, and the agent still executes the source tool exactly once. |
 | `upgrade` | Install a different previous package/definition, then invoke the public scanner update command. | Current package is restored, changed Codex hook trust is renewed, retrieval works and settings survive. |
@@ -95,4 +96,4 @@ host, then retrieve the existing receipt without repeating the source command.
 CLI: start with stale trust, repair it while the parent is running, observe the
 child's blocked retrieval, then resume the same parent in a fresh process and
 retrieve the original scan. The source execution count must remain one. This
-additional regression runs before publishing alongside the twelve content flows.
+additional regression runs before publishing alongside the sixteen content flows.

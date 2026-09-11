@@ -202,8 +202,17 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
     // Static audits own their CLI lifecycle and configuration validation. Do not
     // require an unrelated runtime worker/model startup just to audit a file.
     if (request.method === 'static') {
-      scanner ??= new StaticScanner({ executable: config.executable, configPath: config.configPath }, shutdown.signal)
-      return scanner.scan({ kind: request.kind, path: request.path, ...(request.server === undefined ? {} : {server:request.server}) }, signal)
+      scanner ??= new StaticScanner({ executable: config.executable, configPath: config.configPath }, shutdown.signal, 300_000, true)
+      const result = await scanner.scan({ kind: request.kind, path: request.path, ...(request.server === undefined ? {} : {server:request.server}) }, signal)
+      return record(result) && result.schema === 'patronus.deepseek.static.v1'
+        ? { ...result, schema: 'patronus.static.v1' }
+        : result
+    }
+    if (request.method === 'read_static_redacted') {
+      return scanner?.readRedacted(request.fileId, signal) ?? {
+        status: 'invalid_reference', code: 'scan_not_available', expected: 'static_file_id',
+        message: 'Use a file_id returned by a static finding in this session.',
+      }
     }
     const { client, hello } = await boot()
     if (signal.aborted) return unavailable()
@@ -227,7 +236,8 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
     try {
       const submitted = await client.submit({ session, policy_scope: `${config.host}.${request.method === 'request' ? 'user_input' : request.tool.startsWith('mcp__') ? 'mcp_result' : 'tool_result'}`, direction: request.method, tool: request.tool, call_id: request.callId, payload: request.payload }, budget)
       job = { session, scan_id: submitted.scan_id }
-      const result = await waitForScan(client, job, wait, budget)
+      let result = await waitForScan(client, job, wait, budget)
+      if (result.status === 'pending' && result.job_status === undefined) result = { ...result, job_status: 'queued' }
       approved = result.status === 'approved' && !budget.aborted
       if (request.method === 'response') {
         const visible = await autoRedact(result, () => client.readRedacted(job!, budget))

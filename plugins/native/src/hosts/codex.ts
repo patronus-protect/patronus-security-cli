@@ -7,13 +7,13 @@ function record(value: unknown): value is Record<string, unknown> {
 
 /** Raw external text exposed by the pinned Codex hook contract. */
 export function codexExternalText(event: string, input: HookInput): string[] {
-  if (event === 'UserPromptSubmit') return typeof input.prompt === 'string' ? [input.prompt] : []
+  if (event === 'UserPromptSubmit') return typeof input.prompt === 'string' && input.prompt.length > 0 ? [input.prompt] : []
   if (event !== 'PostToolUse') return []
   const response = input.tool_response
-  if (typeof response === 'string') return [response]
+  if (typeof response === 'string') return response.length > 0 ? [response] : []
   if (!record(response) || !Array.isArray(response.content)) return []
   return response.content.flatMap(block =>
-    record(block) && block.type === 'text' && typeof block.text === 'string' ? [block.text] : [],
+    record(block) && block.type === 'text' && typeof block.text === 'string' && block.text.length > 0 ? [block.text] : [],
   )
 }
 

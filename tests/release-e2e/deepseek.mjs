@@ -53,15 +53,16 @@ export async function deepseekFlow(setup, flow) {
   const flowEnv = {...env}
   if (flow === 'remote-fail-open') delete flowEnv.PATRONUS_API_KEY
   const dir = join(root,flow); await mkdir(dir)
-  const config = join(dir,'scanner.toml'), document = join(dir,'manifest.toml'), counter=join(dir,'executions')
+  const config = join(dir,'scanner.toml'), document = join(dir,'manifest.toml'), blocker=join(dir,'queue-blocker.txt'), counter=join(dir,'executions')
   const evidence = join(dir,'evidence.json'), requests=join(dir,'requests.json')
-  await writeFile(config,scannerConfig)
+  await writeFile(config,scannerConfig+(flow==='queue-backlog'?'[chunking]\ntarget_bytes=4\noverlap_bytes=0\nprefer_line_boundaries=false\n':''))
   await writeFile(document,flow==='read-redacted'?injectionDocument:manifest+(flow==='auto-pii'?`author = "${email}"\n`:''))
+  if(flow==='queue-backlog') await writeFile(blocker,'benign queue blocker\n'.repeat(64))
   const patch = (executable, degraded = false) => [
     {id:'patronus-security',config:{executable,configPath:config,stateDir:join(dir,'scanner-state'),responseWaitMs:0}},
     {id:'agent-default-model',config:{provider:'release-model',model:'scripted'}},
     {id:'llm-deepseek',disabled:true},{id:'session-title-llm',disabled:true},{id:'typert-loader',disabled:true},
-    {insert:[{id:'release-model',name:model,config:{flow,degraded,document,counter,evidence,requests,...(flow==='read-redacted'?{expectedRedacted:injectionRedacted}:{})}}]},
+    {insert:[{id:'release-model',name:model,config:{flow,degraded,document,blocker,counter,evidence,requests,...(flow==='read-redacted'?{expectedRedacted:injectionRedacted}:{})}}]},
   ]
   const patchPath=join(home,'profiles/headless/cordis.patch.yml')
   await writeFile(patchPath,JSON.stringify(patch(process.env.PATRONUS_SCANNER_BIN)))
@@ -107,7 +108,8 @@ export async function deepseekFlow(setup, flow) {
     assert(result.stdout.includes('RELEASE_FLOW_PASSED'),'CLI did not finish the scripted task')
     const proof=JSON.parse(await readFile(evidence,'utf8'))
     assert.equal(proof.completed,true)
-    assert.equal(await readFile(counter,'utf8'),flow==='outage-recovery'?'11':'1')
+    if(flow==='queue-backlog') assert.equal(proof.queueBackpressureVisible,true)
+    assert.equal(await readFile(counter,'utf8'),flow==='outage-recovery'||flow==='queue-backlog'?'11':'1')
     return {...proof,...(flow==='outage-recovery'?{degradedWarning:true,originalAvailable:true,recovered:true,sourceExecutions:2}:{}),root:dir}
   } catch(error) { error.evidenceRoot=dir; error.message+=`\nDeepSeek evidence: ${dir}`;throw error }
 }

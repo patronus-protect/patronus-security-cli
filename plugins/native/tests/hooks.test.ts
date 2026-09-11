@@ -24,6 +24,31 @@ test('Codex pending response replaces the original with a receipt', async () => 
   assert(result.reason.includes('patronus_check_result'))
 })
 
+test('queued receipts tell Codex and Claude to preserve the scan id and poll later', async () => {
+  for (const host of ['codex', 'claude'] as const) {
+    const result: any = await handleHook(host, 'PostToolUse', input('PostToolUse', { tool_response: 'RAW-QUEUED-731' }), {}, async () => ({
+      scan_id: 'scan-queued-731', status: 'pending', job_status: 'queued',
+    }))
+    const visible = JSON.stringify(result)
+    assert.match(visible, /scanner_queue/)
+    assert.match(visible, /not a scan failure or expiry/)
+    assert.match(visible, /patronus_check_result/)
+    assert(!visible.includes('RAW-QUEUED-731'))
+  }
+})
+
+test('queued status retrieval retains the queue guidance for every native host', async () => {
+  for (const host of ['codex', 'claude'] as const) {
+    const result: any = await handleHook(host, 'PreToolUse', input('PreToolUse', {
+      tool_name: 'mcp__patronus__patronus_check_result', tool_input: { scan_id: 'scan-queued-731' },
+    }), {}, async () => ({ scan_id: 'scan-queued-731', status: 'pending', job_status: 'queued' }))
+    const visible = JSON.stringify(result)
+    assert.match(visible, /scanner_queue/)
+    assert.match(visible, /not a scan failure or expiry/)
+    assert.match(visible, /patronus_check_result/)
+  }
+})
+
 test('retrieval uses native session identity and never executes the MCP placeholder', async () => {
   let config: any, request: any
   const result: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', { tool_name: 'mcp__patronus__patronus_check_result', tool_input: { scan_id: 'scan-731' } }), {}, async (c, r) => {
@@ -51,13 +76,60 @@ test('static scope reaches the scanner as an absolute path, without source bytes
   assert.equal(JSON.parse(result.hookSpecificOutput.permissionDecisionReason).approved, true)
 })
 
+test('invalid static arguments return actionable validation without contacting the broker', async () => {
+  let calls = 0
+  const result: any = await handleHook('claude', 'PreToolUse', input('PreToolUse', {
+    tool_name: 'mcp__patronus__patronus_scan', tool_input: { path: '/private/tmp/notes.txt' },
+  }), {}, async () => { calls++; return {} })
+  assert.equal(calls, 0)
+  const receipt = JSON.parse(result.hookSpecificOutput.permissionDecisionReason)
+  assert.deepEqual(receipt, {
+    status: 'invalid_arguments', code: 'missing_required_arguments', required: ['kind', 'path'], missing: ['kind'],
+    next_tool: null, message: 'Call the same Patronus tool once with exactly these required arguments: kind, path.',
+  })
+  assert(!JSON.stringify(receipt).includes('scan_id'))
+})
+
+test('static file redaction uses file_id while runtime redaction keeps scan_id', async () => {
+  const fileId = `file_${'a'.repeat(64)}`
+  const requests: unknown[] = []
+  for (const args of [{ file_id: fileId }, { scan_id: 'scan-731' }]) {
+    const result: any = await handleHook('claude', 'PreToolUse', input('PreToolUse', {
+      tool_name: 'mcp__patronus__patronus_read_redacted', tool_input: args,
+    }), {}, async (_config, request) => { requests.push(request); return { status: 'redacted', result: '[REDACTED]' } })
+    assert.equal(result.hookSpecificOutput.permissionDecision, 'deny')
+  }
+  assert.deepEqual(requests, [
+    { method: 'read_static_redacted', fileId },
+    { method: 'read_redacted', scanId: 'scan-731' },
+  ])
+})
+
+test('session end closes directly without protocol rendering', async () => {
+  let request: unknown
+  const result = await runHook('claude', 'SessionEnd', input('SessionEnd'), {}, async (_config, value) => { request = value; return { closed: true } },
+    async () => { throw Error('SessionEnd must not render protocol output') })
+  assert.deepEqual(result, {})
+  assert.deepEqual(request, { method: 'close' })
+})
+
 test('failed URL audits fall open with degraded context', async () => {
   const result: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', {
     tool_name: 'mcp__patronus__patronus_scan', tool_input: { kind: 'url', path: 'https://example.org/' },
   }), {}, async () => ({ schema: 'patronus.native.static.v1', status: 'FAILED', approved: false, reason: 'scan_unavailable' }))
   assert.equal(result.hookSpecificOutput.permissionDecision, undefined)
   assert.match(result.hookSpecificOutput.additionalContext, /continue the task/)
-  assert.match(result.systemMessage, /protection is inactive/)
+  assert.doesNotMatch(result.systemMessage, /protection is inactive/)
+  assert.match(result.systemMessage, /static audit/)
+})
+
+test('remote audit failures report their cause without claiming the integration is inactive', async () => {
+  const result: any = await handleHook('claude', 'PreToolUse', input('PreToolUse', {
+    tool_name: 'mcp__patronus__patronus_scan', tool_input: { kind: 'url', path: 'https://example.org/' },
+  }), {}, async () => ({ schema: 'patronus.deepseek.static.v1', status: 'FAILED', approved: false, reason: 'authentication_missing' }))
+  const message = result.hookSpecificOutput.additionalContext
+  assert.match(message, /auth login/)
+  assert.doesNotMatch(message, /integration is inactive/)
 })
 
 test('broker failures and malformed native inputs warn without blocking', async () => {
@@ -104,7 +176,7 @@ test('Claude scans only exact external result text, independent of tool name and
     { response: 'PLAIN-731', expected: 'PLAIN-731' },
     { response: [{ type: 'text', text: '{"raw":731}' }, { type: 'image', data: 'IMAGE-731' }, { type: 'text', text: 'SECOND-731' }], expected: ['{"raw":731}', 'SECOND-731'] },
     { response: { structuredContent: { value: 'STRUCTURED-731' }, content: [{ type: 'text', text: 'MCP-731' }, { type: 'image', data: 'IMAGE-731' }] }, expected: 'MCP-731' },
-    { response: { stdout: 'OUT-731', stderr: 'ERR-731', interrupted: false, isImage: true, path: 'PRIVATE-PATH-731' }, expected: ['OUT-731', 'ERR-731'] },
+    { response: { stdout: 'OUT-731', stderr: '', interrupted: false, isImage: true, path: 'PRIVATE-PATH-731' }, expected: 'OUT-731' },
     { response: { type: 'text', file: { filePath: 'PRIVATE-PATH-731', content: 'FILE-731', numLines: 1, startLine: 1, totalLines: 1 } }, expected: 'FILE-731' },
   ]
   for (const { response, expected } of responses) {
@@ -150,7 +222,7 @@ test('Claude scans exact tool failure text and admits an approved error', async 
 })
 
 test('Claude ignores result envelopes that contain no external text', async () => {
-  for (const response of [undefined, { type: 'image', data: 'IMAGE-731' }, [{ type: 'image', data: 'IMAGE-731' }]]) {
+  for (const response of ['', { stdout: '', stderr: '' }, undefined, { type: 'image', data: 'IMAGE-731' }, [{ type: 'text', text: '' }, { type: 'image', data: 'IMAGE-731' }]]) {
     let calls = 0
     assert.deepEqual(await handleHook('claude', 'PostToolUse', input('PostToolUse', {
       tool_name: 'ArbitraryExternalTool', tool_response: response,
@@ -161,8 +233,10 @@ test('Claude ignores result envelopes that contain no external text', async () =
 
 test('Codex passes results with no external text without scanning or approval claims', async () => {
   const responses = [
+    '',
     undefined,
     { type: 'image', data: 'IMAGE-731' },
+    { content: [{ type: 'text', text: '' }] },
     731,
   ]
   for (const response of responses) {

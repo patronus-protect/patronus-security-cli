@@ -31,7 +31,9 @@ for await (const line of createInterface({ input: process.stdin })) {
           { type: 'text', text: 'RAW_ADDITIONAL_BLOCK_SENTINEL' },
         ] }
       : { content: [{ type: 'text', text: message.params.name === 'read_json' ? JSON.stringify(data) : 'RAW_RESPONSE_ONLY_SENTINEL' }] };
-    if (message.params.name === 'read_error') result.isError = true;
+    if (message.params.name === 'read_error') result = {
+      content: [{ type: 'text', text: 'The requested fixture record is unavailable.' }], isError: true,
+    };
     if (message.params.name === 'read_source_error') result = {
       content: [{ type: 'text', text: await readFile(join(process.env.PATRONUS_FIXTURE_DIRECTORY, 'source.txt'), 'utf8') }], isError: true,
     };

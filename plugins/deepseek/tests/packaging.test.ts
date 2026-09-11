@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -51,12 +51,16 @@ it('installs the built tarball and runs native static scan and request/response 
   const workspace = join(scratch, 'workspace')
   await mkdir(workspace, { recursive: true })
   // tsx deliberately skips path aliases inside node_modules. This unbuilt host
-  // checkout therefore needs its real tools source exposed to external plugins.
+  // checkout therefore needs its runtime peer sources exposed to external plugins.
   // Patronus itself is loaded from the installed tarball, never redirected to source.
   const hostResolver = join(scratch, 'host-resolver.mjs')
+  const installedUrl = pathToFileURL(await realpath(installed)).href + '/'
   await writeFile(hostResolver, `export function resolve(specifier, context, next) {
-    if (specifier === '@deepseek-ai/dsh-tools' && context.parentURL?.startsWith(${JSON.stringify(pathToFileURL(installed).href + '/')})) {
+    if (specifier === '@deepseek-ai/dsh-tools' && context.parentURL?.startsWith(${JSON.stringify(installedUrl)})) {
       return next(${JSON.stringify(pathToFileURL(join(harness, 'packages/core/tools/src/index.ts')).href)}, context)
+    }
+    if (specifier === '@deepseek-ai/dsh-llm' && context.parentURL?.startsWith(${JSON.stringify(installedUrl)})) {
+      return next(${JSON.stringify(pathToFileURL(join(harness, 'packages/llm/llm/src/index.ts')).href)}, context)
     }
     return next(specifier, context)
   }`)

@@ -1,6 +1,6 @@
 {
   "name": "patronus-security",
-  "description": "Local Patronus native hook prototype and explicit repository scans. Validated text tool results are gated before model continuation.",
+  "description": "Patronus Runtime Protection and explicit security scans for Claude Code.",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "author": {

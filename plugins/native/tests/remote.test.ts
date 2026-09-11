@@ -42,3 +42,12 @@ for(const invalid of [{complete:false},{status:['CLEAN']},{approved:true,finding
   assert(!JSON.stringify(result).includes('PRIVATE-REMOTE-CANARY'))
  }finally{await rm(f.root,{recursive:true,force:true})}
 })
+
+test('structured remote failures preserve a safe actionable reason',async()=>{
+ const report={schema:'patronus.remote.scan.error.v1',kind:'url',provider:'api',status:'FAILED',approved:false,complete:false,reason:'authentication_missing'}
+ const f=await fixture(report,4)
+ try {
+  const result:any=await new StaticScanner({executable:f.executable},signal()).scan({kind:'url',path:'https://example.org'},signal())
+  assert.deepEqual(result,{schema:'patronus.deepseek.static.v1',status:'FAILED',approved:false,reason:'authentication_missing'})
+ }finally{await rm(f.root,{recursive:true,force:true})}
+})

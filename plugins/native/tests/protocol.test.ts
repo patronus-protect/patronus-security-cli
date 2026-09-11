@@ -47,6 +47,17 @@ test('protocol append failures do not alter scan results or expose scan errors',
   assert(!JSON.stringify(events).includes('PRIVATE-SCAN-ERROR-917'))
 })
 
+test('static MCP protocol identity includes the selected server without persisting it', async () => {
+  const events: any[] = []
+  const append = async (event: any) => { events.push(event) }
+  for (const server of ['first', 'second']) {
+    await recordProtocolScan(config, { method: 'static', kind: 'mcp', path: '/private/mcp.json', server }, async () => ({ status: 'CLEAN' }), append)
+  }
+  assert.notEqual(events[0].payload_hash, events[1].payload_hash)
+  assert(!JSON.stringify(events).includes('first'))
+  assert(!JSON.stringify(events).includes('second'))
+})
+
 test('terminal scan result waits for protocol persistence', async () => {
   let persisted = false
   const result = recordProtocolScan(config, {

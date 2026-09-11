@@ -25,6 +25,7 @@ export interface BrokerConfig {
 export type BrokerRequest =
   | { method: 'request' | 'response'; tool: string; callId: string; payload: TextPayload }
   | { method: 'check' | 'read_redacted'; scanId: string }
+  | { method: 'read_static_redacted'; fileId: string }
   | { method: 'static'; kind: 'repo' | 'directory' | 'file' | 'url' | 'mcp'; path: string; server?: string }
   | { method: 'close' }
 
@@ -62,6 +63,10 @@ export function validRequest(value: unknown): value is BrokerRequest {
     case 'check': case 'read_redacted':
       keys = ['method', 'scanId']
       if (typeof value.scanId !== 'string' || !/^[a-f0-9]{32}$/.test(value.scanId)) return false
+      break
+    case 'read_static_redacted':
+      keys = ['method', 'fileId']
+      if (typeof value.fileId !== 'string' || !/^file_[a-f0-9]{64}$/.test(value.fileId)) return false
       break
     case 'static':
       keys = ['method', 'kind', 'path', 'server']

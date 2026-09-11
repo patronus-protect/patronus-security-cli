@@ -33,6 +33,8 @@ test('built native bundle replaces Bash response with a pending receipt', { time
   assert.ok(events.some(event => event.hook_event_name === 'PostToolUse'), `request was not approved: ${result.directory}`);
   assert.doesNotMatch(JSON.stringify(result.messages), /RAW_RESPONSE_ONLY_SENTINEL/);
   assert.match(JSON.stringify(result.messages[1]), /pending/);
+  assert.match(JSON.stringify(result.messages[1]), /scanner_queue/);
+  assert.match(JSON.stringify(result.messages[1]), /not a scan failure or expiry/);
   assert.doesNotMatch(result.stdout, /RAW_RESPONSE_ONLY_SENTINEL/);
   process.stdout.write(`runtime proof: ${result.directory}\n`);
 });
@@ -156,4 +158,63 @@ test('built native bundle automatically redacts PII and continues with the docum
   assert.match(JSON.stringify(result.messages[1]),/0\.1\.0/);
   assert.match(JSON.stringify(result.messages[1]),/REDACTED/);
   console.log(JSON.stringify({test:'installed-claude-pii-redaction',root:result.directory}));
+});
+
+test('static file findings can be read only through a verified redacted file_id', { timeout: 160000 }, async () => {
+  const secret = 'alice.static@example.org';
+  const result = await runHost({
+    name: 'runtime-static-file-redaction',
+    tool: 'mcp__plugin_patronus-security_patronus__patronus_scan',
+    input: (_directory, source) => ({ kind: 'file', path: source }),
+    sourceText: `Customer email: ${secret}\nPublic version: 0.1.0\n`,
+    flow: 'static-redacted', runtime: { responseWaitMs: 10000 }, timeout: 140000,
+  });
+  assert.equal(result.timedOut, false, result.directory);
+  assert.equal(result.exitCode, 0, result.directory);
+  assert.equal(result.messages.length, 3, result.directory);
+  assert(!JSON.stringify(result.messages).includes(secret), result.directory);
+  assert.match(JSON.stringify(result.messages[1]), /file_[a-f0-9]{64}/);
+  assert.match(JSON.stringify(result.messages[2]), /\[REDACTED\]/);
+  assert.doesNotMatch(result.stderr, /SessionEnd.*failed|Hook cancelled/i);
+  console.log(JSON.stringify({ test: 'installed-claude-static-file-redaction', root: result.directory }));
+});
+
+test('invalid static tool arguments return one deterministic correction', { timeout: 100000 }, async () => {
+  const result = await runHost({
+    name: 'runtime-invalid-static-arguments',
+    tool: 'mcp__plugin_patronus-security_patronus__patronus_scan',
+    input: { path: '/private/tmp/never-read' }, runtime: { responseWaitMs: 10000 }, timeout: 90000,
+  });
+  assert.equal(result.exitCode, 0, result.directory);
+  assert.equal(result.messages.length, 2, result.directory);
+  assert.match(JSON.stringify(result.messages[1]), /invalid_arguments/);
+  assert.match(JSON.stringify(result.messages[1]), /kind/);
+  assert.doesNotMatch(result.stderr, /SessionEnd.*failed|Hook cancelled/i);
+});
+
+for (const remote of [
+  { kind: 'url', sourceText: 'unused\n', input: { kind: 'url', path: 'https://example.com/' } },
+  {
+    kind: 'mcp',
+    sourceText: JSON.stringify({ mcpServers: { deepwiki: { type: 'http', url: 'https://mcp.deepwiki.com/mcp' } } }),
+    input: (_directory, source) => ({ kind: 'mcp', path: source, server: 'deepwiki' }),
+  },
+]) test(`normal scanner routes ${remote.kind} audits through the API`, {
+  timeout: 220000,
+  skip: process.env.PATRONUS_CLAUDE_REMOTE !== '1' ? 'set PATRONUS_CLAUDE_REMOTE=1 for authenticated remote audits' : false,
+}, async () => {
+  const result = await runHost({
+    name: `runtime-remote-${remote.kind}`,
+    tool: 'mcp__plugin_patronus-security_patronus__patronus_scan', input: remote.input,
+    sourceText: remote.sourceText, runtime: { responseWaitMs: 10000 }, timeout: 200000,
+  });
+  assert.equal(result.timedOut, false, result.directory);
+  assert.equal(result.exitCode, 0, result.directory);
+  assert.equal(result.messages.length, 2, result.directory);
+  const feedback = result.messages[1].messages.at(-1)?.content.find(item => item.type === 'tool_result')?.content;
+  assert.equal(typeof feedback, 'string', result.directory);
+  assert.match(feedback, /"provider":"api"/);
+  assert.match(feedback, /"complete":true/);
+  assert.doesNotMatch(feedback, /protection is inactive|integration is inactive/i);
+  assert.doesNotMatch(result.stderr, /SessionEnd.*failed|Hook cancelled/i);
 });

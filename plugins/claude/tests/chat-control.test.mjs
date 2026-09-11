@@ -5,7 +5,7 @@ import test from 'node:test'
 import { runHost } from './scripted-host.mjs'
 
 test('installed Claude handles a chat pause locally using its native session ID', { timeout: 90000 }, async () => {
-  const result = await runHost({ name: 'chat-command-off', tool: 'Bash', input: { command: 'true' }, runtime: true, userPrompt: 'patronus off', timeout: 60000 })
+  const result = await runHost({ name: 'chat-command-off', tool: 'Bash', input: { command: 'true' }, runtime: { isolatedDataDir: true }, userPrompt: 'patronus off', timeout: 60000 })
   assert.equal(result.timedOut, false)
   assert.equal(result.messages.length, 0)
   const events = (await readFile(join(result.directory, 'hooks.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
