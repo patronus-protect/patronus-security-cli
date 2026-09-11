@@ -3,10 +3,13 @@ use crate::{
     config::Config,
     error::{Result, ScannerError},
 };
+use patronus_api_client::{Client, ErrorKind};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
-    io::Read,
-    time::{Duration, Instant},
+    io::{Read, Write},
+    path::Path,
+    time::Duration,
 };
 
 pub fn error(message: &str) -> ScannerError {
@@ -19,94 +22,205 @@ pub fn token(config: &Config) -> Result<String> {
         .map(Ok)
         .unwrap_or_else(crate::auth::access_token)
 }
-pub fn submit(config: &Config, body: Value) -> Result<Vec<Value>> {
+pub fn has_token(config: &Config) -> bool {
+    std::env::var(&config.provider.api_key_env)
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty())
+        || crate::auth::access_token().is_ok()
+}
+
+pub fn submit(config: &Config, body: Value, allow_anonymous: bool) -> Result<Vec<Value>> {
     config.validate()?;
-    let endpoint = format!("{}/scan", config.provider.api_base_url);
-    submit_at(
-        &endpoint,
-        &token(config)?,
-        body,
-        Duration::from_millis(config.runtime.scan_timeout_ms),
-    )
-}
-fn decode(response: std::result::Result<ureq::Response, ureq::Error>) -> Result<Value> {
-    let response = response.map_err(|e| match e {
-        ureq::Error::Status(401 | 403, _) => {
-            error("API authentication required. Run onboarding or auth login.")
-        }
-        ureq::Error::Status(429, _) => {
-            error("API usage limit reached. Check auth usage and retry after reset.")
-        }
-        _ => error("API request failed; no approval granted."),
-    })?;
-    let mut bytes = Vec::new();
-    response
-        .into_reader()
-        .take(1_048_577)
-        .read_to_end(&mut bytes)
-        .map_err(|_| error("API response unavailable"))?;
-    if bytes.len() > 1_048_576 {
-        return Err(error("API response exceeds limit"));
+    let timeout = Duration::from_millis(config.runtime.scan_timeout_ms);
+    if let Ok(token) = token(config) {
+        return submit_at(&config.provider.api_base_url, &token, body, timeout);
     }
-    serde_json::from_slice(&bytes).map_err(|_| error("Invalid API response"))
+    if !allow_anonymous {
+        return Err(error(
+            "API authentication required. Run onboarding or auth login.",
+        ));
+    }
+    with_anonymous_client(config, |client| {
+        client.scan_json(body).map(|response| response.jobs)
+    })
 }
-fn remaining(deadline: Instant) -> Result<Duration> {
-    deadline
-        .checked_duration_since(Instant::now())
-        .filter(|d| !d.is_zero())
-        .ok_or_else(|| error("API scan timeout"))
+fn submit_at(base_url: &str, token: &str, body: Value, timeout: Duration) -> Result<Vec<Value>> {
+    Client::with_base_url(base_url, token)
+        .map_err(map_error)?
+        .with_timeout(timeout)
+        .scan_json(body)
+        .map(|response| response.jobs)
+        .map_err(map_error)
 }
-fn submit_at(endpoint: &str, token: &str, body: Value, timeout: Duration) -> Result<Vec<Value>> {
-    let deadline = Instant::now() + timeout;
-    let client = ureq::AgentBuilder::new()
-        .redirects(0)
-        .timeout(timeout)
-        .build();
-    let accepted = decode(
+
+pub fn submit_anonymous_files(
+    config: &Config,
+    files: &[patronus_api_client::FileUpload],
+    scan_config: &Value,
+) -> Result<Vec<Value>> {
+    config.validate()?;
+    with_anonymous_client(config, |client| {
         client
-            .post(endpoint)
-            .set("Authorization", &format!("Bearer {token}"))
-            .set("Prefer", "wait=1")
-            .send_json(body),
-    )?;
-    let Some(jobs) = accepted.get("jobs") else {
-        return Ok(vec![accepted]);
+            .scan_files(files, None, Some(scan_config))
+            .map(|response| response.jobs)
+    })
+}
+
+#[derive(Serialize, Deserialize)]
+struct AnonymousIdentity {
+    cookie: String,
+}
+
+fn with_anonymous_client<T>(
+    config: &Config,
+    operation: impl FnOnce(&Client) -> patronus_api_client::Result<T>,
+) -> Result<T> {
+    let root = crate::config::user_root()?;
+    let previous = load_anonymous_identity(&root)?;
+    let client = Client::with_base_url_anonymous(&config.provider.api_base_url, previous)
+        .map_err(map_error)?
+        .with_timeout(Duration::from_millis(config.runtime.scan_timeout_ms));
+    let result = operation(&client);
+    if let Some(cookie) = client.anonymous_cookie() {
+        save_anonymous_identity(&root, &cookie)?;
+    }
+    result.map_err(map_error)
+}
+
+fn identity_path(root: &Path) -> std::path::PathBuf {
+    root.join("anonymous/identity.json")
+}
+
+fn load_anonymous_identity(root: &Path) -> Result<Option<String>> {
+    let path = identity_path(root);
+    if std::fs::symlink_metadata(root.join("anonymous"))
+        .is_ok_and(|metadata| metadata.file_type().is_symlink() || !metadata.is_dir())
+    {
+        return Err(error("Unsafe anonymous identity directory"));
+    }
+    let metadata = match std::fs::symlink_metadata(&path) {
+        Ok(value) => value,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => return Err(ScannerError::Io { path, source }),
     };
-    let jobs = jobs
-        .as_array()
-        .filter(|j| !j.is_empty() && j.len() <= 32)
-        .ok_or_else(|| error("Invalid API jobs"))?;
-    let mut results = Vec::new();
-    for job in jobs {
-        let id = job["job_id"]
-            .as_str()
-            .filter(|s| {
-                s.len() == 36
-                    && s.starts_with("job_")
-                    && s[4..].bytes().all(|b| b.is_ascii_hexdigit())
-            })
-            .ok_or_else(|| error("Invalid API job identifier"))?;
-        loop {
-            let result = decode(
-                client
-                    .get(&format!("{endpoint}/{id}"))
-                    .set("Authorization", &format!("Bearer {token}"))
-                    .timeout(remaining(deadline)?)
-                    .call(),
-            )?;
-            match result["status"].as_str() {
-                Some("running" | "queued") => {
-                    std::thread::sleep(Duration::from_millis(200).min(remaining(deadline)?))
-                }
-                Some("completed") => {
-                    results.push(result);
-                    break;
-                }
-                _ => return Err(error("API scan did not complete; no approval granted")),
-            }
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 8192 {
+        return Err(error("Unsafe anonymous identity file"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o777 != 0o600 {
+            return Err(error("Anonymous identity file must have permissions 0600"));
         }
     }
-    Ok(results)
+    let mut bytes = Vec::new();
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    options
+        .open(&path)
+        .map_err(|source| ScannerError::Io {
+            path: path.clone(),
+            source,
+        })?
+        .take(8193)
+        .read_to_end(&mut bytes)
+        .map_err(|source| ScannerError::Io {
+            path: path.clone(),
+            source,
+        })?;
+    if bytes.len() > 8192 {
+        return Err(error("Anonymous identity file is too large"));
+    }
+    let identity: AnonymousIdentity =
+        serde_json::from_slice(&bytes).map_err(|_| error("Invalid anonymous identity file"))?;
+    Ok(Some(identity.cookie))
+}
+
+fn save_anonymous_identity(root: &Path, cookie: &str) -> Result<()> {
+    crate::dashboard::ensure_directory(root)?;
+    let directory = root.join("anonymous");
+    crate::dashboard::ensure_directory(&directory)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).map_err(
+            |source| ScannerError::Io {
+                path: directory.clone(),
+                source,
+            },
+        )?;
+    }
+    let temporary = directory.join(format!(".identity-{:016x}.tmp", rand::random::<u64>()));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let result = (|| {
+        let mut file = options
+            .open(&temporary)
+            .map_err(|source| ScannerError::Io {
+                path: temporary.clone(),
+                source,
+            })?;
+        file.write_all(
+            &serde_json::to_vec(&AnonymousIdentity {
+                cookie: cookie.to_owned(),
+            })
+            .map_err(|_| error("Cannot encode anonymous identity"))?,
+        )
+        .map_err(|source| ScannerError::Io {
+            path: temporary.clone(),
+            source,
+        })?;
+        file.sync_all().map_err(|source| ScannerError::Io {
+            path: temporary.clone(),
+            source,
+        })?;
+        crate::atomic_file::replace(&temporary, &identity_path(root)).map_err(|source| {
+            ScannerError::Io {
+                path: directory.clone(),
+                source,
+            }
+        })
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn map_error(source: patronus_api_client::Error) -> ScannerError {
+    let message = match source.kind {
+        ErrorKind::Authentication => "API authentication required. Run onboarding or auth login.",
+        ErrorKind::Quota | ErrorKind::RateLimit => return ScannerError::Api {
+            kind: source.kind,
+            message: format!("API usage limit reached. Run `patronus-security-scanner auth login` or open https://control.patronus.studio/.{}",
+                source.retry_after.map(|seconds| format!(" Retry after {seconds} seconds.")).unwrap_or_default()),
+            code: source.code,
+            retry_after: source.retry_after,
+            details: source.details,
+        },
+        ErrorKind::Timeout => "API scan timeout",
+        ErrorKind::Protocol => "Invalid API response",
+        ErrorKind::Validation => "API request rejected; no approval granted.",
+        ErrorKind::Transport => "API request failed; no approval granted.",
+    }
+    .to_owned();
+    ScannerError::Api {
+        kind: source.kind,
+        message,
+        code: source.code,
+        retry_after: source.retry_after,
+        details: source.details,
+    }
 }
 
 #[cfg(test)]
@@ -116,7 +230,7 @@ mod tests {
     fn rejects_untrusted_job_identifier_before_polling() {
         use std::io::{BufRead, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let endpoint = format!("http://{}/scan", listener.local_addr().unwrap());
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let thread = std::thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
             let mut r = std::io::BufReader::new(s.try_clone().unwrap());
@@ -126,7 +240,8 @@ mod tests {
                     break;
                 }
             }
-            let body = r#"{"jobs":[{"job_id":"https://foreign.invalid/token"}]}"#;
+            let body =
+                r#"{"status":"accepted","jobs":[{"job_id":"https://foreign.invalid/token"}]}"#;
             write!(
                 s,
                 "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -142,5 +257,27 @@ mod tests {
         )
         .is_err());
         thread.join().unwrap();
+    }
+
+    #[test]
+    fn anonymous_identity_round_trips_in_a_private_file() {
+        let root = tempfile::tempdir().unwrap();
+        save_anonymous_identity(root.path(), "patronus_anon=principal.signature").unwrap();
+        assert_eq!(
+            load_anonymous_identity(root.path()).unwrap().as_deref(),
+            Some("patronus_anon=principal.signature")
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(identity_path(root.path()))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
     }
 }

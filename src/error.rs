@@ -17,6 +17,14 @@ pub enum ScannerError {
     },
     #[error("Ark error: {0}")]
     Ark(String),
+    #[error("{message}")]
+    Api {
+        kind: patronus_api_client::ErrorKind,
+        message: String,
+        code: Option<String>,
+        retry_after: Option<u64>,
+        details: Option<Box<serde_json::Value>>,
+    },
     #[error("output error: {0}")]
     Output(String),
     #[error("support bundle error: {0}")]

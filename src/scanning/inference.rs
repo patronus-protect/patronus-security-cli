@@ -74,7 +74,7 @@ impl Inference {
             let request = json!({"text": input.content, "config": {
                 "categories": [api_category], "max_level": level.to_uppercase(), "gates":gates
             }});
-            let jobs = crate::api_client::submit(&self.config, request)?;
+            let jobs = crate::api_client::submit(&self.config, request, false)?;
             if jobs.len() != 1 {
                 return Err(error("Expected one API text result"));
             }

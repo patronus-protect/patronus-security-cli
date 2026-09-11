@@ -1,0 +1,11 @@
+{
+  "status": "completed",
+  "jobs": [{
+    "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "status": "completed",
+    "decision": "allow",
+    "categories": {}
+  }],
+  "coverage": { "state": "complete" },
+  "usage": { "scan_units": 1, "unit_version": "scan-unit-v1" }
+}

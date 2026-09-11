@@ -56,6 +56,11 @@ fn execute(cli: Cli) -> Result<i32> {
         Command::Scan {
             target: patronus_security_scanner::cli::ScanTarget::Mcp(args),
         } => patronus_security_scanner::remote_scan::execute("mcp", args),
+        Command::Scan {
+            target: patronus_security_scanner::cli::ScanTarget::File { path, options },
+        } if options.anonymous_api => {
+            patronus_security_scanner::remote_scan::execute_file(&path, options)
+        }
         Command::Maintenance { command } => {
             patronus_security_scanner::maintenance::execute(command)?;
             Ok(0)

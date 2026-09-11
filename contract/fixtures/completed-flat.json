@@ -1,0 +1,18 @@
+{
+  "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source": "text",
+  "status": "completed",
+  "progress": {},
+  "categories": {},
+  "completion": {
+    "state": "complete"
+  },
+  "decision": "allow",
+  "timings": {},
+  "usage": {
+    "input_tokens": 8,
+    "scan_units": 1,
+    "request_units": 1,
+    "unit_version": "scan-unit-v1"
+  }
+}

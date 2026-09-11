@@ -1,9 +1,9 @@
 //! Explicit URL/MCP API scans. Targets are resolved by the CLI, never fetched here.
 use crate::{
     api_client::error,
-    cli::{OutputFormat, RemoteScanArgs},
+    cli::{OutputFormat, RemoteScanArgs, ScanOptions},
     config::Config,
-    error::Result,
+    error::{Result, ScannerError},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -31,6 +31,65 @@ pub struct RemoteFinding {
     pub category: String,
     pub level: String,
     pub confidence: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct RemoteFailure<'a> {
+    schema: &'static str,
+    kind: &'a str,
+    provider: &'static str,
+    status: &'static str,
+    approved: bool,
+    complete: bool,
+    reason: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_after: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quota: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_command: Option<&'static str>,
+}
+
+fn failure_reason(error: &ScannerError) -> &'static str {
+    if let ScannerError::Api { kind, .. } = error {
+        return match kind {
+            patronus_api_client::ErrorKind::Authentication => "authentication_missing",
+            patronus_api_client::ErrorKind::Quota | patronus_api_client::ErrorKind::RateLimit => {
+                "usage_limit_reached"
+            }
+            patronus_api_client::ErrorKind::Timeout => "remote_scan_timeout",
+            patronus_api_client::ErrorKind::Validation => "invalid_target",
+            patronus_api_client::ErrorKind::Transport => "remote_api_unavailable",
+            patronus_api_client::ErrorKind::Protocol => "remote_scan_failed",
+        };
+    }
+    let message = error.to_string().to_lowercase();
+    if message.contains("not signed in")
+        || message.contains("token expired")
+        || message.contains("authentication required")
+    {
+        "authentication_missing"
+    } else if message.contains("usage limit") || message.contains("rate limit") {
+        "usage_limit_reached"
+    } else if message.contains("timeout") {
+        "remote_scan_timeout"
+    } else if message.contains("api request failed") || message.contains("api response unavailable")
+    {
+        "remote_api_unavailable"
+    } else if matches!(error, ScannerError::Config { .. }) {
+        "configuration_unavailable"
+    } else if message.contains("expected")
+        || message.contains("mcp config")
+        || message.contains("https url")
+    {
+        "invalid_target"
+    } else {
+        "remote_scan_failed"
+    }
 }
 
 pub fn https_target(target: &str) -> Result<String> {
@@ -116,6 +175,7 @@ pub fn scan(
         _ => return Err(error("Unknown remote scan type")),
     };
     let target_id = crate::chunk::hash(format!("{kind}\0{target}").as_bytes());
+    let anonymous = kind == "url" && !crate::api_client::has_token(config);
     let categories: Vec<String> = config
         .ark
         .categories
@@ -127,6 +187,7 @@ pub fn scan(
                 c.clone()
             }
         })
+        .filter(|category: &String| !anonymous || matches!(category.as_str(), "injection" | "dlp"))
         .collect();
     // Categories with identical gates share one fetch. Per-category overrides
     // get their own request so no disabled L1 gate or model level is lost.
@@ -178,7 +239,7 @@ pub fn scan(
         } else {
             "mcp_server_url"
         }] = json!(target);
-        let jobs = crate::api_client::submit(config, body)?;
+        let jobs = crate::api_client::submit(config, body, kind == "url")?;
         let partial = summarize(kind, &members, &jobs)?;
         report.jobs += partial.jobs;
         report
@@ -201,6 +262,11 @@ pub fn scan(
     report.approved = report.findings.is_empty();
     report.status = if report.approved { "CLEAN" } else { "FINDINGS" }.into();
     report.duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    persist_report(&report)?;
+    Ok(report)
+}
+
+fn persist_report(report: &RemoteReport) -> Result<()> {
     let root = crate::config::user_root()?.join("remote-scans");
     crate::dashboard::ensure_directory(&root)?;
     let id = format!(
@@ -212,7 +278,156 @@ pub fn scan(
         &root.join(id),
         &serde_json::to_vec(&report).map_err(|_| error("Cannot save remote scan report"))?,
     )?;
+    Ok(())
+}
+
+type ApiErrorFields<'a> = (
+    Option<&'a str>,
+    Option<u64>,
+    Option<&'a Value>,
+    Option<&'a Value>,
+    Option<&'static str>,
+);
+
+fn api_error_fields(error: &ScannerError) -> ApiErrorFields<'_> {
+    let ScannerError::Api {
+        code,
+        retry_after,
+        details,
+        ..
+    } = error
+    else {
+        return (None, None, None, None, None);
+    };
+    let body = details.as_deref();
+    let quota = body.and_then(|value| value.get("quota"));
+    let usage = body.and_then(|value| value.get("usage"));
+    let next = match failure_reason(error) {
+        "usage_limit_reached" | "authentication_missing" => {
+            Some("patronus-security-scanner auth login")
+        }
+        _ => None,
+    };
+    (code.as_deref(), *retry_after, quota, usage, next)
+}
+
+fn remote_file(path: &Path, options: &ScanOptions) -> Result<RemoteReport> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|_| error("File not found"))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(error(
+            "Anonymous API upload requires one regular, non-symlink file",
+        ));
+    }
+    if metadata.len() > 100_000 {
+        return Err(error("Anonymous API files must not exceed 100,000 bytes"));
+    }
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| error("Invalid file name"))?;
+    let media_type = match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("txt") => "text/plain",
+        Some("md" | "markdown") => "text/markdown",
+        Some("html" | "htm") => "text/html",
+        Some("pdf") => "application/pdf",
+        Some("docx") => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        _ => {
+            return Err(error(
+                "Anonymous API files must be TXT, Markdown, HTML, PDF, or DOCX",
+            ))
+        }
+    };
+    let mut config = Config::load(options.config.as_deref(), None)?;
+    config.apply_scan_options(options)?;
+    let categories: Vec<String> = config
+        .ark
+        .categories
+        .iter()
+        .map(|value| {
+            if value == "prompt_injection" {
+                "injection".into()
+            } else {
+                value.clone()
+            }
+        })
+        .collect();
+    let settings = json!({
+        "categories": categories,
+        "max_level": config.ark.max_level.to_uppercase(),
+        "gates": {"rules": config.analysis.l1_rules, "models": config.analysis.l1_detectors.iter().map(|(key,value)| (format!("native:{key}"), *value)).collect::<std::collections::BTreeMap<_,_>>()}
+    });
+    let bytes = std::fs::read(path).map_err(|_| error("File unavailable"))?;
+    let target_id = crate::chunk::hash(&bytes);
+    let start = std::time::Instant::now();
+    let jobs = crate::api_client::submit_anonymous_files(
+        &config,
+        &[patronus_api_client::FileUpload::new(
+            filename, media_type, bytes,
+        )],
+        &settings,
+    )?;
+    let mut report = summarize("file", &categories, &jobs)?;
+    report.target_id = target_id;
+    report.scanned_at = Some(chrono::Utc::now());
+    report.duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+    persist_report(&report)?;
     Ok(report)
+}
+
+pub fn execute_file(path: &Path, options: ScanOptions) -> Result<i32> {
+    execute_result("file", options.format, remote_file(path, &options))
+}
+
+fn execute_result(kind: &str, format: OutputFormat, report: Result<RemoteReport>) -> Result<i32> {
+    let json = format == OutputFormat::Json;
+    let report = match report {
+        Ok(report) => report,
+        Err(error) if json => {
+            let (code, retry_after, quota, usage, next_command) = api_error_fields(&error);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&RemoteFailure {
+                    schema: "patronus.remote.scan.error.v1",
+                    kind,
+                    provider: "api",
+                    status: "FAILED",
+                    approved: false,
+                    complete: false,
+                    reason: failure_reason(&error),
+                    code,
+                    retry_after,
+                    quota,
+                    usage,
+                    next_command,
+                })
+                .map_err(|_| crate::api_client::error("Cannot serialize remote scan failure"))?
+            );
+            return Ok(4);
+        }
+        Err(error) => return Err(error),
+    };
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .map_err(|_| error("Cannot serialize scan report"))?
+        );
+    } else {
+        println!(
+            "{}: {} · API · {} ms\n{} categories checked; {} findings; complete coverage.",
+            kind,
+            report.status,
+            report.duration_ms,
+            report.categories.len(),
+            report.findings.len()
+        );
+    }
+    Ok(if report.approved { 0 } else { 1 })
 }
 fn summarize(kind: &str, categories: &[String], jobs: &[Value]) -> Result<RemoteReport> {
     if jobs.is_empty() {
@@ -271,31 +486,18 @@ fn summarize(kind: &str, categories: &[String], jobs: &[Value]) -> Result<Remote
     })
 }
 pub fn execute(kind: &str, args: RemoteScanArgs) -> Result<i32> {
-    let mut config = Config::load(args.config.as_deref(), None)?;
-    if let Some(level) = args.max_level {
-        config.ark.max_level = level.as_str().into();
-    }
-    if !args.category.is_empty() {
-        config.ark.categories = args.category;
-    }
-    let report = scan(&config, kind, &args.target, args.server.as_deref())?;
-    if args.format == OutputFormat::Json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&report)
-                .map_err(|_| error("Cannot serialize scan report"))?
-        );
-    } else {
-        println!(
-            "{}: {} · API · {} ms\n{} categories checked; {} findings; complete coverage.",
-            kind,
-            report.status,
-            report.duration_ms,
-            report.categories.len(),
-            report.findings.len()
-        );
-    }
-    Ok(if report.approved { 0 } else { 1 })
+    let format = args.format;
+    let report = (|| {
+        let mut config = Config::load(args.config.as_deref(), None)?;
+        if let Some(level) = args.max_level {
+            config.ark.max_level = level.as_str().into();
+        }
+        if !args.category.is_empty() {
+            config.ark.categories = args.category;
+        }
+        scan(&config, kind, &args.target, args.server.as_deref())
+    })();
+    execute_result(kind, format, report)
 }
 #[cfg(test)]
 mod tests {
@@ -331,5 +533,23 @@ mod tests {
         let config: Config = toml::from_str(crate::config::DEFAULTS).unwrap();
         let error = scan(&config, "url", "http://example.org", None).unwrap_err();
         assert!(error.to_string().contains("Expected HTTPS"));
+    }
+
+    #[test]
+    fn classifies_remote_failures_without_exposing_diagnostics() {
+        assert_eq!(
+            failure_reason(&crate::api_client::error("not signed in; run auth login")),
+            "authentication_missing"
+        );
+        assert_eq!(
+            failure_reason(&crate::api_client::error("API scan timeout")),
+            "remote_scan_timeout"
+        );
+        assert_eq!(
+            failure_reason(&crate::api_client::error(
+                "API request failed; private diagnostic"
+            )),
+            "remote_api_unavailable"
+        );
     }
 }

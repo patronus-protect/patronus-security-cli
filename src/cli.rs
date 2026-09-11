@@ -8,7 +8,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
     version,
     disable_help_subcommand = false
 )]
-#[command(about = "Scan local source content with Patronus Ark")]
+#[command(about = "Patronus Security CLI for AI agent protection and security scans")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -210,6 +210,9 @@ pub struct RemoteScanArgs {
 
 #[derive(Debug, Clone, Args, Default)]
 pub struct ScanOptions {
+    /// Upload this one file to the rate-limited anonymous API instead of scanning it locally.
+    #[arg(long)]
+    pub anonymous_api: bool,
     /// Use only user/explicit configuration, ignoring repository settings.
     #[arg(long)]
     pub no_repo_config: bool,
@@ -242,6 +245,41 @@ pub enum OutputFormat {
     #[default]
     Human,
     Json,
+}
+
+#[cfg(test)]
+mod anonymous_api_tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn anonymous_file_upload_is_explicit() {
+        let cli = Cli::try_parse_from([
+            "patronus-security-scanner",
+            "scan",
+            "file",
+            "report.pdf",
+            "--anonymous-api",
+        ])
+        .unwrap();
+        let Command::Scan {
+            target: ScanTarget::File { options, .. },
+        } = cli.command
+        else {
+            panic!("expected file scan")
+        };
+        assert!(options.anonymous_api);
+
+        let cli = Cli::try_parse_from(["patronus-security-scanner", "scan", "file", "report.pdf"])
+            .unwrap();
+        let Command::Scan {
+            target: ScanTarget::File { options, .. },
+        } = cli.command
+        else {
+            panic!("expected file scan")
+        };
+        assert!(!options.anonymous_api);
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

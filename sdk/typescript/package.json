@@ -1,0 +1,16 @@
+{
+  "name": "@patronus-protect/api-client",
+  "version": "0.1.0",
+  "description": "Minimal TypeScript client for the Patronus Scan API",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=18" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/client.test.mjs",
+    "test:live": "npm run build && node --test test/live.test.mjs"
+  },
+  "devDependencies": { "typescript": "^5.8.0" }
+}

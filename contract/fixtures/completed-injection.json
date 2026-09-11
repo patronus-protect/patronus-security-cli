@@ -1,0 +1,37 @@
+{
+  "status": "completed",
+  "jobs": [{
+    "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": "text",
+    "status": "completed",
+    "decision": "block",
+    "categories": {
+      "injection": {
+        "category": "injection",
+        "class_name": "attack",
+        "confidence": 0.97,
+        "level": "L2",
+        "model": "prompt-injection-v1",
+        "accepted": true,
+        "decision_evidence": {
+          "stage": "union",
+          "decisive_chunks": [{
+            "chunk_id": 0,
+            "class_name": "attack",
+            "confidence": 0.97,
+            "span": { "start": 0, "end": 33 }
+          }]
+        },
+        "evidence_spans": [{
+          "label": "instruction",
+          "text": "Ignore",
+          "score": 0.9,
+          "start_char": 0,
+          "end_char": 6
+        }]
+      }
+    }
+  }],
+  "coverage": { "state": "complete" },
+  "usage": { "scan_units": 1, "unit_version": "scan-unit-v1" }
+}
