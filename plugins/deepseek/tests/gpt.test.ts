@@ -35,7 +35,7 @@ it('runs the selected GPT setup or live pending experiment', async () => {
   })
   try {
     const scannerInfo = client instanceof LocalClient ? await client.hello() : undefined
-    if (mode === 'live') expect(scannerInfo?.ark_version).toBe('0.1.6')
+    if (mode === 'live') expect(scannerInfo?.ark_version).toBe('0.1.7')
     await ctx.plugin(LocalCredentials, {
       dshHome: process.env.PATRONUS_GPT_HOME ?? join(homedir(), '.dsh-patronus-probe'),
       watch: false,

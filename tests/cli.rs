@@ -9,7 +9,7 @@ fn version_contract_is_stable() {
         .arg("version")
         .assert()
         .success()
-        .stdout(predicates::str::contains("patronus-ark 0.1.6"));
+        .stdout(predicates::str::contains("patronus-ark 0.1.7"));
 }
 
 #[test]
@@ -222,7 +222,7 @@ fn file_scan_writes_complete_pipe_safe_json_and_support_dry_run() {
         serde_json::from_slice(&stdout).expect("stdout is exactly one JSON value");
     assert_eq!(report["schema"], "patronus.security-scanner.report.v1");
     assert_eq!(report["status"], "CLEAN");
-    assert_eq!(report["ark_version"], "0.1.6");
+    assert_eq!(report["ark_version"], "0.1.7");
     assert!(report["findings"].as_array().unwrap().is_empty());
     let run = only_child(&output);
     assert!(output.join("index.html").is_file());

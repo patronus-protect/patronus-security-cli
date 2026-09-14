@@ -31,7 +31,7 @@ it('gates requests and pending responses with the selected local model profile',
   const states: string[] = []
   try {
     const hello = await client.hello()
-    expect(hello.ark_version).toBe('0.1.6')
+    expect(hello.ark_version).toBe('0.1.7')
     ctx.tools.register(defineTool({
       name: 'process_document', description: 'Process the supplied document.',
       parameters: { text: { type: 'string', required: true } },

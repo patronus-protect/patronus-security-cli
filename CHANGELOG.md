@@ -24,14 +24,14 @@
 - Add Codex and Claude native hook adapters with a shared local session broker, session-bound
   pending/status/redacted retrieval, and static scans that return bounded metadata. Completed findings
   are enforced while infrastructure failures fall open with explicit degraded context; scanner execution
-  remains local with Ark 0.1.6.
-- Upgrade the local scanner to Ark 0.1.6 and its ORT rc.13 dependency.
+  remains local with Ark 0.1.7.
+- Upgrade the local scanner to Ark 0.1.7 and its ORT rc.13 dependency.
 - Add a persistent local stdio runtime and native DeepSeek request/response gates, configurable
   500-ms response waits, and agent polling through pending receipts. Dangerous originals remain
   private; only approved originals or separately redacted dangerous responses can be retrieved.
 - Bound runtime chunk preparation by the scan deadline while preserving static scan chunk records.
 - Preserve cached model classifications when optional decision metadata is absent; expose bounded
-  model-level metadata in runtime findings. Retain the known Ark 0.1.6 long-document detection
+  model-level metadata in runtime findings. Retain the known Ark 0.1.7 long-document detection
   regression and document separately validated L2/L3 tool flows.
 
 - Initial standalone scanner, deterministic artifacts, opt-in support bundles, and Codex/Claude plugin adapters.

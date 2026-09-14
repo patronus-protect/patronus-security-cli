@@ -18,7 +18,7 @@ export async function nativeFixture(next, overrides = {}, options = {}) {
     assert.equal(ark.code, 0)
     assert.match(host.stdout, /^codex-cli \d+\.\d+\.\d+\s*$/)
     if (process.env.PATRONUS_CODEX_EXPECTED_VERSION) assert.equal(host.stdout.trim(), `codex-cli ${process.env.PATRONUS_CODEX_EXPECTED_VERSION}`)
-    assert(ark.stdout.includes('patronus-ark 0.1.6'))
+    assert(ark.stdout.includes('patronus-ark 0.1.7'))
   })
   await versions
   const root = await mkdtemp(join(options.tempRoot ?? tmpdir(), 'patronus-codex-native-'))

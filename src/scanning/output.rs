@@ -186,7 +186,7 @@ impl RunOutput {
             &self.run_dir.join("COMPLETE"),
             b"patronus.security-scanner.complete.v1\n",
         )?;
-        dashboard::rebuild_index(&workspace_root, output_root)
+        dashboard::prune_completed_reports(&workspace_root, output_root, 2)
     }
 }
 

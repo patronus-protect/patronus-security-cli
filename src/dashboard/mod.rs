@@ -118,6 +118,50 @@ pub fn rebuild_index(root: &Path, output_root: &Path) -> Result<()> {
     result
 }
 
+pub fn prune_completed_reports(
+    root: &Path,
+    output_root: &Path,
+    keep_per_target: usize,
+) -> Result<()> {
+    ensure_directory(root)?;
+    if output_root.exists() {
+        ensure_directory(output_root)?;
+    }
+    let lock_path = root.join(".dashboard.lock");
+    ensure_regular_or_missing(&lock_path)?;
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .at(&lock_path)?;
+    lock.lock_exclusive().map_err(|source| ScannerError::Io {
+        path: lock_path.clone(),
+        source,
+    })?;
+    let result = prune_completed_reports_locked(output_root, keep_per_target)
+        .and_then(|_| rebuild_index_locked(root, output_root));
+    let _ = lock.unlock();
+    result
+}
+
+fn prune_completed_reports_locked(output_root: &Path, keep_per_target: usize) -> Result<()> {
+    let mut reports = verified_reports(output_root)?;
+    reports.sort_by(|a, b| b.1.started_at.cmp(&a.1.started_at));
+    let mut targets = std::collections::HashMap::new();
+    for (run, report) in reports {
+        let count = targets
+            .entry((report.target_kind, report.target.clone()))
+            .or_insert(0usize);
+        *count += 1;
+        if *count > keep_per_target {
+            std::fs::remove_dir_all(&run).at(&run)?;
+        }
+    }
+    Ok(())
+}
+
 fn rebuild_index_locked(root: &Path, output_root: &Path) -> Result<()> {
     let scans = completed_reports(output_root)?;
     let sessions = protocol_summaries(root, &root.join("protocol"))?;
@@ -141,6 +185,31 @@ struct StoredManifest {
 }
 
 fn completed_reports(output_root: &Path) -> Result<Vec<(PathBuf, Report)>> {
+    let reports = verified_reports(output_root)?;
+    let workspace = workspace_root(output_root);
+    let index_href = if workspace == output_root {
+        "../index.html"
+    } else {
+        "../../index.html"
+    };
+    let mut reports = reports
+        .into_iter()
+        .map(|(run, report)| {
+            let html_path = run.join("report.html");
+            atomic_write(
+                &html_path,
+                render_report_with_index(&report, index_href).as_bytes(),
+            )?;
+            Ok((html_path, report))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    reports.sort_by(|a, b| b.1.started_at.cmp(&a.1.started_at));
+    let mut targets = std::collections::HashSet::new();
+    reports.retain(|(_, report)| targets.insert((report.target_kind, report.target.clone())));
+    Ok(reports)
+}
+
+fn verified_reports(output_root: &Path) -> Result<Vec<(PathBuf, Report)>> {
     let mut reports = Vec::new();
     let entries = match std::fs::read_dir(output_root) {
         Ok(entries) => entries,
@@ -208,22 +277,8 @@ fn completed_reports(output_root: &Path) -> Result<Vec<(PathBuf, Report)>> {
         {
             continue;
         }
-        let workspace = workspace_root(output_root);
-        let index_href = if workspace == output_root {
-            "../index.html"
-        } else {
-            "../../index.html"
-        };
-        let html_path = run.join("report.html");
-        atomic_write(
-            &html_path,
-            render_report_with_index(&report, index_href).as_bytes(),
-        )?;
-        reports.push((html_path, report));
+        reports.push((run, report));
     }
-    reports.sort_by(|a, b| b.1.started_at.cmp(&a.1.started_at));
-    let mut targets = std::collections::HashSet::new();
-    reports.retain(|(_, report)| targets.insert((report.target_kind, report.target.clone())));
     Ok(reports)
 }
 

@@ -1289,7 +1289,7 @@ async function serveBroker(input) {
       await privateDirectory(join6(directory, "scanner"));
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir });
       const connected = await runtimeSessions.runtime(id2, shutdown.signal);
-      if (connected.hello.ark_version !== "0.1.6" || connected.hello.provider !== frozen.provider) {
+      if (connected.hello.ark_version !== "0.1.7" || connected.hello.provider !== frozen.provider) {
         await runtimeSessions.close();
         throw brokerFailure();
       }
@@ -1562,6 +1562,9 @@ function securityContext(text2) {
     }
     if (receipt2.status === "pending" && receipt2.wait_reason === "scanner_queue" && typeof receipt2.message === "string") {
       return receipt2.message;
+    }
+    if (receipt2.status === "dangerous") {
+      return "The security finding applies to the returned text, not to the source tool or command. Do not avoid or rerun the source tool. Follow the receipt recovery instruction and continue only with the approved or redacted result.";
     }
   } catch {
   }

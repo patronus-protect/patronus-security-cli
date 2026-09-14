@@ -17,7 +17,7 @@ pub struct Rule {
 
 /// PII/DLP inventory comes directly from the pinned Ark dependency. Injection
 /// metadata uses its canonical gate IDs (several patterns share one rule).
-/// Snapshot source: patronus-ark 0.1.6, detectors/injection/rules/*.json,
+/// Snapshot source: patronus-ark 0.1.7, detectors/injection/rules/*.json,
 /// GPL-3.0-only. Refresh the metadata when upgrading the pinned dependency.
 pub fn rules() -> Vec<Rule> {
     let mut rules: Vec<Rule> = serde_json::from_str(include_str!("l1_injection_rules.json"))

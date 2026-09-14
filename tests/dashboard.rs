@@ -1,7 +1,7 @@
 use chrono::{TimeZone, Utc};
 use patronus_security_scanner::dashboard::{
-    append_protocol_event, attest_run, persist_protocol_event, rebuild_index, render_report,
-    ProtocolEvent,
+    append_protocol_event, attest_run, persist_protocol_event, prune_completed_reports,
+    rebuild_index, render_report, ProtocolEvent,
 };
 use patronus_security_scanner::report::{Coverage, Finding, Report, ScanStatus};
 use patronus_security_scanner::target::TargetKind;
@@ -229,7 +229,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
         "status": "FINDINGS",
         "scan_root": scan_root,
         "scanner_version": "0.1.0",
-        "ark_version": "0.1.6",
+        "ark_version": "0.1.7",
         "artifact_hashes": {
             "report.json": report_hash
         },
@@ -277,7 +277,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
             "status": "FINDINGS",
             "scan_root": newer_attestation.scan_root.clone(),
             "scanner_version": "0.1.0",
-            "ark_version": "0.1.6",
+            "ark_version": "0.1.7",
             "artifact_hashes": {"report.json": newer_hash},
             "attestation": newer_attestation,
             "authentication": newer_authentication
@@ -306,6 +306,30 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
     assert!(!std::fs::read_to_string(root.join("index.html"))
         .unwrap()
         .contains("run-1"));
+}
+
+#[test]
+fn completed_report_retention_keeps_two_per_target() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join(".patronus-security-scanner");
+    let output = root.join("output");
+    std::fs::create_dir_all(&output).unwrap();
+
+    for (index, hour) in [(1, 8), (2, 9), (3, 10)] {
+        let mut report = sample_report();
+        report.run_id = format!("run-{index}");
+        report.started_at = Utc.with_ymd_and_hms(2026, 9, 4, hour, 0, 0).unwrap();
+        report.completed_at = Utc.with_ymd_and_hms(2026, 9, 4, hour, 0, 1).unwrap();
+        write_authenticated_report(&root, &output, &report);
+    }
+    std::fs::create_dir_all(output.join("unverified")).unwrap();
+
+    prune_completed_reports(&root, &output, 2).unwrap();
+
+    assert!(!output.join("run-1").exists());
+    assert!(output.join("run-2").is_dir());
+    assert!(output.join("run-3").is_dir());
+    assert!(output.join("unverified").is_dir());
 }
 
 #[cfg(unix)]
@@ -346,7 +370,7 @@ fn sample_report() -> Report {
         target_kind: TargetKind::Repo,
         target: ".".into(),
         scanner_version: "0.1.0".into(),
-        ark_version: "0.1.6".into(),
+        ark_version: "0.1.7".into(),
         ark_categories: vec!["prompt_injection".into()],
         ark_max_level: "l1".into(),
         ark_category_levels: Default::default(),
@@ -383,4 +407,37 @@ fn sample_report() -> Report {
         report_path: "output/run-1/report.md".into(),
         scope_disclaimer: vec![],
     }
+}
+
+fn write_authenticated_report(root: &std::path::Path, output: &std::path::Path, report: &Report) {
+    let run = output.join(&report.run_id);
+    std::fs::create_dir_all(&run).unwrap();
+    let report_bytes = serde_json::to_vec_pretty(report).unwrap();
+    std::fs::write(run.join("report.json"), &report_bytes).unwrap();
+    std::fs::write(run.join("COMPLETE"), "complete").unwrap();
+    let report_hash = format!("blake3:{}", blake3::hash(&report_bytes).to_hex());
+    let (attestation, authentication) = attest_run(
+        root,
+        &report.run_id,
+        root.parent().unwrap(),
+        &report_hash,
+        report.status,
+    )
+    .unwrap();
+    let manifest = serde_json::json!({
+        "schema": "patronus.security-scanner.manifest.v1",
+        "run_id": report.run_id,
+        "status": report.status,
+        "scan_root": attestation.scan_root.clone(),
+        "scanner_version": attestation.scanner_version.clone(),
+        "ark_version": attestation.ark_version.clone(),
+        "artifact_hashes": {"report.json": report_hash},
+        "attestation": attestation,
+        "authentication": authentication
+    });
+    std::fs::write(
+        run.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
 }

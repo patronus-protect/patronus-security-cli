@@ -301,6 +301,8 @@ fn scan(
                     continue;
                 }
             };
+            let file_input_tokens =
+                patronus_security_scanner::inference::input_tokens(&decoded.text);
             if !config
                 .scan
                 .supported_encodings
@@ -339,7 +341,7 @@ fn scan(
                 let content = &decoded.text[chunk.decoded_byte_start..chunk.decoded_byte_end];
                 output.chunk(&chunk, content)?;
                 match analyzer.analyze(ChunkInput {
-                    input_tokens: None,
+                    input_tokens: Some(file_input_tokens),
                     run_id: &output.run_id,
                     chunk_id: &chunk.chunk_id,
                     file_id: &chunk.file_id,

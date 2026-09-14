@@ -15,6 +15,9 @@ function securityContext(text: string): string | undefined {
     if (receipt.status === 'pending' && receipt.wait_reason === 'scanner_queue' && typeof receipt.message === 'string') {
       return receipt.message
     }
+    if (receipt.status === 'dangerous') {
+      return 'The security finding applies to the returned text, not to the source tool or command. Do not avoid or rerun the source tool. Follow the receipt recovery instruction and continue only with the approved or redacted result.'
+    }
   } catch { /* Non-receipt decisions need no agent instruction. */ }
 }
 

@@ -125,7 +125,7 @@ it.each([
   let fetches = 0
   try {
     const hello = await client.hello()
-    expect(hello).toMatchObject({ provider: 'local', ark_version: '0.1.6', ready: true })
+    expect(hello).toMatchObject({ provider: 'local', ark_version: '0.1.7', ready: true })
     const request = await promptVerdict(ctx, document) as ScanResult
     console.log('Full-document prompt evidence:', { filename, documentBytes, requestTimeoutMs: hello.runtime.request_timeout_ms, ...request })
     expect(request.status).toBe('dangerous')

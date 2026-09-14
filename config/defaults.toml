@@ -70,7 +70,7 @@ user_prompt_pii = false
 # prompt_injection = "l2"
 # pii = "l1"
 # dlp = "l1"
-# threat = "l2" # Threat has no L1 detector in Ark 0.1.6.
+# threat = "l2" # Threat has no L1 detector in Ark 0.1.7.
 
 [analysis.l1]
 # prompt_injection = true

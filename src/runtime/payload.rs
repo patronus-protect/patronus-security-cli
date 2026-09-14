@@ -113,6 +113,9 @@ impl PayloadScan<'_> {
     fn text(&mut self, text: &str) -> Result<String, ScanError> {
         let field_id = self.next_field;
         self.next_field += 1;
+        if text.is_empty() {
+            return Ok(String::new());
+        }
         let field = format!("field-{field_id}");
         // Runtime strings already have exact UTF-8 offsets, including a literal
         // BOM. File decoding and its original-byte map are unnecessary here.
@@ -284,8 +287,10 @@ fn merge_findings(findings: &mut Vec<RuntimeFinding>) {
 fn inspect(value: &Value, coverage: &mut PayloadCoverage) -> bool {
     match value {
         Value::String(text) => {
-            coverage.fields_total += 1;
-            coverage.bytes_total += text.len();
+            if !text.is_empty() {
+                coverage.fields_total += 1;
+                coverage.bytes_total += text.len();
+            }
             false
         }
         Value::Array(items) => items.iter().fold(false, |unsupported, item| {

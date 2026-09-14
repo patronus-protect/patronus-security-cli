@@ -10,12 +10,12 @@ import { StaticScanner } from '../src/static.ts'
 import { createAgent, createHarness, execute } from './harness.ts'
 
 const executable = process.env.PATRONUS_TEST_SCANNER
-if (!executable) throw new Error('Set PATRONUS_TEST_SCANNER to the trusted installed Ark 0.1.6 CLI.')
+if (!executable) throw new Error('Set PATRONUS_TEST_SCANNER to the trusted installed Ark 0.1.7 CLI.')
 const signal = () => new AbortController().signal
 
-it('scans clean file/directory/repo and the known dangerous document with installed Ark 0.1.6, without file bytes in model requests', async () => {
+it('scans clean file/directory/repo and the known dangerous document with installed Ark 0.1.7, without file bytes in model requests', async () => {
   const version = await promisify(execFile)(executable, ['version'])
-  expect(version.stdout).toContain('patronus-ark 0.1.6')
+  expect(version.stdout).toContain('patronus-ark 0.1.7')
   const root = await mkdtemp(join(tmpdir(), 'patronus-static-local-'))
   const target = join(root, 'project')
   await mkdir(target)

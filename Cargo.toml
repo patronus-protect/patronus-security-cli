@@ -26,11 +26,13 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 clap = { version = "4.5", features = ["derive"] }
 directories = "6.0"
 ignore = "0.4"
-patronus-ark = "=0.1.6"
+patronus-ark = "=0.1.7"
 patronus-api-client = { version = "0.1.0", path = "crates/patronus-api-client" }
 rand = "0.9"
 ring = "0.17"
 libc = "0.2"
+lopdf = { version = "0.45", default-features = false }
+quick-xml = "0.38"
 rusqlite = { version = "0.37", features = ["bundled"] }
 fs2 = "0.4"
 serde = { version = "1.0", features = ["derive"] }

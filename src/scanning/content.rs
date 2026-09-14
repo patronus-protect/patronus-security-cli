@@ -1,4 +1,6 @@
-use std::path::Path;
+use std::{io::Read, path::Path};
+
+use quick_xml::{events::Event, Reader};
 
 use crate::error::{IoContext, Result};
 
@@ -36,6 +38,8 @@ pub enum ContentError {
     Binary,
     #[error("unsupported or invalid text encoding")]
     Encoding,
+    #[error("unsupported or invalid document")]
+    Document,
     #[error("path resolved outside the selected scan root")]
     OutsideRoot,
 }
@@ -55,10 +59,113 @@ pub fn read_decode(
         return Ok(Err(ContentError::OutsideRoot));
     }
     let bytes = std::fs::read(path).at(path)?;
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase);
+    if extension.as_deref() == Some("pdf") {
+        return Ok(extract_pdf(&bytes, max_size));
+    }
+    if extension.as_deref() == Some("docx") {
+        return Ok(extract_docx(&bytes, max_size));
+    }
     if obvious_binary(&bytes) {
         return Ok(Err(ContentError::Binary));
     }
     Ok(decode(&bytes))
+}
+
+fn extracted(text: String) -> std::result::Result<DecodedContent, ContentError> {
+    if text.trim().is_empty() {
+        return Err(ContentError::Document);
+    }
+    let mut positions = text
+        .char_indices()
+        .map(|(offset, _)| (offset, offset))
+        .collect::<Vec<_>>();
+    positions.push((text.len(), text.len()));
+    Ok(DecodedContent {
+        original_len: text.len(),
+        text,
+        encoding: Encoding::Utf8,
+        positions,
+    })
+}
+
+fn extract_pdf(bytes: &[u8], limit: u64) -> std::result::Result<DecodedContent, ContentError> {
+    let document = lopdf::Document::load_mem(bytes).map_err(|_| ContentError::Document)?;
+    let pages = document.get_pages().keys().copied().collect::<Vec<_>>();
+    if pages.is_empty() || pages.len() > 10_000 {
+        return Err(ContentError::Document);
+    }
+    let expanded_limit =
+        usize::try_from(limit.saturating_mul(4)).map_err(|_| ContentError::Document)?;
+    let per_page_limit = expanded_limit.checked_div(pages.len()).unwrap_or(0);
+    if per_page_limit == 0 {
+        return Err(ContentError::Document);
+    }
+    let text = document
+        .extract_text_with_limit(&pages, per_page_limit)
+        .map_err(|_| ContentError::Document)?;
+    if text.len() as u64 > limit {
+        return Err(ContentError::Document);
+    }
+    extracted(text)
+}
+
+fn extract_docx(bytes: &[u8], limit: u64) -> std::result::Result<DecodedContent, ContentError> {
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|_| ContentError::Document)?;
+    let mut document = archive
+        .by_name("word/document.xml")
+        .map_err(|_| ContentError::Document)?;
+    if document.size() > limit {
+        return Err(ContentError::Document);
+    }
+    let mut xml = Vec::new();
+    document
+        .by_ref()
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut xml)
+        .map_err(|_| ContentError::Document)?;
+    if xml.len() as u64 > limit {
+        return Err(ContentError::Document);
+    }
+    let mut reader = Reader::from_reader(xml.as_slice());
+    let mut text = String::new();
+    loop {
+        match reader.read_event() {
+            Ok(Event::Text(value)) => {
+                text.push_str(&value.decode().map_err(|_| ContentError::Document)?);
+            }
+            Ok(Event::GeneralRef(value)) => {
+                if let Some(character) = value
+                    .resolve_char_ref()
+                    .map_err(|_| ContentError::Document)?
+                {
+                    text.push(character);
+                } else {
+                    match value.decode().map_err(|_| ContentError::Document)?.as_ref() {
+                        "amp" => text.push('&'),
+                        "apos" => text.push('\''),
+                        "gt" => text.push('>'),
+                        "lt" => text.push('<'),
+                        "quot" => text.push('"'),
+                        _ => return Err(ContentError::Document),
+                    }
+                }
+            }
+            Ok(Event::End(value)) if matches!(value.local_name().as_ref(), b"p" | b"tr") => {
+                if !text.ends_with('\n') {
+                    text.push('\n');
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => return Err(ContentError::Document),
+            _ => {}
+        }
+    }
+    extracted(text)
 }
 
 pub fn obvious_binary(bytes: &[u8]) -> bool {

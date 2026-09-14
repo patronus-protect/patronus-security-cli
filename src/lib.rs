@@ -22,4 +22,4 @@ pub use scanning::{
 };
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const ARK_VERSION: &str = "0.1.6";
+pub const ARK_VERSION: &str = "0.1.7";

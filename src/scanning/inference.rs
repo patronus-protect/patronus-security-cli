@@ -17,7 +17,6 @@ fn local_route(mode: ProviderMode, input: &ChunkInput<'_>, user_prompt: bool) ->
     mode == ProviderMode::Local
         || (mode == ProviderMode::Hybrid
             && (user_prompt
-                || input.run_id != "runtime"
                 || input
                     .input_tokens
                     .unwrap_or_else(|| input_tokens(input.content))
@@ -384,5 +383,25 @@ mod hybrid_boundary_tests {
             );
         }
         assert!(input_tokens("<|endoftext|>") > 0);
+    }
+
+    #[test]
+    fn hybrid_file_and_repo_chunks_use_the_same_token_boundary() {
+        for count in [1_024, 1_025] {
+            for run_id in ["file-scan", "repo-scan"] {
+                let input = ChunkInput {
+                    run_id,
+                    chunk_id: "0",
+                    file_id: "0",
+                    path: "document.pdf",
+                    content: "one small chunk",
+                    input_tokens: Some(count),
+                };
+                assert_eq!(
+                    local_route(ProviderMode::Hybrid, &input, false),
+                    count <= 1_024
+                );
+            }
+        }
     }
 }

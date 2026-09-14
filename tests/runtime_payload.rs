@@ -128,9 +128,9 @@ fn scans_only_ordered_raw_text_and_preserves_json_looking_strings() {
     assert_eq!(outcome.status, JobStatus::Completed);
     assert_eq!(outcome.verdict, Some(Verdict::Approved));
     assert!(outcome.coverage.complete);
-    assert_eq!(outcome.coverage.fields_total, 3);
-    assert_eq!(outcome.coverage.fields_scanned, 3);
-    let expected = vec!["Hello", "{\"other\":\"Grüße\"}", ""];
+    assert_eq!(outcome.coverage.fields_total, 2);
+    assert_eq!(outcome.coverage.fields_scanned, 2);
+    let expected = vec!["Hello", "{\"other\":\"Grüße\"}"];
     assert_eq!(seen.into_inner(), expected);
     assert_eq!(
         outcome.coverage.bytes_total,
@@ -438,6 +438,28 @@ fn an_empty_text_list_is_a_complete_noop() {
     assert_eq!(outcome.verdict, Some(Verdict::Approved));
     assert!(outcome.coverage.complete);
     assert_eq!(outcome.coverage.fields_total, 0);
+}
+
+#[test]
+fn empty_fields_are_preserved_but_never_sent_to_the_analyzer() {
+    let seen = RefCell::new(Vec::new());
+    let analyzer = Analyzer(|input: ChunkInput<'_>| {
+        seen.borrow_mut()
+            .push((input.file_id.to_owned(), input.content.to_owned()));
+        Ok(classify(input, Some(Vec::new())))
+    });
+    let outcome = run(&analyzer, &json!(["", "unsafe", ""]));
+
+    assert_eq!(seen.into_inner(), vec![("field-1".into(), "unsafe".into())]);
+    assert_eq!(outcome.coverage.fields_total, 1);
+    assert_eq!(outcome.coverage.fields_scanned, 1);
+    assert_eq!(outcome.coverage.bytes_total, 6);
+    assert_eq!(outcome.coverage.bytes_scanned, 6);
+    assert_eq!(outcome.redacted, Some(json!(["", "[REDACTED]", ""])));
+    assert_eq!(outcome.findings.len(), 1);
+    assert_eq!(outcome.findings[0].field_id, 1);
+    assert_eq!(outcome.findings[0].start_byte, 0);
+    assert_eq!(outcome.findings[0].end_byte, 6);
 }
 
 #[test]

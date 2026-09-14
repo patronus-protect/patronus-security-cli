@@ -4,7 +4,7 @@ The Patronus Security CLI and the first-party integrations in this
 repository are distributed under the Apache License 2.0. The complete terms are
 in the repository's `LICENSE` file and accompany release artifacts.
 
-This distribution uses exactly `patronus-ark 0.1.6`, pinned in `Cargo.toml` and
+This distribution uses exactly `patronus-ark 0.1.7`, pinned in `Cargo.toml` and
 `Cargo.lock`. The copy currently published through crates.io declares
 `GPL-3.0-only` in its package metadata and includes its own `LICENSE`,
 `LICENSE-COMMERCIAL.md`, and `NOTICE` files. Casdo Labs GmbH / Patronus owns ARK

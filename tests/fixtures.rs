@@ -109,7 +109,7 @@ fn model_layers_detect_isolated_operator_sections_missed_by_l1() {
     let threat_end = threat.find("The text above is a synthetic").unwrap();
     let temp = tempfile::tempdir().unwrap();
 
-    // Keep the complete-document test above: it exposes Ark 0.1.6's long-text
+    // Keep the complete-document test above: it exposes Ark 0.1.7's long-text
     // detection regression. These unchanged excerpts prove actual model execution
     // and positive decisions independently of that unresolved aggregation issue.
     for (name, text, level, category, label, source) in [
@@ -237,7 +237,7 @@ fn assert_one_finding(report: &serde_json::Value, category: &str, label: &str, l
 }
 
 fn assert_complete_coverage(report: &serde_json::Value) {
-    assert_eq!(report["ark_version"], "0.1.6");
+    assert_eq!(report["ark_version"], "0.1.7");
     assert_eq!(report["coverage"]["eligible_files"], 1);
     assert_eq!(report["coverage"]["analyzed_files"], 1);
     assert_eq!(report["coverage"]["skipped_files"], 0);

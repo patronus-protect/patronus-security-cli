@@ -250,5 +250,95 @@
     "category": "prompt_injection",
     "description": "Structural instruction override and sensitive disclosure",
     "default_enabled": true
+  },
+  {
+    "id": "ark.injection.skillspector.anti_refusal",
+    "category": "prompt_injection",
+    "description": "Explicit instruction to never refuse requests",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.skillspector.unconditional_compliance",
+    "category": "prompt_injection",
+    "description": "Explicit instruction to obey every request",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.skillspector.policy_nullification",
+    "category": "prompt_injection",
+    "description": "Explicit claim that safety rules no longer apply",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.skillspector.persistent_override",
+    "category": "prompt_injection",
+    "description": "Persistent instruction to ignore all rules",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.skillspector.memory_reset",
+    "category": "prompt_injection",
+    "description": "Explicit instruction to erase safety rules",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.prior_reference",
+    "category": "prompt_injection",
+    "description": "Override an explicit prior-context reference",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.leak.own_prompt",
+    "category": "prompt_injection",
+    "description": "Disclosure of the assistant own prompt",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.guardrail.disable_directive",
+    "category": "prompt_injection",
+    "description": "Imperative bypass of explicit safety controls",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.override.ethical_parameters",
+    "category": "prompt_injection",
+    "description": "Reset existing ethical constraints",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.encoded_instruction_payload",
+    "category": "prompt_injection",
+    "description": "Decode a supplied payload containing an instruction override or prompt disclosure",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.boundary.persona_directive",
+    "category": "prompt_injection",
+    "description": "Forged system-role boundary followed by an unsafe persona directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.escalation.prior_bypass_agreement",
+    "category": "prompt_injection",
+    "description": "Claims prior agreement to bypass active safety restrictions",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.decode_for_instructions",
+    "category": "prompt_injection",
+    "description": "Decode an opaque message specifically to obtain instructions",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.cross_tool.override_then_call",
+    "category": "prompt_injection",
+    "description": "Override prior instructions in order to invoke another tool",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.obfuscation.escaped_instruction_payload",
+    "category": "prompt_injection",
+    "description": "Decode a Unicode-escaped instruction override or prompt disclosure",
+    "default_enabled": true
   }
 ]

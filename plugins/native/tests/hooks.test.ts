@@ -24,6 +24,17 @@ test('Codex pending response replaces the original with a receipt', async () => 
   assert(result.reason.includes('patronus_check_result'))
 })
 
+test('Claude explains that a dangerous finding belongs to the result, not the tool', async () => {
+  const result: any = await handleHook('claude', 'PostToolUse', input('PostToolUse', {
+    tool_response: { stdout: 'RAW-CANARY-731', stderr: '' },
+  }), {}, async () => ({ scan_id: 'scan-731', status: 'dangerous', redacted_available: true }))
+  const context = result.hookSpecificOutput.additionalContext
+  assert.match(context, /returned text, not to the source tool or command/)
+  assert.match(context, /Do not avoid or rerun the source tool/)
+  assert.match(result.hookSpecificOutput.updatedToolOutput.stdout, /patronus_read_redacted/)
+  assert(!JSON.stringify(result).includes('RAW-CANARY-731'))
+})
+
 test('queued receipts tell Codex and Claude to preserve the scan id and poll later', async () => {
   for (const host of ['codex', 'claude'] as const) {
     const result: any = await handleHook(host, 'PostToolUse', input('PostToolUse', { tool_response: 'RAW-QUEUED-731' }), {}, async () => ({
