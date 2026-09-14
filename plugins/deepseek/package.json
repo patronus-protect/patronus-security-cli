@@ -47,7 +47,7 @@
   },
   "devDependencies": {
     "@types/node": "22.20.0",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "js-yaml": "4.2.0",
     "typescript": "6.0.3"
   },
