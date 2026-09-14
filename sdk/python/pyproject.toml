@@ -11,6 +11,10 @@ license = "Apache-2.0"
 readme = "README.md"
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/patronus-protect/patronus-security-cli"
+Documentation = "https://patronus-protect.github.io/patronus-security-cli/"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

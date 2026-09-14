@@ -159,6 +159,32 @@ fn verify_versions(expected: &str) -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!("{path} does not target release {expected}").into());
         }
     }
+    for path in [
+        "crates/patronus-api-client/Cargo.toml",
+        "sdk/python/pyproject.toml",
+    ] {
+        let text = std::fs::read_to_string(path)?;
+        let value: toml::Value = toml::from_str(&text)?;
+        let version = value
+            .get("package")
+            .or_else(|| value.get("project"))
+            .and_then(|package| package.get("version"))
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("missing version in {path}"))?;
+        if version != expected {
+            return Err(
+                format!("{path} version {version} does not match release {expected}").into(),
+            );
+        }
+    }
+    let path = "sdk/typescript/package.json";
+    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
+    let version = value["version"]
+        .as_str()
+        .ok_or_else(|| format!("missing version in {path}"))?;
+    if version != expected {
+        return Err(format!("{path} version {version} does not match release {expected}").into());
+    }
     Ok(())
 }
 

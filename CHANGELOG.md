@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add package validation and gated crates.io, npm, and PyPI publishing for the three API clients.
 - Add shared Rust, TypeScript, and Python Scan API clients, persistent anonymous
   URL-scan identities, and explicit `scan file --anonymous-api` document uploads.
 - Organize Rust modules by domain while retaining existing public module aliases.

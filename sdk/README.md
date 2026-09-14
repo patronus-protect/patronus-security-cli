@@ -12,6 +12,18 @@ The Control Plane remains authoritative for extraction, limits, scan units, and
 result semantics. Remote MCP OAuth is handled by MCP hosts rather than these
 API-key clients.
 
+## Installation
+
+```sh
+cargo add patronus-api-client
+npm install @patronus-protect/api-client
+pip install patronus-api-client
+```
+
+Release tags publish the clients through the gated release workflow. npm and
+PyPI use GitHub OIDC trusted publishing; crates.io uses the protected
+`CARGO_REGISTRY_TOKEN` secret.
+
 ## Tests
 
 Deterministic contract tests cover every public client method without consuming

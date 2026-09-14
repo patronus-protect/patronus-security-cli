@@ -27,7 +27,7 @@ clap = { version = "4.5", features = ["derive"] }
 directories = "6.0"
 ignore = "0.4"
 patronus-ark = "=0.1.6"
-patronus-api-client = { path = "crates/patronus-api-client" }
+patronus-api-client = { version = "0.1.0", path = "crates/patronus-api-client" }
 rand = "0.9"
 ring = "0.17"
 libc = "0.2"

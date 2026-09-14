@@ -2,11 +2,17 @@
   "name": "@patronus-protect/api-client",
   "version": "0.1.0",
   "description": "Minimal TypeScript client for the Patronus Scan API",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/patronus-protect/patronus-security-cli.git",
+    "directory": "sdk/typescript"
+  },
   "type": "module",
   "license": "Apache-2.0",
   "engines": { "node": ">=18" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist", "README.md"],
+  "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/client.test.mjs",
