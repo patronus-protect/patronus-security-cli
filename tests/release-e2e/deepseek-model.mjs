@@ -56,7 +56,7 @@ export function apply(ctx, config) {
       }
       if (config.flow === 'remote-fail-open' && reads === 0) {
         assert.equal(remoteReport?.status, 'FAILED', 'Unavailable API audit did not expose its failed scan result')
-        assert(visible.includes('remote audit could not authenticate'), 'Unavailable API audit omitted its authentication failure')
+        assert.equal(remoteReport?.reason, 'authentication_missing', 'Unavailable API audit omitted its authentication failure')
         tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return
       }
       if (calls === 1) { tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return }

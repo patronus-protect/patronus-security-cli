@@ -30,7 +30,7 @@ export async function nativeFixture(next, overrides = {}, options = {}) {
   await writeFile(config, '[provider]\nmode = "local"\n[ark]\ncategories = ["prompt_injection"]\nmax_level = "l1"\ndownload_files = false\n')
   Object.assign(env, { PATRONUS_SCANNER_BIN: scanner, PATRONUS_CONFIG: config,
     PATRONUS_NATIVE_STATE_DIR: join(root, 'native-state'), PATRONUS_RESPONSE_WAIT_MS: '0' }, overrides)
-  if (options.codeMode) await appendFile(join(env.CODEX_HOME, 'config.toml'), '\n[features]\ncode_mode = true\n' + (options.subagents ? 'multi_agent_v2 = true\n' : ''))
+  if (options.codeMode) await appendFile(join(env.CODEX_HOME, 'config.toml'), '\n[features]\ncode_mode = true\n' + (options.subagents ? 'multi_agent = true\n' : ''))
   if (options.mixedMcp) {
     const mixed = join(root, 'mixed-mcp.mjs')
     const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOoCNAAAAI0APHlrLKsAAAAAElFTkSuQmCC'

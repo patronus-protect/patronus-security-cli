@@ -24,7 +24,10 @@ const fixture=await nativeFixture(async (body,index)=>{
     }
     return [customCall(body,'exec',`text(await tools.mcp__patronus__patronus_check_result({scan_id:${JSON.stringify(scanId)}}));`,'recover-'+index)]
   }
-  const isChild=(body.input??[]).some(item=>item.type==='agent_message' && item.recipient==='/root/release_child')
+  const isChild=(body.input??[]).some(item=>
+    (item.type==='agent_message' && item.recipient==='/root/release_child') ||
+    (item.type==='message' && item.role==='user' && item.content?.some(part=>part.type==='input_text' && part.text==='Read the fixture document.'))
+  )
   if(isChild){
     if(!submitted){submitted=true;return [customCall(body,'exec',`text(await tools.exec_command({cmd:${JSON.stringify(command)}}));`,'child-source')]}
     if(visible.includes('Patronus native hooks did not handle this call')){blocked=true;childDone=true;return [done()]}
