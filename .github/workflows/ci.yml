@@ -56,7 +56,7 @@ jobs:
           repository: deepseek-ai/deepseek-harness
           ref: 76fda729799fe9b3848dbe2c211d4b231032b81e
           path: .harness
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - uses: pnpm/action-setup@v4
