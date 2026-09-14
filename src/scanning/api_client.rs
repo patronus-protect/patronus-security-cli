@@ -45,12 +45,61 @@ pub fn submit(config: &Config, body: Value, allow_anonymous: bool) -> Result<Vec
     })
 }
 fn submit_at(base_url: &str, token: &str, body: Value, timeout: Duration) -> Result<Vec<Value>> {
-    Client::with_base_url(base_url, token)
-        .map_err(map_error)?
-        .with_timeout(timeout)
-        .scan_json(body)
-        .map(|response| response.jobs)
-        .map_err(map_error)
+    let deadline = std::time::Instant::now() + timeout;
+    let mut attempt = 0u32;
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(error("API scan timeout"));
+        }
+        let result = Client::with_base_url(base_url, token)
+            .map_err(map_error)?
+            .with_timeout(remaining)
+            .scan_json(body.clone());
+        match result {
+            Ok(response) => return Ok(response.jobs),
+            Err(source) if retryable_rate_limit(&source) => {
+                let delay = retry_delay(&source, attempt);
+                if delay >= deadline.saturating_duration_since(std::time::Instant::now()) {
+                    return Err(map_error(source));
+                }
+                std::thread::sleep(delay);
+                attempt = attempt.saturating_add(1);
+            }
+            Err(source) => return Err(map_error(source)),
+        }
+    }
+}
+
+fn retryable_rate_limit(source: &patronus_api_client::Error) -> bool {
+    if source.kind == ErrorKind::RateLimit {
+        return true;
+    }
+    if source.kind != ErrorKind::Quota {
+        return false;
+    }
+    let code = source.code.as_deref().unwrap_or("").to_ascii_lowercase();
+    let limit = source
+        .details
+        .as_deref()
+        .and_then(|value| value.pointer("/quota/limit_kind"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    code.contains("rate")
+        || code.contains("tokens_per_second")
+        || limit.contains("rate")
+        || limit.contains("per_second")
+}
+
+fn retry_delay(source: &patronus_api_client::Error, attempt: u32) -> Duration {
+    let base = source
+        .retry_after
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_millis(250u64.saturating_mul(1u64 << attempt.min(4))))
+        .min(Duration::from_secs(5));
+    let jitter = (u64::from(std::process::id()) + u64::from(attempt).saturating_mul(97)) % 251;
+    base + Duration::from_millis(jitter)
 }
 
 pub fn submit_anonymous_files(
@@ -226,6 +275,40 @@ fn map_error(source: patronus_api_client::Error) -> ScannerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn api_error(kind: ErrorKind, code: &str, limit_kind: &str) -> patronus_api_client::Error {
+        patronus_api_client::Error {
+            kind,
+            message: "bounded test error".into(),
+            status: Some(429),
+            code: Some(code.into()),
+            request_id: None,
+            retry_after: Some(1),
+            details: Some(Box::new(serde_json::json!({
+                "quota": {"limit_kind": limit_kind}
+            }))),
+        }
+    }
+
+    #[test]
+    fn retries_rate_limits_but_not_permanent_quota() {
+        assert!(retryable_rate_limit(&api_error(
+            ErrorKind::RateLimit,
+            "RATE_LIMITED",
+            "requests_per_second"
+        )));
+        assert!(retryable_rate_limit(&api_error(
+            ErrorKind::Quota,
+            "TOKEN_RATE_EXCEEDED",
+            "tokens_per_second"
+        )));
+        assert!(!retryable_rate_limit(&api_error(
+            ErrorKind::Quota,
+            "QUOTA_EXCEEDED",
+            "daily_scan_units"
+        )));
+    }
+
     #[test]
     fn rejects_untrusted_job_identifier_before_polling() {
         use std::io::{BufRead, Write};
