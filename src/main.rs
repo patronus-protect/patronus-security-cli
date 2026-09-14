@@ -246,7 +246,7 @@ fn scan(
     );
     progress.phase("preparing Ark/models");
     let mut builder = ReportBuilder::new();
-    let mut analyzer = patronus_security_scanner::inference::Inference::new(&config)?;
+    let mut analyzer = patronus_security_scanner::inference::Inference::new_lazy(&config)?;
     let prepared = match analyzer.prepare() {
         Ok(()) => true,
         Err(error) => {

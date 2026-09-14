@@ -52,11 +52,11 @@ export function apply(ctx, config) {
       }
       if (calls === 1 && config.flow === 'remote-fail-open') {
         tools.push('patronus_scan')
-        yield* toolCallResponse('remote-audit', 'patronus_scan', { kind: 'url', path: 'https://example.org/' }); return
+        yield* toolCallResponse('remote-audit', 'patronus_scan', { kind: 'mcp', path: 'https://example.org/' }); return
       }
       if (config.flow === 'remote-fail-open' && reads === 0) {
         assert.equal(remoteReport?.status, 'FAILED', 'Unavailable API audit did not expose its failed scan result')
-        assert(visible.includes('Patronus protection is inactive'), 'Unavailable API audit omitted degraded context')
+        assert(visible.includes('remote audit could not authenticate'), 'Unavailable API audit omitted its authentication failure')
         tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return
       }
       if (calls === 1) { tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return }

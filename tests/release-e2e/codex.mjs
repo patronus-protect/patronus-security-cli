@@ -31,9 +31,9 @@ export async function codexFlow(flow) {
       if (!submitted) {
         submitted = true
         tools.push('patronus_scan')
-        return [customCall(body, 'exec', 'text(await tools.mcp__patronus__patronus_scan({kind:"url",path:"https://example.org/"}));', 'remote-audit')]
+        return [customCall(body, 'exec', 'text(await tools.mcp__patronus__patronus_scan({kind:"mcp",path:"https://example.org/"}));', 'remote-audit')]
       }
-      assert(visible.includes('protection is degraded') || visible.includes('protection is inactive'), 'Unavailable API audit omitted degraded context')
+      assert(visible.includes('remote audit could not authenticate'), 'Unavailable API audit omitted its authentication failure')
       remoteAuditSeen = true
       tools.push('source')
       return [customCall(body, 'exec', `text(await tools.exec_command({cmd:${JSON.stringify(command)}}));`, phase + '-source')]

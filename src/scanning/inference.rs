@@ -26,23 +26,35 @@ fn local_route(mode: ProviderMode, input: &ChunkInput<'_>, user_prompt: bool) ->
 type ScopedInference = std::collections::BTreeMap<String, (Box<Inference>, Option<Box<Inference>>)>;
 
 pub struct Inference {
-    local: Option<ArkAnalyzer>,
+    local: std::cell::RefCell<Option<ArkAnalyzer>>,
+    local_prepared: std::cell::Cell<bool>,
     config: Config,
     scoped: std::cell::RefCell<ScopedInference>,
 }
 
 impl Inference {
     pub fn new(config: &Config) -> Result<Self> {
+        Self::with_local_initialization(config, true)
+    }
+
+    pub fn new_lazy(config: &Config) -> Result<Self> {
+        Self::with_local_initialization(config, false)
+    }
+
+    fn with_local_initialization(config: &Config, initialize_local: bool) -> Result<Self> {
         Ok(Self {
-            local: if config.provider.mode != ProviderMode::Api {
-                Some(ArkAnalyzer::with_policy(
-                    &config.ark,
-                    &config.analysis,
-                    config.output.include_evidence_text,
-                )?)
-            } else {
-                None
-            },
+            local: std::cell::RefCell::new(
+                if initialize_local && config.provider.mode != ProviderMode::Api {
+                    Some(ArkAnalyzer::with_policy(
+                        &config.ark,
+                        &config.analysis,
+                        config.output.include_evidence_text,
+                    )?)
+                } else {
+                    None
+                },
+            ),
+            local_prepared: std::cell::Cell::new(false),
             config: config.clone(),
             scoped: Default::default(),
         })
@@ -99,8 +111,16 @@ impl Inference {
 
 impl ContentAnalyzer for Inference {
     fn prepare(&mut self) -> Result<()> {
-        if let Some(local) = &mut self.local {
-            local.prepare()?;
+        if self.local.get_mut().is_some() || self.config.provider.mode == ProviderMode::Local {
+            if self.local.get_mut().is_none() {
+                *self.local.get_mut() = Some(ArkAnalyzer::with_policy(
+                    &self.config.ark,
+                    &self.config.analysis,
+                    self.config.output.include_evidence_text,
+                )?);
+            }
+            self.local.get_mut().as_mut().unwrap().prepare()?;
+            self.local_prepared.set(true);
         }
         Ok(())
     }
@@ -185,12 +205,30 @@ impl ContentAnalyzer for Inference {
     }
 }
 impl Inference {
+    fn local(&self, input: ChunkInput<'_>, user_prompt: bool) -> Result<AnalysisOutcome> {
+        let mut local = self.local.borrow_mut();
+        if local.is_none() {
+            *local = Some(ArkAnalyzer::with_policy(
+                &self.config.ark,
+                &self.config.analysis,
+                self.config.output.include_evidence_text,
+            )?);
+        }
+        let local = local.as_mut().unwrap();
+        if !self.local_prepared.get() {
+            local.prepare()?;
+            self.local_prepared.set(true);
+        }
+        if user_prompt {
+            local.analyze_user_prompt(input)
+        } else {
+            local.analyze(input)
+        }
+    }
+
     fn analyze_text(&self, input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
         if local_route(self.config.provider.mode, &input, false) {
-            self.local
-                .as_ref()
-                .ok_or_else(|| error("Local inference unavailable"))?
-                .analyze(input)
+            self.local(input, false)
         } else {
             self.cloud(input, false)
         }
@@ -199,10 +237,7 @@ impl Inference {
         if self.config.provider.mode == ProviderMode::Api {
             self.cloud(input, true)
         } else {
-            self.local
-                .as_ref()
-                .ok_or_else(|| error("Local inference unavailable"))?
-                .analyze_user_prompt(input)
+            self.local(input, true)
         }
     }
 }

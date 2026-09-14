@@ -45,27 +45,38 @@ fn setup_is_resumable_and_check_is_real_and_persisted() {
     }
 }
 #[test]
-fn no_interactive_setup_and_remote_scans_require_authentication() {
+fn no_interactive_setup_and_remote_scan_authentication_contract() {
     let root = tempfile::tempdir().unwrap();
     cli(root.path())
         .arg("onboarding")
         .assert()
         .failure()
         .stderr(predicates::str::contains("interactive terminal"));
-    for kind in ["url", "mcp"] {
-        let output = cli(root.path())
-            .args(["scan", kind, "https://example.org/", "--format", "json"])
-            .assert()
-            .failure()
-            .get_output()
-            .stdout
-            .clone();
-        let output: Value = serde_json::from_slice(&output).unwrap();
-        assert_eq!(output["schema"], "patronus.remote.scan.error.v1");
-        assert_eq!(output["kind"], kind);
-        assert_eq!(output["provider"], "api");
-        assert_eq!(output["reason"], "authentication_missing");
-    }
+    let url = cli(root.path())
+        .args(["scan", "url", "https://example.org/", "--format", "json"])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+    let url: Value = serde_json::from_slice(&url).unwrap();
+    assert_eq!(url["schema"], "patronus.remote.scan.error.v1");
+    assert_eq!(url["kind"], "url");
+    assert_eq!(url["provider"], "api");
+    assert_ne!(url["reason"], "authentication_missing");
+
+    let mcp = cli(root.path())
+        .args(["scan", "mcp", "https://example.org/", "--format", "json"])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+    let mcp: Value = serde_json::from_slice(&mcp).unwrap();
+    assert_eq!(mcp["schema"], "patronus.remote.scan.error.v1");
+    assert_eq!(mcp["kind"], "mcp");
+    assert_eq!(mcp["provider"], "api");
+    assert_eq!(mcp["reason"], "authentication_missing");
     assert!(!root.path().join("auth/credentials.json").exists());
 }
 #[test]

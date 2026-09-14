@@ -32,7 +32,7 @@ directory from its extracted release archive. Use absolute paths.
 Use the actual deployed Codex CLI, including the app-bundled executable when
 checking desktop behavior. Its exact version is recorded; optionally enforce it
 with `PATRONUS_CODEX_EXPECTED_VERSION`. The release workflow requires the repository
-variable `PATRONUS_CODEX_RELEASE_VERSION` and refuses to fall back to an older CLI.
+version pinned in `.github/release-host-versions.env` and refuses to fall back to an older CLI.
 Desktop 0.153.4 was verified locally, including the stale-parent regression. DeepSeek uses the dependency-installed CLI checkout at
 `76fda729799fe9b3848dbe2c211d4b231032b81e`, matching the plugin's peer dependencies.
 The DeepSeek adapter starts `apps/cli/src/bin.ts` with its installed tsx loader;
@@ -56,7 +56,7 @@ Each of the following runs once per host:
 | `pending` | Read with zero response wait, then poll. | Actual pending receipt followed by approved content; no repeated source execution. |
 | `queue-backlog` | Read with zero response wait while the result is still queued. | The agent receives `job_status=queued`, `wait_reason=scanner_queue`, and the exact polling tool instead of treating the result as failed or expired. |
 | `read-redacted` | Read release notes containing an actual prompt-injection instruction, then request redaction. | The complete returned text exactly matches the golden file: only the injection span becomes `[REDACTED]`. Surrounding text, Unicode, numbers and newlines remain unchanged. |
-| `remote-fail-open` | Request a URL audit in Local mode without API authentication, then use the requested source tool. | The packaged CLI reports the unavailable audit, the hook adds degraded context, and the agent still executes the source tool exactly once. |
+| `remote-fail-open` | Request an authenticated MCP audit without API authentication, then use the requested source tool. | The packaged CLI reports the unavailable audit, the hook adds degraded context, and the agent still executes the source tool exactly once. |
 | `upgrade` | Install a different previous package/definition, then invoke the public scanner update command. | Current package is restored, changed Codex hook trust is renewed, retrieval works and settings survive. |
 | `outage-recovery` | Make scanner unavailable, then restore it. | The real CLI receives a model-visible inactive warning, keeps the original unscanned result usable, and succeeds normally after recovery. |
 
