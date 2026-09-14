@@ -6,6 +6,8 @@ The compiled defaults come from `config/defaults.toml`. Precedence is: compiled 
 
 Reports default to `~/.patronus-security-scanner/output`; protocol journals and runtime sessions use the same shared user directory. `PATRONUS_DATA_DIR` relocates this root for tests or managed deployments. Explicit output/state overrides are honored. The old `.patronus-security-scanner/output` configuration default is normalized to the shared root; existing repository reports are not moved automatically.
 
+Static `scan file`, `scan directory`, and `scan repo` commands omit analyzed chunk content by default. Pass `--activate-store-content` to retain it in `chunks.jsonl`; the CLI prints the existing sensitive-content warning when this opt-in is active.
+
 `config print` emits the effective, recursively redacted configuration. Ark categories are `prompt_injection`, `dlp`, `pii` and `threat`; levels are `l1`, `l2` and `l3`. `threat` requires prepared L2/L3 assets; L1 cannot complete that category. Model downloads are off by default. Model-specific fixtures can remain clean under L1: coverage and the selected profile determine what a result establishes.
 
 ## Local request/response runtime

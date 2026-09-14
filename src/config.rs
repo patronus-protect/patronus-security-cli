@@ -152,6 +152,9 @@ impl Config {
 
     pub fn apply_scan_options(&mut self, options: &ScanOptions) -> Result<()> {
         self.ignore.patterns.extend(options.ignore.iter().cloned());
+        if options.activate_store_content {
+            self.output.include_chunk_content = true;
+        }
         if !options.category.is_empty() {
             self.ark.categories.clone_from(&options.category);
         }

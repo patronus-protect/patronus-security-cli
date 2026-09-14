@@ -1,4 +1,7 @@
-use patronus_security_scanner::config::{Config, ProviderMode, DEFAULTS};
+use patronus_security_scanner::{
+    cli::ScanOptions,
+    config::{Config, ProviderMode, DEFAULTS},
+};
 
 #[test]
 fn compiled_defaults_are_valid_and_runnable() {
@@ -8,6 +11,21 @@ fn compiled_defaults_are_valid_and_runnable() {
     assert_eq!(config.provider.mode, ProviderMode::Local);
     assert_eq!(config.ark.max_level, "l1");
     assert!(!config.ark.download_files);
+}
+
+#[test]
+fn storing_analyzed_content_requires_explicit_scan_opt_in() {
+    let mut config: Config = toml::from_str(DEFAULTS).unwrap();
+    assert!(!config.output.include_chunk_content);
+
+    config
+        .apply_scan_options(&ScanOptions {
+            activate_store_content: true,
+            ..ScanOptions::default()
+        })
+        .unwrap();
+
+    assert!(config.output.include_chunk_content);
 }
 
 #[test]

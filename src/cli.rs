@@ -213,6 +213,9 @@ pub struct ScanOptions {
     /// Upload this one file to the rate-limited anonymous API instead of scanning it locally.
     #[arg(long)]
     pub anonymous_api: bool,
+    /// Retain analyzed chunk content in output artifacts.
+    #[arg(long)]
+    pub activate_store_content: bool,
     /// Use only user/explicit configuration, ignoring repository settings.
     #[arg(long)]
     pub no_repo_config: bool,
@@ -269,9 +272,16 @@ mod anonymous_api_tests {
             panic!("expected file scan")
         };
         assert!(options.anonymous_api);
+        assert!(!options.activate_store_content);
 
-        let cli = Cli::try_parse_from(["patronus-security-scanner", "scan", "file", "report.pdf"])
-            .unwrap();
+        let cli = Cli::try_parse_from([
+            "patronus-security-scanner",
+            "scan",
+            "file",
+            "report.pdf",
+            "--activate-store-content",
+        ])
+        .unwrap();
         let Command::Scan {
             target: ScanTarget::File { options, .. },
         } = cli.command
@@ -279,6 +289,7 @@ mod anonymous_api_tests {
             panic!("expected file scan")
         };
         assert!(!options.anonymous_api);
+        assert!(options.activate_store_content);
     }
 }
 
