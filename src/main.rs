@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
@@ -171,21 +171,27 @@ fn config_command(command: ConfigCommand) -> Result<i32> {
         }
         ConfigCommand::Print { config, format } => {
             let config = Config::load(config.as_deref(), None)?;
-            match format {
-                ConfigFormat::Toml => print!("{}", config.redacted_toml()?),
+            let output = match format {
+                ConfigFormat::Toml => config.redacted_toml()?,
                 ConfigFormat::Json => {
                     let value: toml::Value = toml::from_str(&config.redacted_toml()?)
                         .map_err(|error| ScannerError::Output(error.to_string()))?;
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&value)
-                            .map_err(|error| ScannerError::Output(error.to_string()))?
-                    );
+                    serde_json::to_string_pretty(&value)
+                        .map_err(|error| ScannerError::Output(error.to_string()))?
                 }
-            }
+            };
+            write_config_output(std::io::stdout().lock(), &output)?;
         }
     }
     Ok(0)
+}
+
+fn write_config_output(mut writer: impl Write, output: &str) -> Result<()> {
+    match writeln!(writer, "{output}") {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Err(error) => Err(ScannerError::Output(error.to_string())),
+    }
 }
 
 fn assets_command(command: AssetsCommand) -> Result<i32> {
@@ -465,4 +471,26 @@ fn scan(
         ),
     }
     Ok(exit_code(report.status, options.fail_on))
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+
+    struct BrokenPipe;
+
+    impl Write for BrokenPipe {
+        fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn config_output_accepts_a_closed_pipe() {
+        write_config_output(BrokenPipe, "configuration").unwrap();
+    }
 }

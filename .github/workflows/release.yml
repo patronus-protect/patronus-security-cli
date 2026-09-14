@@ -158,25 +158,26 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
+      - name: Load pinned host versions
+        shell: bash
+        run: |
+          source .github/release-host-versions.env
+          echo "CODEX_RELEASE_VERSION=$CODEX_RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "CLAUDE_RELEASE_VERSION=$CLAUDE_RELEASE_VERSION" >> "$GITHUB_ENV"
+          echo "DEEPSEEK_RELEASE_VERSION=$DEEPSEEK_RELEASE_VERSION" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile --ignore-scripts
         working-directory: .harness
       - name: Install pinned Codex host
-        env:
-          CODEX_RELEASE_VERSION: ${{ vars.PATRONUS_CODEX_RELEASE_VERSION }}
         run: |
-          test -n "$CODEX_RELEASE_VERSION" || { echo 'Set PATRONUS_CODEX_RELEASE_VERSION to the deployed host version; no older fallback is allowed.'; exit 1; }
           npm install --global "@openai/codex@$CODEX_RELEASE_VERSION"
           echo "PATRONUS_CODEX_EXPECTED_VERSION=$CODEX_RELEASE_VERSION" >> "$GITHUB_ENV"
       - name: Install pinned Claude Code host
-        env:
-          CLAUDE_RELEASE_VERSION: ${{ vars.PATRONUS_CLAUDE_RELEASE_VERSION }}
-        run: |
-          test -n "$CLAUDE_RELEASE_VERSION" || { echo 'Set PATRONUS_CLAUDE_RELEASE_VERSION to the deployed host version; no older fallback is allowed.'; exit 1; }
-          npm install --global "@anthropic-ai/claude-code@$CLAUDE_RELEASE_VERSION"
+        run: npm install --global "@anthropic-ai/claude-code@$CLAUDE_RELEASE_VERSION"
       - name: Install pinned DeepSeek Harness host
         run: |
           version=$(node -p "require('./plugins/deepseek/package.json').patronusProbe.dshVersion")
-          npm install --global "@deepseek-ai/dsh@$version"
+          test "$version" = "$DEEPSEEK_RELEASE_VERSION"
+          npm install --global "@deepseek-ai/dsh@$DEEPSEEK_RELEASE_VERSION"
       - uses: actions/download-artifact@v4
         with:
           name: patronus-security-x86_64-unknown-linux-gnu

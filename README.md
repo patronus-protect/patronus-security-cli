@@ -35,35 +35,23 @@ Choose the hosts you use during onboarding. Each plugin page explains its hooks,
 
 ## Install
 
-Download the installer and its checksum from the fixed `v0.1.0` release, verify it, then run it:
+Install the latest release on macOS or Linux:
 
 ```sh
-version=v0.1.0
-base="https://github.com/patronus-protect/patronus-security-cli/releases/download/$version"
-work_dir=$(mktemp -d)
-trap 'rm -rf "$work_dir"' 0 HUP INT TERM
-curl -fsSL "$base/install.sh" -o "$work_dir/install.sh"
-curl -fsSL "$base/install.sh.sha256" -o "$work_dir/install.sh.sha256"
-expected=$(awk 'NR == 1 { print $1 }' "$work_dir/install.sh.sha256")
-if command -v shasum >/dev/null 2>&1; then
-  actual=$(shasum -a 256 "$work_dir/install.sh" | awk '{ print $1 }')
-elif command -v sha256sum >/dev/null 2>&1; then
-  actual=$(sha256sum "$work_dir/install.sh" | awk '{ print $1 }')
-else
-  echo "A SHA-256 tool (shasum or sha256sum) is required" >&2
-  exit 1
-fi
-[ "$actual" = "$expected" ] || { echo "Installer checksum mismatch" >&2; exit 1; }
-PATRONUS_VERSION="$version" sh "$work_dir/install.sh"
+curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/latest/download/install.sh | sh
 ```
 
-The installer downloads only the matching `v0.1.0` CLI artifact, verifies it against the checksum published with that release, installs `patronus-security-scanner`, and immediately opens onboarding. The checksum establishes integrity within the GitHub release channel; it is not an independent signature.
+The installer detects the platform, verifies the matching CLI artifact, installs
+`patronus-security-scanner` to `~/.local/bin`, and opens onboarding. It does not
+require an account for local protection.
 
-For a shorter convenience install that trusts the versioned GitHub release URL for the installer itself:
+To install the first release explicitly:
 
 ```sh
-curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.0/install.sh | PATRONUS_VERSION=v0.1.0 sh
+curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.0/install.sh | sh
 ```
+
+Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.
 
 ## Onboarding
 

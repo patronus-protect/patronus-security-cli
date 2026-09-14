@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible Patronus Security defect
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include secrets, private scan content, or security vulnerabilities. Report vulnerabilities through GitHub private vulnerability reporting.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: patronus-security-scanner 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS, Linux, Windows]
+    validations:
+      required: true

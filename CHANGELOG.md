@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-09-14
 
 - Add package validation and gated crates.io, npm, and PyPI publishing for the three API clients.
 - Add shared Rust, TypeScript, and Python Scan API clients, persistent anonymous
@@ -33,8 +33,6 @@
 - Preserve cached model classifications when optional decision metadata is absent; expose bounded
   model-level metadata in runtime findings. Retain the known Ark 0.1.6 long-document detection
   regression and document separately validated L2/L3 tool flows.
-
-## 0.1.0 - 2026-08-11
 
 - Initial standalone scanner, deterministic artifacts, opt-in support bundles, and Codex/Claude plugin adapters.
 - Updated the analysis engine to `patronus-ark 0.1.3`.

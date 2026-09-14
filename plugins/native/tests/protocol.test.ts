@@ -74,6 +74,8 @@ test('terminal scan result waits for protocol persistence', async () => {
 
 test('native adapter appends through the real Rust CLI', { skip: !process.env.PATRONUS_SCANNER_BIN }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'patronus-native-protocol-e2e-'))
+  const previousDataDir = process.env.PATRONUS_DATA_DIR
+  process.env.PATRONUS_DATA_DIR = root
   await mkdir(join(root, '.git'))
   try {
     const actualConfig = { ...config, cwd: root, executable: process.env.PATRONUS_SCANNER_BIN! }
@@ -97,5 +99,9 @@ test('native adapter appends through the real Rust CLI', { skip: !process.env.PA
     assert.deepEqual(events.map(event => event.event), ['scan_completed'])
     assert(events.every(event => event.schema === 'patronus.protocol.event.v1'))
     assert.match(index, /native-e2e-scan|codex/)
-  } finally { await rm(root, { recursive: true, force: true }) }
+  } finally {
+    if (previousDataDir === undefined) delete process.env.PATRONUS_DATA_DIR
+    else process.env.PATRONUS_DATA_DIR = previousDataDir
+    await rm(root, { recursive: true, force: true })
+  }
 })
