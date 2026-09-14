@@ -35,7 +35,7 @@ jobs:
       - run: jq empty schemas/*.json plugins/codex/.codex-plugin/plugin.json plugins/claude/.claude-plugin/plugin.json
       - run: test -f plugins/codex/skills/patronus-security-scan/SKILL.md
       - run: test -f plugins/claude/skills/scan/SKILL.md
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m venv .venv
