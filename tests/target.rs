@@ -1,4 +1,6 @@
-use patronus_security_scanner::target::{find_repo_root, ScanTarget, TargetKind};
+use patronus_security_scanner::target::find_repo_root;
+#[cfg(unix)]
+use patronus_security_scanner::target::{ScanTarget, TargetKind};
 
 #[test]
 fn finds_git_directory_and_worktree_file() {
