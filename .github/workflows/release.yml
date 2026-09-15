@@ -124,7 +124,8 @@ jobs:
           npm ci --ignore-scripts
           cp ../../LICENSE LICENSE
           cp ../../THIRD_PARTY_NOTICES.md THIRD_PARTY_NOTICES.md
-          tarball=$(npm pack --pack-destination ../../dist --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s)[0].filename))")
+          npm run build
+          tarball=$(npm pack --ignore-scripts --pack-destination ../../dist --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.parse(s)[0].filename))")
           test "$tarball" = "patronus-deepseek-security-${version}.tgz"
           cargo run --manifest-path ../../Cargo.toml --locked --bin package-plugins -- --checksum "../../dist/$tarball"
       - name: SHA-256 checksums (Unix)
