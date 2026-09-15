@@ -64,8 +64,9 @@ the [CLI installation runbook](INSTALL.md).
 
 Applications can submit scans directly with the small, contract-tested
 [Rust, TypeScript and Python API clients](sdk/README.md). Each client README
-includes registry and source installation, a quick start, error behavior and
-instructions an agent can safely follow without receiving your API key.
+includes registry installation, a quick start and error behavior. Each client
+directory also contains a dedicated `INSTALL.md` that a coding agent can follow
+without receiving your API key.
 
 ## Onboarding
 

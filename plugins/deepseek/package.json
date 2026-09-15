@@ -18,6 +18,8 @@
     "dist/index.js",
     "cordis.patch.yml",
     "skills/**/*.md",
+    "README.md",
+    "INSTALL.md",
     "assets/icon.png",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"

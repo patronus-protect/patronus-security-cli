@@ -26,6 +26,7 @@ it('installs the built tarball and runs native static scan and response gates wi
   expect(await readFile(join(installed, 'dist/index.js'), 'utf8')).toContain('patronus_check_result')
   expect(await readFile(join(installed, 'dist/index.js'), 'utf8')).toContain('patronus_scan')
   expect(await readFile(join(installed, 'skills/patronus-static-scan/SKILL.md'), 'utf8')).toContain('approved=true')
+  expect(await readFile(join(installed, 'INSTALL.md'), 'utf8')).toContain('patronus-security-scanner integration deepseek install')
   expect(await readFile(join(installed, 'LICENSE'), 'utf8')).toContain('Apache License')
   expect(await readFile(join(installed, 'THIRD_PARTY_NOTICES.md'), 'utf8')).toContain('patronus-ark 0.1.7')
   for (const path of ['src/index.ts', 'scripts/build.mjs', 'gpt-flow.evidence.json']) {

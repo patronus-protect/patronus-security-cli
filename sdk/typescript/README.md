@@ -5,19 +5,12 @@ server and document scans to the Patronus Scan API and polls accepted jobs.
 
 ## Install
 
-After the first public release:
-
 ```sh
 npm install @patronus-protect/api-client
 ```
 
-Before publication, build and install it from this repository:
-
-```sh
-npm --prefix sdk/typescript ci
-npm --prefix sdk/typescript run build
-npm install ./sdk/typescript
-```
+For installation by a coding agent, provide the
+[agent installation instructions](https://github.com/patronus-protect/patronus-security-cli/blob/main/sdk/typescript/INSTALL.md).
 
 ## Quick start
 
@@ -51,10 +44,3 @@ quota, validation, timeout, and protocol failures throw `PatronusError`.
 Use `submit` and `getJob` when your application manages polling itself. The
 constructor also accepts `baseUrl`, `timeoutMs`, `pollIntervalMs` and a custom
 `fetch` implementation. Non-local custom endpoints must use HTTPS.
-
-## Let an agent install it
-
-Ask the agent to install the package, read the existing `PATRONUS_API_KEY`
-environment variable, add the smallest required scan and run `npm test`. The
-agent must never paste the key into code, `.env` files committed to Git, logs or
-chat, and must ask before running `npm run test:live` because it uses the API.

@@ -26,20 +26,7 @@ To add DeepSeek later:
 patronus-security-scanner integration deepseek install
 ```
 
-### Let an agent install it
-
-After you authorize global npm installation and changes to the Harness profile,
-an agent may install the pinned `dsh` version, run the integration command above
-and verify it with:
-
-```sh
-dsh --version
-patronus-security-scanner integration deepseek status
-```
-
-The agent should use the CLI rather than editing the Harness profile directly.
-You must complete any browser login yourself and restart the Harness after
-installation. The agent must not request credentials in chat.
+For installation by an agent, provide [`INSTALL.md`](INSTALL.md).
 
 Restart the Harness after installation. Try:
 

@@ -7,28 +7,12 @@ server-side.
 
 ## Install
 
-After the first public release:
-
 ```sh
 cargo add patronus-api-client
 ```
 
-Until then, use the client from a checkout of this repository:
-
-```toml
-[dependencies]
-patronus-api-client = { path = "crates/patronus-api-client" }
-```
-
-For an application outside this checkout, pin a reviewed repository commit:
-
-```toml
-[dependencies]
-patronus-api-client = { git = "https://github.com/patronus-protect/patronus-security-cli.git", rev = "<commit>" }
-```
-
-The crate source is in this repository at `crates/patronus-api-client`. It is
-published to crates.io only by the gated release workflow.
+For installation by a coding agent, provide the
+[agent installation instructions](https://github.com/patronus-protect/patronus-security-cli/blob/main/crates/patronus-api-client/INSTALL.md).
 
 ## Quick start
 
@@ -65,15 +49,3 @@ let result = client.scan_file(file)?;
 Authenticated clients use `Client::new(api_key)`. For anonymous text, URL, or document scans, use `Client::anonymous(previous_cookie)`. After every request, persist `client.anonymous_cookie()` and pass it into the next client instance so the Control Plane can enforce one stable daily allowance.
 
 Anonymous identity cookies are pseudonymous quota identifiers, not authentication credentials. Store them privately and never send them anywhere except `https://control.patronus.studio` (or an explicitly configured local test server).
-
-## Let an agent install it
-
-Ask the agent to add `patronus-api-client`, load `PATRONUS_API_KEY` from the
-environment, implement the smallest required scan, and run:
-
-```sh
-cargo test -p patronus-api-client
-```
-
-The agent must not place the key in source, logs, shell history or chat. Live
-tests are ignored by default and require your explicit approval.

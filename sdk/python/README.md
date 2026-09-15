@@ -5,19 +5,12 @@ URL, public MCP server and file scans and polls accepted jobs automatically.
 
 ## Install
 
-After the first public release:
-
 ```sh
 python -m pip install patronus-api-client
 ```
 
-Before publication, install it from a checkout of this repository:
-
-```sh
-python -m pip install ./sdk/python
-```
-
-Use a virtual environment for either command.
+For installation by a coding agent, provide the
+[agent installation instructions](https://github.com/patronus-protect/patronus-security-cli/blob/main/sdk/python/INSTALL.md).
 
 ## Quick start
 
@@ -49,11 +42,3 @@ rate-limit, validation, timeout, transport and protocol failures and exposes
 
 The constructor accepts `base_url`, `timeout` and `poll_interval`. Non-local
 custom endpoints must use HTTPS.
-
-## Let an agent install it
-
-Ask the agent to create or use the project's virtual environment, install
-`patronus-api-client`, read `PATRONUS_API_KEY` from the environment, implement
-the smallest required scan and run the deterministic unit tests. The agent must
-not put the key in source, committed `.env` files, output or chat, and must ask
-before running the live test because it consumes API quota.

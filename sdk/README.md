@@ -16,14 +16,9 @@ API-key clients.
 
 | Language | Package | Source |
 | --- | --- | --- |
-| Rust | `patronus-api-client` | [`crates/patronus-api-client`](../crates/patronus-api-client/README.md) |
-| TypeScript | `@patronus-protect/api-client` | [`sdk/typescript`](typescript/README.md) |
-| Python | `patronus-api-client` | [`sdk/python`](python/README.md) |
-
-The packages are published by the gated release workflow when a release tag is
-approved. Before the first public release, install from this repository using
-the source instructions in each package README; the registry commands below
-will work after version `0.1.0` has been published.
+| Rust | `patronus-api-client` | [README](../crates/patronus-api-client/README.md) · [agent install](../crates/patronus-api-client/INSTALL.md) |
+| TypeScript | `@patronus-protect/api-client` | [README](typescript/README.md) · [agent install](typescript/INSTALL.md) |
+| Python | `patronus-api-client` | [README](python/README.md) · [agent install](python/INSTALL.md) |
 
 ## Registry installation
 
@@ -32,18 +27,6 @@ cargo add patronus-api-client
 npm install @patronus-protect/api-client
 pip install patronus-api-client
 ```
-
-Release tags publish the clients through the gated release workflow. npm and
-PyPI use GitHub OIDC trusted publishing; crates.io uses the protected
-`CARGO_REGISTRY_TOKEN` secret.
-
-## Agent-assisted installation
-
-Give your coding agent the README for the language you use. It may add the
-dependency, read the API key from the existing `PATRONUS_API_KEY` environment
-variable, add a minimal scan call and run the deterministic package tests. It
-must not ask you to paste the key into chat, commit it, print it, or run a live
-scan unless you explicitly authorize network use and quota consumption.
 
 ## Tests
 
