@@ -8,7 +8,58 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      heavy: ${{ steps.filter.outputs.heavy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        name: Select test scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          heavy=false
+          while IFS= read -r path; do
+            case "$path" in
+              plugins/*/skills/*) heavy=true; break ;;
+              *.md|docs/*|.github/ISSUE_TEMPLATE/*) ;;
+              *) heavy=true; break ;;
+            esac
+          done < <(git diff --name-only "$BASE_SHA"...HEAD)
+          echo "heavy=$heavy" >> "$GITHUB_OUTPUT"
+
+  baseline:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check changed-file whitespace
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          if [[ "$EVENT_NAME" == "push" && "$BASE_SHA" =~ ^0+$ ]]; then
+            BASE_SHA="HEAD^"
+          fi
+          git diff --check "$BASE_SHA"...HEAD
+      - name: Validate repository JSON
+        run: jq empty schemas/*.json plugins/codex/.codex-plugin/plugin.json plugins/claude/.claude-plugin/plugin.json plugins/deepseek/package.json sdk/typescript/package.json
+
   licenses:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +68,8 @@ jobs:
       - run: cargo deny check licenses
 
   test:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +86,8 @@ jobs:
       - run: cargo build --release
 
   schemas-and-plugins:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +101,8 @@ jobs:
       - run: .venv/bin/python -m unittest discover -s tests -p test_installer.py
 
   deepseek:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
     env:
       DSH_SOURCE_ROOT: ${{ github.workspace }}/.harness
