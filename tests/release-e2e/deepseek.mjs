@@ -41,6 +41,9 @@ export async function deepseekSetup(reportRoot) {
     await checked('npm',['pack','--ignore-scripts','--pack-destination',root],{cwd:packageRoot,env})
     tarball = join(root,(await readdir(root)).find(name=>name.endsWith('.tgz')))
   }
+  // pnpm 11 imports a configured pnpmfile before DSH has created a new profile.
+  await mkdir(join(home,'profiles/headless'),{recursive:true})
+  await writeFile(join(home,'profiles/headless/.pnpmfile.mjs'),'')
   await checked(dsh,['plugin','--profile','headless','add',tarball,'--ignore-scripts'],{cwd:workspace,env})
   const artifact = await treeDigest(installed)
   const model = join(home,'profiles','patronus-release-model.mjs')
