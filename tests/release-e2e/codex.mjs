@@ -119,14 +119,14 @@ export async function codexFlow(flow) {
     if (flow === 'outage-recovery') {
       fixture.env.PATRONUS_SCANNER_BIN = join(fixture.root, 'absent-scanner')
       phase = 'outage'
-      await fixture.exec('outage')
+      await fixture.exec('outage', { bypassApprovals: process.platform === 'linux' })
       assert.equal(await readCounter(counter), '1', 'Degraded source action did not execute exactly once')
       assert(states.includes('degraded'), 'Degraded result was not observed by the model')
       fixture.env.PATRONUS_SCANNER_BIN = process.env.PATRONUS_SCANNER_BIN
       phase = 'recovered'
       submitted = false
     }
-    await fixture.exec(flow)
+    await fixture.exec(flow, { bypassApprovals: process.platform === 'linux' })
     const sourceExecutions = flow === 'outage-recovery' || flow === 'queue-backlog' ? 2 : 1
     assert.equal(await readCounter(counter), '1'.repeat(sourceExecutions), 'Unexpected source execution count')
     if (flow === 'remote-fail-open') assert(remoteAuditSeen && tools.includes('patronus_scan') && tools.includes('source'))
