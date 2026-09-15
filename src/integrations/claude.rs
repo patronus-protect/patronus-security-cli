@@ -63,6 +63,11 @@ pub(super) fn execute(args: IntegrationArgs) -> Result<()> {
     }
 }
 
+pub(super) fn dashboard_status() -> Result<IntegrationStatus> {
+    let binary = executable("PATRONUS_CLAUDE_BIN", "claude");
+    Ok(status(&binary, crate::cli::IntegrationScope::User))
+}
+
 fn status(claude: &Path, scope: crate::cli::IntegrationScope) -> IntegrationStatus {
     let listed = run(claude, &["plugin", "list", "--json"])
         .ok()

@@ -14,7 +14,7 @@ import { processIdentity } from '../src/daemon.ts'
 const entry = process.env.PATRONUS_NATIVE_BUNDLE
   ? join(dirname(dirname(process.env.PATRONUS_NATIVE_BUNDLE)), 'tests/broker-fixture.mjs')
   : fileURLToPath(new URL('./broker-fixture.mjs', import.meta.url))
-const installed = process.env.PATRONUS_TEST_SCANNER ?? '/Users/benediktveith/.local/bin/patronus-security-scanner'
+const installed = process.env.PATRONUS_TEST_SCANNER ?? 'patronus-security-scanner'
 
 async function fixture(): Promise<{ root: string; config: BrokerConfig }> {
   const root = await mkdtemp(join(tmpdir(), 'patronus-broker-test-'))

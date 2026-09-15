@@ -237,6 +237,13 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
                 .to_string(),
         ));
     }
+    if request.method == "GET" && request.path == "/api/integrations" {
+        return Ok((
+            200,
+            "application/json",
+            crate::integrations::dashboard_statuses().to_string(),
+        ));
+    }
     if request.method != "POST"
         || request.headers.get("content-type").map(String::as_str) != Some("application/json")
     {

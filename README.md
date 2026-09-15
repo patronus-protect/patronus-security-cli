@@ -55,13 +55,13 @@ Release checksums are available on the [GitHub Releases](https://github.com/patr
 
 ## Onboarding
 
-Onboarding guides you through five short choices:
+Onboarding guides you through a short setup:
 
 1. Sign in when you want cloud-backed features. Local protection works without an account.
 2. Choose Local, Hybrid or API processing.
-3. Choose the analysis level. L1 needs no model download.
-4. Run a visible injection check.
-5. Select any detected agent hosts. Patronus downloads and installs their plugins automatically.
+3. Patronus uses L3 analysis. For Local mode it measures a 256-token L3 check and recommends Hybrid when that takes more than 200 ms.
+4. Run a visible injection check in the final processing mode.
+5. Choose Full protection, Scanner + skills without automatic hooks, or CLI only. For either agent integration, select the detected hosts you use.
 
 Run onboarding again at any time:
 

@@ -26,7 +26,7 @@ fi
 PATRONUS_VERSION="$version" sh "$work_dir/install.sh"
 ```
 
-The installer fetches only the matching `v0.1.0` artifact, verifies it against the checksum published with that release, places the CLI in `~/.local/bin`, verifies that it starts, and launches onboarding. The checksum establishes integrity within the GitHub release channel; it is not an independent signature. In onboarding, choose processing and analysis settings, run the visible safety check, then select the detected Codex, Claude Code or DeepSeek hosts you want to protect. Plugin downloads and installation are automatic.
+The installer fetches only the matching `v0.1.0` artifact, verifies it against the checksum published with that release, places the CLI in `~/.local/bin`, verifies that it starts, and launches onboarding. The checksum establishes integrity within the GitHub release channel; it is not an independent signature. Onboarding always configures L3. Local mode first measures a 256-token L3 check and recommends Hybrid above 200 ms, then runs the visible safety check in the final mode. Finally choose Full protection, Scanner + skills without automatic hooks, or CLI only; plugin downloads and installation for selected hosts are automatic.
 
 Start a new agent chat when onboarding asks you to. Try:
 

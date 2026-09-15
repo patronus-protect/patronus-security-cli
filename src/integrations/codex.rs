@@ -68,6 +68,11 @@ pub(super) fn execute(args: IntegrationArgs) -> Result<()> {
     }
 }
 
+pub(super) fn dashboard_status() -> Result<IntegrationStatus> {
+    let binary = executable("PATRONUS_CODEX_BIN", "codex");
+    Ok(status(&binary, IntegrationScope::User))
+}
+
 fn status(binary: &Path, scope: IntegrationScope) -> IntegrationStatus {
     let configured = configured_state();
     let listed = run(

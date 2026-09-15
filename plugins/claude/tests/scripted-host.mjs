@@ -143,7 +143,7 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
     const stateRoot = process.env.PATRONUS_CLAUDE_STATE_ROOT || join(tmpdir(), 'patronus-claude-native-state');
     await mkdir(stateRoot, { recursive: true });
     env.PATRONUS_NATIVE_STATE_DIR = await mkdtemp(join(stateRoot, 'broker-state-'));
-    env.PATRONUS_SCANNER_BIN = runtime.scanner || process.env.PATRONUS_PROOF_SCANNER || '/Users/benediktveith/.local/bin/patronus-security-scanner';
+    env.PATRONUS_SCANNER_BIN = runtime.scanner || process.env.PATRONUS_PROOF_SCANNER || 'patronus-security-scanner';
     env.PATRONUS_RESPONSE_WAIT_MS = String(runtime.responseWaitMs ?? 500);
   }
   async function invoke(extra = []) {

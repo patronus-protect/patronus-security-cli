@@ -47,12 +47,23 @@ function renderSettings(){
  $('inference-mode').value=state.config.provider.mode;
  $('cli-update-status').textContent=state.maintenance.cargo_install?'Cargo installation detected.':state.maintenance.standalone_install?'Standalone CLI: updates use verified GitHub Release artifacts.':'Development build: install a release to enable updates.';
  for(const id of ['update-cli','uninstall-cli','uninstall-all'])$(id).disabled=!(state.maintenance.cargo_install||state.maintenance.standalone_install);
- const integrations=$('integration-settings');integrations.replaceChildren();
- for(const host of ['codex','claude','deepseek']){const row=node('div',undefined,'policy-row');row.append(node('strong',host[0].toUpperCase()+host.slice(1)));for(const action of ['enable','disable','update','uninstall'])row.append(button(action,async()=>{if(action==='uninstall'&&!confirm(`Uninstall the Patronus plugin from ${host}?`))return;const source=undefined;message(`${host}: ${action} running…`);await api('/api/integration',{host,action,source});message(`${host}: ${action} completed.`);}));integrations.append(row);}
 }
+async function loadIntegrations(){
+ const integrations=$('integration-settings');integrations.replaceChildren(node('p','Checking integrations…','setting-line'));
+ const statuses=await api('/api/integrations');integrations.replaceChildren();
+ for(const status of statuses){
+  const row=node('div',undefined,'policy-row'),summary=node('div'),name=status.host==='deepseek'?'DeepSeek':status.host[0].toUpperCase()+status.host.slice(1);
+  const badge=node('span',status.ready?'Active':status.state.replaceAll('_',' '),`status ${status.ready?'clean':status.state==='unavailable'||status.state==='unreachable'?'failed':'incomplete'}`);
+  summary.append(node('strong',name),node('small',status.message));row.append(summary,badge);
+  const actions=!status.reachable?[]:status.installed===false?['install']:status.enabled===false?['enable','update','uninstall']:status.ready?['disable','update','uninstall']:['enable','disable','update','uninstall'];
+  for(const action of actions)row.append(button(action,async()=>{if(action==='uninstall'&&!confirm(`Uninstall the Patronus plugin from ${name}?`))return;message(`${name}: ${action} running…`);await api('/api/integration',{host:status.host,action});await loadIntegrations();message(`${name}: ${action} completed.`);}));
+  integrations.append(row);
+ }
+}
+on('refresh-integrations','click',loadIntegrations);
 on('save-settings','click',async()=>{const config=clone(state.config);config.provider.mode=$('inference-mode').value;if(config.provider.mode!=='local')config.provider.api_base_url='https://control.patronus.studio/api/v1';await api('/api/config',config);state=await api('/api/state');renderSettings();message('Inference settings saved. Restart active agent sessions to apply them.');});
 window.addEventListener('beforeunload',event=>{if(state&&dirty()){event.preventDefault();event.returnValue='';}});
-(async()=>{try{state=await api('/api/state');draft=clone(state.profiles);document.querySelectorAll('.server-note').forEach(el=>el.hidden=true);document.querySelectorAll('.live-controls').forEach(el=>el.hidden=false);document.querySelector('.local').textContent='Local dashboard';document.querySelector('footer').textContent=`Activity stored in ${state.data_root} · Survives CLI restarts.`;renderSettings();renderAssessments();updateDraft();await loadSetup();}catch(error){message(error.message,true);}})();
+(async()=>{try{state=await api('/api/state');draft=clone(state.profiles);document.querySelectorAll('.server-note').forEach(el=>el.hidden=true);document.querySelectorAll('.live-controls').forEach(el=>el.hidden=false);document.querySelector('.local').textContent='Local dashboard';document.querySelector('footer').textContent=`Activity stored in ${state.data_root} · Survives CLI restarts.`;renderSettings();renderAssessments();updateDraft();await loadIntegrations();await loadSetup();}catch(error){message(error.message,true);}})();
 
 for(const [id,action,all]of [['update-cli','update',false],['uninstall-cli','uninstall',false],['uninstall-all','uninstall',true]])on(id,'click',async()=>{if(!confirm(action==='update'?'Update the CLI from its public release source?':`Uninstall ${all?'the CLI and all three plugins':'the CLI'}? Reports and settings will be preserved.`))return;message('Maintenance is running. See the CLI terminal for progress.');await api('/api/maintenance',{action,all,confirmed:true});message('Maintenance completed. Stop and restart the dashboard to use an updated CLI.');});
 
@@ -69,7 +80,6 @@ async function refreshUsage(){
    if(limit!==null)box.append(node('p',`${Math.max(0,limit-used).toLocaleString()} remaining`));
    box.append(node('p',`Resets ${new Date(reset).toLocaleString()}`));grid.append(box);
   }
-  const box=node('div');box.append(node('h3','Token rate'),node('p',`${usage.tokens_per_second.toLocaleString()} tokens / second`));grid.append(box);
  }catch(error){$('usage-values').replaceChildren();$('usage-panel').hidden=false;$('usage-status').textContent='Usage unavailable. Please refresh.';}
  finally{usageLoading=false;$('refresh-usage').disabled=false;}
 }

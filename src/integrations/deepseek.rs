@@ -94,6 +94,12 @@ pub(super) fn execute(args: IntegrationArgs) -> Result<()> {
     }
 }
 
+pub(super) fn dashboard_status() -> Result<IntegrationStatus> {
+    let home = dsh_home()?;
+    let binary = executable("PATRONUS_DSH_BIN", "dsh");
+    Ok(status(&binary, &home, "headless"))
+}
+
 fn status(dsh: &Path, home: &Path, profile: &str) -> IntegrationStatus {
     let installed = package_installed(home, profile).ok();
     let effective = installed.filter(|installed| *installed).and_then(|_| {

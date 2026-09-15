@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use serde::Serialize;
+use serde_json::{json, Value};
 
 use crate::cli::{
     IntegrationAction, IntegrationArgs, IntegrationHost, IntegrationScope, OutputFormat,
@@ -50,6 +51,21 @@ pub fn execute(mut args: IntegrationArgs) -> Result<()> {
         IntegrationHost::Claude => claude::execute(args),
         IntegrationHost::Deepseek => deepseek::execute(args),
     }
+}
+
+pub fn dashboard_statuses() -> Value {
+    [
+        ("codex", codex::dashboard_status()),
+        ("claude", claude::dashboard_status()),
+        ("deepseek", deepseek::dashboard_status()),
+    ]
+    .into_iter()
+    .map(|(host, status)| {
+        status
+            .and_then(|status| serde_json::to_value(status).map_err(|error| ScannerError::Integration(error.to_string())))
+            .unwrap_or_else(|_| json!({"host":host,"installed":null,"enabled":null,"reachable":false,"ready":false,"state":"unavailable","message":"Integration status is unavailable."}))
+    })
+    .collect()
 }
 
 #[derive(Debug, Serialize)]

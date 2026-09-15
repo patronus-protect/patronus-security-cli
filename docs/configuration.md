@@ -10,7 +10,7 @@ Static `scan file`, `scan directory`, and `scan repo` commands omit analyzed chu
 
 Local static scans decode UTF-8 and BOM-marked UTF-16 text directly. PDF text and DOCX document XML are extracted locally with bounded decompression; image-only PDFs require OCR and are reported as unsupported documents.
 
-`config print` emits the effective, recursively redacted configuration. Ark categories are `prompt_injection`, `dlp`, `pii` and `threat`; levels are `l1`, `l2` and `l3`. `threat` requires prepared L2/L3 assets; L1 cannot complete that category. Model downloads are off by default. Model-specific fixtures can remain clean under L1: coverage and the selected profile determine what a result establishes.
+`config print` emits the effective, recursively redacted configuration. Ark categories are `prompt_injection`, `dlp`, `pii` and `threat`; levels are L1 (rules), L2 (lightweight ML models) and L3 (deeper models). `threat` requires prepared L2/L3 assets; L1 cannot complete that category. Model downloads are off by default. Model-specific fixtures can remain clean under L1: coverage and the selected profile determine what a result establishes.
 
 ## Local request/response runtime
 
