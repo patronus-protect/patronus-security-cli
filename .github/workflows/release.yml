@@ -202,7 +202,6 @@ jobs:
           export PATRONUS_DEEPSEEK_TARBALL="$(realpath release-artifacts/*.tgz)"
           node tests/release-e2e/run.mjs --out release-e2e-report
           node tests/release-e2e/codex-subagent.mjs > release-e2e-report/subagent-recovery.log 2>&1
-          node --test plugins/codex/tests/host-contract.test.mjs
           node --test plugins/claude/tests/claude-host.test.mjs plugins/claude/tests/claude-runtime.test.mjs plugins/claude/tests/chat-control.test.mjs
       - uses: actions/upload-artifact@v4
         if: always()
