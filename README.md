@@ -57,6 +57,16 @@ curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/do
 
 Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.
 
+For a checksum-first installation and explicit coding-agent boundaries, follow
+the [CLI installation runbook](INSTALL.md).
+
+## API clients
+
+Applications can submit scans directly with the small, contract-tested
+[Rust, TypeScript and Python API clients](sdk/README.md). Each client README
+includes registry and source installation, a quick start, error behavior and
+instructions an agent can safely follow without receiving your API key.
+
 ## Onboarding
 
 Onboarding guides you through a short setup:

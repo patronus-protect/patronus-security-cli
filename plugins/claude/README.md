@@ -20,6 +20,19 @@ To add Claude Code later:
 patronus-security-scanner integration claude install
 ```
 
+### Let an agent install it
+
+After you authorize changes to your Claude Code configuration, an agent may run
+the integration command above and verify it with:
+
+```sh
+patronus-security-scanner integration claude status
+```
+
+The agent should use the CLI rather than editing Claude Code plugin files
+directly. You must complete any browser login yourself and restart Claude Code
+after installation. The agent must not request credentials in chat.
+
 Restart Claude Code after installation. Try:
 
 > Check this repository with Patronus.

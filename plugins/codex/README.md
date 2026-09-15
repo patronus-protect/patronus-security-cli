@@ -20,6 +20,19 @@ To add Codex later:
 patronus-security-scanner integration codex install
 ```
 
+### Let an agent install it
+
+After you authorize changes to your Codex configuration, an agent may run the
+integration command above and verify it with:
+
+```sh
+patronus-security-scanner integration codex status
+```
+
+The agent should use the CLI rather than editing Codex plugin files directly.
+You must complete any browser login yourself and start a new Codex task after
+installation. The agent must not request credentials in chat.
+
 Start a new Codex task after installation. Try:
 
 > Check this repository with Patronus.

@@ -1,5 +1,10 @@
 # Install Patronus Security
 
+These instructions are written for both people and coding agents. An agent may
+perform the download, checksum verification, CLI installation and integration
+checks. The user must approve writes outside the current project and personally
+complete interactive onboarding and browser authentication.
+
 Patronus installs from the fixed public GitHub release `v0.1.0`. You do not need Git, Cargo, a repository checkout, or a manually extracted plugin archive.
 
 ## Install and configure
@@ -38,9 +43,14 @@ Then open the dashboard:
 patronus-security-scanner dashboard
 ```
 
-## Let an agent help
+## Agent installation contract
 
-An agent may run the installer after the user authorizes installation into `~/.local/bin`. The user must make the interactive onboarding choices and complete browser authentication personally. The agent must never request a token in chat or execute a scanner binary supplied by the repository being inspected.
+Before making changes, the agent should confirm the operating system is macOS or
+Linux, that `curl` and a SHA-256 tool are available, and that the user authorizes
+installation into `~/.local/bin`. It must download the installer and checksum
+from the same fixed GitHub release, verify them before execution, and never run a
+scanner binary supplied by the repository being inspected. The agent must not
+request or expose API keys, login tokens or anonymous identity cookies in chat.
 
 If the agent cannot attach onboarding to an interactive terminal, it may install first and open setup visibly:
 
@@ -48,6 +58,19 @@ If the agent cannot attach onboarding to an interactive terminal, it may install
 curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.0/install.sh | PATRONUS_VERSION=v0.1.0 sh -s -- --no-onboarding
 patronus-security-scanner onboarding --open
 ```
+
+After the user finishes onboarding, the agent can verify the installation
+without reading credentials:
+
+```sh
+patronus-security-scanner --version
+patronus-security-scanner integration codex status
+patronus-security-scanner integration claude status
+patronus-security-scanner integration deepseek status
+```
+
+Only installed hosts need to report enabled. Start a new chat in each enabled
+host before testing its Patronus status command.
 
 ## Account and reset
 
