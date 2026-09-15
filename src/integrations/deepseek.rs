@@ -486,12 +486,15 @@ fn integration_error(message: impl Into<String>) -> ScannerError {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::sync::Mutex;
 
-    use crate::cli::{IntegrationHost, IntegrationScope};
+    #[cfg(unix)]
+    use crate::cli::IntegrationHost;
 
     use super::*;
 
+    #[cfg(unix)]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]

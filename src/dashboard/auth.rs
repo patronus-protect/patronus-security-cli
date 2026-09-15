@@ -99,9 +99,8 @@ pub fn provision_dashboard_key() -> Result<()> {
     #[cfg(unix)]
     set_mode_if_needed(&root, 0o700)?;
     let _ = load_or_create_key(false)?;
-    let path = root.join("key.v1");
     #[cfg(unix)]
-    set_mode_if_needed(&path, 0o600)?;
+    set_mode_if_needed(&root.join("key.v1"), 0o600)?;
     Ok(())
 }
 
@@ -136,8 +135,11 @@ fn dashboard_key() -> Result<[u8; 32]> {
 
 fn load_or_create_key(validate_permissions: bool) -> Result<[u8; 32]> {
     let root = key_root()?;
+    #[cfg(unix)]
     let root_missing = std::fs::symlink_metadata(&root)
         .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound);
+    #[cfg(not(unix))]
+    let _ = validate_permissions;
     ensure_directory(&root)?;
     #[cfg(unix)]
     if root_missing {

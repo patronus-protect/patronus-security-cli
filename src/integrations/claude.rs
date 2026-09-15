@@ -199,15 +199,20 @@ impl Already {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::fs;
+    #[cfg(unix)]
     use std::sync::Mutex;
 
+    #[cfg(unix)]
     use crate::cli::{IntegrationHost, IntegrationScope};
 
     use super::*;
 
+    #[cfg(unix)]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    #[cfg(unix)]
     fn args(
         action: IntegrationAction,
         source: Option<PathBuf>,
