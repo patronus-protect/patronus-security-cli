@@ -34,7 +34,7 @@ jobs:
           components: rustfmt, clippy
       - run: cargo install cargo-deny --locked --version 0.20.2
       - run: cargo deny check licenses
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.19.0'
       - uses: pnpm/action-setup@v4
@@ -111,7 +111,7 @@ jobs:
         run: |
           cp install.sh install.py dist/
           cargo run --locked --bin package-plugins -- --checksum dist/install.sh dist/install.py
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         with:
           node-version: 22.19.0
@@ -152,7 +152,7 @@ jobs:
           repository: deepseek-ai/deepseek-harness
           ref: 76fda729799fe9b3848dbe2c211d4b231032b81e
           path: .harness
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.19.0'
       - uses: pnpm/action-setup@v4
@@ -237,7 +237,7 @@ jobs:
         working-directory: sdk/typescript
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
