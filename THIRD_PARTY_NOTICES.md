@@ -19,3 +19,16 @@ License. Their notices are provided in `src/dashboard/assets/Inter-OFL.txt` and
 See `Cargo.lock` for the exact Rust dependency versions and source metadata used
 by this build. This notice does not attempt to restate the license metadata of
 every transitive dependency.
+
+## Compatibility marks
+
+The documentation displays the Codex app, Claude and DeepSeek marks solely to
+identify compatible third-party hosts. OpenAI, Codex, ChatGPT, Anthropic,
+Claude, DeepSeek and DeepSeek Harness are marks of their respective owners.
+Patronus Security is an independent project and is not affiliated with,
+sponsored by or endorsed by OpenAI, Anthropic or DeepSeek.
+
+The marks are not part of Patronus Security's Apache-2.0 license. They may not
+be reused under that license. Their owners' current brand and trademark terms
+continue to apply. The Patronus plugin icon remains the Patronus mark in plugin
+manifests and release packages; the third-party marks are documentation-only.

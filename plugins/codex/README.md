@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="../../README.md"><img src="assets/icon.png" width="96" alt="Patronus for Codex"></a>
+  <a href="../../README.md"><img src="../../docs/img/providers/codex-app.png" width="96" alt="Codex app"></a>
 </p>
 
 <h1 align="center">Patronus Security for Codex</h1>

@@ -31,5 +31,10 @@ the release workflow is the authoritative full test matrix.
 ## Pull requests
 
 Keep changes focused, update public documentation and the changelog when needed,
-and describe tests that were run or intentionally skipped. By contributing, you
-agree that your contribution is licensed under Apache-2.0.
+and describe tests that were run or intentionally skipped.
+
+By contributing, you confirm that you have the right to submit the work and
+that it may be distributed under Apache-2.0. Do not submit third-party code,
+model assets, logos, fonts, datasets or generated material unless its license
+permits redistribution and the required attribution or notice is included.
+Clearly identify adapted work and its source in the pull request.

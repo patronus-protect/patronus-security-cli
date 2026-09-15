@@ -21,6 +21,9 @@ on:
       - "contract/**"
       - "sdk/**"
 
+permissions:
+  contents: read
+
 jobs:
   rust:
     runs-on: ubuntu-latest

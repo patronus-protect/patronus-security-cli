@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="../../README.md"><img src="assets/icon.png" width="96" alt="Patronus for DeepSeek Harness"></a>
+  <a href="../../README.md"><img src="../../docs/img/providers/deepseek.svg" width="96" alt="DeepSeek"></a>
 </p>
 
 <h1 align="center">Patronus Security for DeepSeek Harness</h1>
