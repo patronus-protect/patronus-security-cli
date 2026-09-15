@@ -148,7 +148,7 @@ pub fn prune_completed_reports(
 
 fn prune_completed_reports_locked(output_root: &Path, keep_per_target: usize) -> Result<()> {
     let mut reports = verified_reports(output_root)?;
-    reports.sort_by(|a, b| b.1.started_at.cmp(&a.1.started_at));
+    reports.sort_by_key(|item| std::cmp::Reverse(item.1.started_at));
     let mut targets = std::collections::HashMap::new();
     for (run, report) in reports {
         let count = targets
@@ -203,7 +203,7 @@ fn completed_reports(output_root: &Path) -> Result<Vec<(PathBuf, Report)>> {
             Ok((html_path, report))
         })
         .collect::<Result<Vec<_>>>()?;
-    reports.sort_by(|a, b| b.1.started_at.cmp(&a.1.started_at));
+    reports.sort_by_key(|item| std::cmp::Reverse(item.1.started_at));
     let mut targets = std::collections::HashSet::new();
     reports.retain(|(_, report)| targets.insert((report.target_kind, report.target.clone())));
     Ok(reports)
@@ -352,7 +352,7 @@ fn protocol_summaries(root: &Path, protocol_root: &Path) -> Result<Vec<ProtocolS
             events: events.len(),
         });
     }
-    summaries.sort_by(|a, b| b.latest.cmp(&a.latest));
+    summaries.sort_by_key(|summary| std::cmp::Reverse(summary.latest));
     Ok(summaries)
 }
 

@@ -293,6 +293,8 @@ fn inspect(value: &Value, coverage: &mut PayloadCoverage) -> bool {
             }
             false
         }
+        // Every item must be visited because `inspect` records coverage as a side effect.
+        #[allow(clippy::unnecessary_fold)]
         Value::Array(items) => items.iter().fold(false, |unsupported, item| {
             !item.is_string() || inspect(item, coverage) || unsupported
         }),

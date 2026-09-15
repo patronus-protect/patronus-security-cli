@@ -213,11 +213,11 @@ fn decode_utf16(
     little: bool,
     original_len: usize,
 ) -> std::result::Result<DecodedContent, ContentError> {
-    if payload.len() % 2 != 0 {
+    if payload.len() & 1 == 1 {
         return Err(ContentError::Encoding);
     }
     let units = payload
-        .chunks_exact(2)
+        .chunks(2)
         .map(|pair| {
             if little {
                 u16::from_le_bytes([pair[0], pair[1]])
