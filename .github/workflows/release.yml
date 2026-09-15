@@ -178,7 +178,7 @@ jobs:
           version=$(node -p "require('./plugins/deepseek/package.json').patronusProbe.dshVersion")
           test "$version" = "$DEEPSEEK_RELEASE_VERSION"
           npm install --global "@deepseek-ai/dsh@$DEEPSEEK_RELEASE_VERSION"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: patronus-security-x86_64-unknown-linux-gnu
           path: release-artifacts
@@ -270,7 +270,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: python-client-distributions
           path: dist/
@@ -284,7 +284,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: patronus-security-*
           path: dist
