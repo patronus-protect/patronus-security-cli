@@ -70,10 +70,17 @@ fn default_reports_and_protocol_are_shared_across_workspaces() {
         .args(["protocol", "render"])
         .assert()
         .success();
-    cli(root.path())
+    let output = cli(root.path())
         .current_dir(repo.path())
         .args(["config", "print", "--format", "json"])
         .assert()
         .success()
-        .stdout(contains(root.path().display().to_string()));
+        .get_output()
+        .stdout
+        .clone();
+    let config: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        config["output"]["root"],
+        root.path().join("output").display().to_string()
+    );
 }
