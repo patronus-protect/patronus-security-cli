@@ -234,6 +234,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
             source,
         });
     }
+    #[cfg(unix)]
     if let Some(parent) = path.parent() {
         File::open(parent).at(parent)?.sync_all().at(parent)?;
     }
