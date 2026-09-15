@@ -11,7 +11,7 @@
   "license": "Apache-2.0",
   "engines": { "node": ">=18" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "INSTALL.md"],
   "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc -p tsconfig.json",

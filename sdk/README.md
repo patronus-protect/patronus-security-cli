@@ -12,17 +12,21 @@ The Control Plane remains authoritative for extraction, limits, scan units, and
 result semantics. Remote MCP OAuth is handled by MCP hosts rather than these
 API-key clients.
 
-## Installation
+## Packages
+
+| Language | Package | Source |
+| --- | --- | --- |
+| Rust | `patronus-api-client` | [README](../crates/patronus-api-client/README.md) · [agent install](../crates/patronus-api-client/INSTALL.md) |
+| TypeScript | `@patronus-protect/api-client` | [README](typescript/README.md) · [agent install](typescript/INSTALL.md) |
+| Python | `patronus-api-client` | [README](python/README.md) · [agent install](python/INSTALL.md) |
+
+## Registry installation
 
 ```sh
 cargo add patronus-api-client
 npm install @patronus-protect/api-client
 pip install patronus-api-client
 ```
-
-Release tags publish the clients through the gated release workflow. npm and
-PyPI use GitHub OIDC trusted publishing; crates.io uses the protected
-`CARGO_REGISTRY_TOKEN` secret.
 
 ## Tests
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="../../README.md"><img src="assets/icon.png" width="96" alt="Patronus for Claude Code"></a>
+  <a href="../../README.md"><img src="../../docs/img/providers/claude.svg" width="96" alt="Claude"></a>
 </p>
 
 <h1 align="center">Patronus Security for Claude Code</h1>
@@ -19,6 +19,8 @@ To add Claude Code later:
 ```sh
 patronus-security-scanner integration claude install
 ```
+
+For installation by an agent, provide [`INSTALL.md`](INSTALL.md).
 
 Restart Claude Code after installation. Try:
 

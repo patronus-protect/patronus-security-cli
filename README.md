@@ -15,13 +15,13 @@ Patronus Security combines the Patronus Security CLI (the `patronus-security-sca
 <table>
   <tr>
     <td align="center" width="33%">
-      <a href="plugins/codex/README.md"><img src="plugins/codex/assets/icon.png" width="72" alt="Patronus for Codex"><br><strong>Codex</strong></a>
+      <a href="plugins/codex/README.md"><img src="docs/img/providers/codex-app.png" width="72" alt="Codex app"><br><strong>Codex</strong></a>
     </td>
     <td align="center" width="33%">
-      <a href="plugins/claude/README.md"><img src="plugins/claude/assets/icon.png" width="72" alt="Patronus for Claude Code"><br><strong>Claude Code</strong></a>
+      <a href="plugins/claude/README.md"><img src="docs/img/providers/claude.svg" width="72" alt="Claude"><br><strong>Claude Code</strong></a>
     </td>
     <td align="center" width="33%">
-      <a href="plugins/deepseek/README.md"><img src="plugins/deepseek/assets/icon.png" width="72" alt="Patronus for DeepSeek Harness"><br><strong>DeepSeek Harness</strong></a>
+      <a href="plugins/deepseek/README.md"><img src="docs/img/providers/deepseek.svg" width="72" alt="DeepSeek"><br><strong>DeepSeek Harness</strong></a>
     </td>
   </tr>
   <tr>
@@ -32,6 +32,10 @@ Patronus Security combines the Patronus Security CLI (the `patronus-security-sca
 </table>
 
 Choose the hosts you use during onboarding. Each plugin page explains its hooks, protected flow and degraded behavior.
+
+Patronus Security is an independent project and is not endorsed by OpenAI,
+Anthropic or DeepSeek. Third-party names and logos identify compatibility only;
+see [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Install
 
@@ -52,6 +56,17 @@ curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/do
 ```
 
 Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.
+
+For a checksum-first installation and explicit coding-agent boundaries, follow
+the [CLI installation runbook](INSTALL.md).
+
+## API clients
+
+Applications can submit scans directly with the small, contract-tested
+[Rust, TypeScript and Python API clients](sdk/README.md). Each client README
+includes registry installation, a quick start and error behavior. Each client
+directory also contains a dedicated `INSTALL.md` that a coding agent can follow
+without receiving your API key.
 
 ## Onboarding
 

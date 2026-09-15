@@ -24,7 +24,7 @@ function run(command, args, cwd = packageRoot) {
 }
 
 try {
-  for (const path of ['src', 'scripts/build.mjs', 'package.json', 'tsconfig.json', 'cordis.patch.yml', 'skills', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
+  for (const path of ['src', 'scripts/build.mjs', 'package.json', 'tsconfig.json', 'cordis.patch.yml', 'skills', 'README.md', 'INSTALL.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
     await cp(join(root, path), join(packageRoot, path), { recursive: true })
   }
   // Reuse the pinned host's dev tools without installing anything in this repository.

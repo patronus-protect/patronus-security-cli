@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="../../README.md"><img src="assets/icon.png" width="96" alt="Patronus for Codex"></a>
+  <a href="../../README.md"><img src="../../docs/img/providers/codex-app.png" width="96" alt="Codex app"></a>
 </p>
 
 <h1 align="center">Patronus Security for Codex</h1>
@@ -19,6 +19,8 @@ To add Codex later:
 ```sh
 patronus-security-scanner integration codex install
 ```
+
+For installation by an agent, provide [`INSTALL.md`](INSTALL.md).
 
 Start a new Codex task after installation. Try:
 
