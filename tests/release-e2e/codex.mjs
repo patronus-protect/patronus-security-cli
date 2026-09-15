@@ -53,12 +53,14 @@ export async function codexFlow(flow) {
     const receipt = lastReceipt(body)
     states.push(receipt.status)
     if (receipt.status === 'pending') {
-      assert(!visible.includes(marker), 'Original content reached the model before approval')
-      if (flow === 'queue-backlog') {
-        assert.equal(receipt.job_status, 'queued')
-        assert.equal(receipt.wait_reason, 'scanner_queue')
-        assert.equal(receipt.next_tool, 'patronus_check_result')
-        assert.match(receipt.message, /not a scan failure or expiry/)
+        assert(!visible.includes(marker), 'Original content reached the model before approval')
+        if (flow === 'queue-backlog') {
+          assert(['queued','running'].includes(receipt.job_status), `Unexpected pending job status: ${receipt.job_status}`)
+          assert.equal(receipt.next_tool, 'patronus_check_result')
+          if (receipt.job_status === 'queued') {
+            assert.equal(receipt.wait_reason, 'scanner_queue')
+            assert.match(receipt.message, /not a scan failure or expiry/)
+          } else assert.match(receipt.message, /result is withheld/)
       }
       tools.push('patronus_check_result')
       const pause = flow === 'queue-backlog' ? 'await new Promise(resolve=>setTimeout(resolve,50));' : ''

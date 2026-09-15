@@ -54,7 +54,7 @@ Each of the following runs once per host:
 | `safe-read` | Read a tiny manifest. | Version/document marker reaches the model; source executes once. |
 | `auto-pii` | Read the manifest with a synthetic email. | Only redacted email reaches the model; useful content remains; no manual redaction call. |
 | `pending` | Read with zero response wait, then poll. | Actual pending receipt followed by approved content; no repeated source execution. |
-| `queue-backlog` | Read with zero response wait while the result is still queued. | The agent receives `job_status=queued`, `wait_reason=scanner_queue`, and the exact polling tool instead of treating the result as failed or expired. |
+| `queue-backlog` | Read concurrently with zero response wait while scanner capacity is occupied. | The agent receives a pending `queued` or `running` job and the exact polling tool instead of treating the result as failed, expired, or rerunning the source. A queued job also exposes `wait_reason=scanner_queue`. |
 | `read-redacted` | Read release notes containing an actual prompt-injection instruction, then request redaction. | The complete returned text exactly matches the golden file: only the injection span becomes `[REDACTED]`. Surrounding text, Unicode, numbers and newlines remain unchanged. |
 | `remote-fail-open` | Request an authenticated MCP audit without API authentication, then use the requested source tool. | The packaged CLI reports the unavailable audit, the hook adds degraded context, and the agent still executes the source tool exactly once. |
 | `upgrade` | Install a different previous package/definition, then invoke the public scanner update command. | Current package is restored, changed Codex hook trust is renewed, retrieval works and settings survive. |
