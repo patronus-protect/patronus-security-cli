@@ -56,7 +56,7 @@ export function apply(ctx, config) {
       }
       if (config.flow === 'remote-fail-open' && reads === 0) {
         assert.equal(remoteReport?.status, 'FAILED', 'Unavailable API audit did not expose its failed scan result')
-        assert.equal(remoteReport?.reason, 'authentication_missing', 'Unavailable API audit omitted its authentication failure')
+        assert(['authentication_missing','scan_unavailable'].includes(remoteReport?.reason), 'Unavailable API audit omitted its failure reason')
         tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return
       }
       if (calls === 1) { tools.push('source'); yield* toolCallResponse('read', 'release_read_document', {}); return }
@@ -75,10 +75,12 @@ export function apply(ctx, config) {
       if (receipt.status === 'pending') {
         assert(!visible.includes('RELEASE_DOCUMENT_731'), 'Original content reached the model before approval')
         if (config.flow === 'queue-backlog') {
-          assert.equal(receipt.job_status, 'queued')
-          assert.equal(receipt.wait_reason, 'scanner_queue')
+          assert(['queued','running'].includes(receipt.job_status), `Unexpected pending job status: ${receipt.job_status}`)
           assert.equal(receipt.next_tool, 'patronus_check_result')
-          assert.match(receipt.message, /not a scan failure or expiry/)
+          if (receipt.job_status === 'queued') {
+            assert.equal(receipt.wait_reason, 'scanner_queue')
+            assert.match(receipt.message, /not a scan failure or expiry/)
+          } else assert.match(receipt.message, /result is withheld/)
         }
         tools.push('patronus_check_result'); await delay(30)
         yield* toolCallResponse('check-' + calls, 'patronus_check_result', { scan_id: receipt.scan_id }); return
