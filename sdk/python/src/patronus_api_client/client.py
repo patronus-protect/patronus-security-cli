@@ -165,7 +165,7 @@ class Patronus:
         return remaining
 
     def _request(self, path: str, body: bytes | None, headers: dict[str, str], deadline: float):
-        request = Request(f"{self.base_url}{path}", data=body, headers={"Accept": "application/json", "Authorization": f"Bearer {self.api_key}", "User-Agent": "patronus-api-client-python/0.1.0", **headers}, method="POST" if body is not None else "GET")
+        request = Request(f"{self.base_url}{path}", data=body, headers={"Accept": "application/json", "Authorization": f"Bearer {self.api_key}", "User-Agent": "patronus-api-client-python/0.1.1", **headers}, method="POST" if body is not None else "GET")
         try:
             with self._opener.open(request, timeout=self._remaining(deadline)) as response:
                 return self._decode(response)

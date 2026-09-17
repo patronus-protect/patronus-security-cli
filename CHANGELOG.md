@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 - 2026-09-17
+
+- Add an interactive CLI start menu and show onboarding as five visible terminal steps.
+- Refresh the local dashboard layout, account controls and scan entry point.
+- Keep installed agent hosts visible in setup status and prevent repeated sign-in from replacing an active token.
+- Tighten scan option validation and add local Rust, TypeScript and Python file-checker examples.
+
 ## 0.1.0 - 2026-09-14
 
 - Add package validation and gated crates.io, npm, and PyPI publishing for the three API clients.

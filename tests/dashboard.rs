@@ -45,9 +45,11 @@ fn protocol_append_writes_safe_session_html_and_shared_index() {
     let index = std::fs::read_to_string(root.join("index.html")).unwrap();
     assert!(index.contains("Protocol sessions"));
     assert!(index.contains("codex"));
-    assert!(index.contains("for=\"tab-get-started\">Get started"));
-    assert!(index.contains("for=\"tab-api\">API"));
+    assert!(index.contains("for=\"tab-get-started\">Setup"));
+    assert!(index.contains("for=\"tab-api\">Scan"));
     assert!(index.contains("id=\"scan-form\""));
+    assert!(index.contains("id=\"account-action\" href=\"#sign-in\">Connect Control Plane"));
+    assert!(index.contains("id=\"upgrade-cta\" hidden"));
     let jsonl = std::fs::read_dir(root.join("protocol"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -228,7 +230,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
         "run_id": "run-1",
         "status": "FINDINGS",
         "scan_root": scan_root,
-        "scanner_version": "0.1.0",
+        "scanner_version": env!("CARGO_PKG_VERSION"),
         "ark_version": "0.1.7",
         "artifact_hashes": {
             "report.json": report_hash
@@ -276,7 +278,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
             "run_id": "run-2",
             "status": "FINDINGS",
             "scan_root": newer_attestation.scan_root.clone(),
-            "scanner_version": "0.1.0",
+            "scanner_version": env!("CARGO_PKG_VERSION"),
             "ark_version": "0.1.7",
             "artifact_hashes": {"report.json": newer_hash},
             "attestation": newer_attestation,
@@ -369,7 +371,7 @@ fn sample_report() -> Report {
         conclusion: "Review <script>alert(1)</script>".into(),
         target_kind: TargetKind::Repo,
         target: ".".into(),
-        scanner_version: "0.1.0".into(),
+        scanner_version: env!("CARGO_PKG_VERSION").into(),
         ark_version: "0.1.7".into(),
         ark_categories: vec!["prompt_injection".into()],
         ark_max_level: "l1".into(),

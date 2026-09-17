@@ -22,13 +22,11 @@ pub fn execute(mut args: IntegrationArgs) -> Result<()> {
     }
 
     if args.source.is_some()
-        && !matches!(
-            args.action,
-            IntegrationAction::Install | IntegrationAction::Update
-        )
+        && !matches!(args.action, IntegrationAction::Install)
+        && !(args.host == IntegrationHost::Deepseek && args.action == IntegrationAction::Update)
     {
         return Err(ScannerError::Integration(
-            "--source is supported only during install/update".into(),
+            "--source is supported only during install or DeepSeek update".into(),
         ));
     }
     if args.profile.is_some() && args.host != IntegrationHost::Deepseek {
@@ -46,11 +44,17 @@ pub fn execute(mut args: IntegrationArgs) -> Result<()> {
     if args.action == IntegrationAction::Install {
         crate::dashboard::provision_dashboard_key()?;
     }
-    match args.host {
+    let host = args.host;
+    let installed = args.action == IntegrationAction::Install;
+    match host {
         IntegrationHost::Codex => codex::execute(args),
         IntegrationHost::Claude => claude::execute(args),
         IntegrationHost::Deepseek => deepseek::execute(args),
+    }?;
+    if installed {
+        crate::onboarding::record_install(host.as_str())?;
     }
+    Ok(())
 }
 
 pub fn dashboard_statuses() -> Value {
@@ -64,6 +68,22 @@ pub fn dashboard_statuses() -> Value {
         status
             .and_then(|status| serde_json::to_value(status).map_err(|error| ScannerError::Integration(error.to_string())))
             .unwrap_or_else(|_| json!({"host":host,"installed":null,"enabled":null,"reachable":false,"ready":false,"state":"unavailable","message":"Integration status is unavailable."}))
+    })
+    .collect()
+}
+
+pub fn installed_hosts() -> Vec<&'static str> {
+    [
+        ("codex", codex::dashboard_status()),
+        ("claude", claude::dashboard_status()),
+        ("deepseek", deepseek::dashboard_status()),
+    ]
+    .into_iter()
+    .filter_map(|(host, status)| {
+        status
+            .ok()
+            .filter(|status| status.installed == Some(true))
+            .map(|_| host)
     })
     .collect()
 }

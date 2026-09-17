@@ -14,7 +14,7 @@ import urllib.request
 import zipfile
 
 REPOSITORY = "patronus-protect/patronus-security-cli"
-INSTALLER_VERSION = "0.1.0"
+INSTALLER_VERSION = "0.1.1"
 
 def fetch(url, limit):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "patronus-installer"}

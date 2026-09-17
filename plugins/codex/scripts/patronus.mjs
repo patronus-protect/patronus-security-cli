@@ -1050,7 +1050,7 @@ var StaticScanner = class {
       const result = await run(executable, [
         "scan",
         input.kind,
-        "--no-repo-config",
+        ...input.kind === "repo" ? ["--no-repo-config"] : [],
         "--config",
         configPath,
         "--output",
@@ -1059,8 +1059,6 @@ var StaticScanner = class {
         "json",
         "--progress",
         "off",
-        "--color",
-        "never",
         "--fail-on",
         "incomplete",
         "--",
@@ -1910,7 +1908,7 @@ function handleMcp(value) {
   const id2 = typeof request.id === "number" && Number.isSafeInteger(request.id) || typeof request.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(request.id) ? request.id : null;
   const result = (data) => ({ jsonrpc: "2.0", id: id2, result: data });
   if (request.jsonrpc !== "2.0" || id2 === null) return { jsonrpc: "2.0", id: id2, error: { code: -32600, message: "Invalid request." } };
-  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.0" } });
+  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.1" } });
   if (request.method === "ping") return result({});
   if (request.method === "tools/list") return result({ tools });
   if (request.method === "tools/call") {

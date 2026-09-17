@@ -5,6 +5,54 @@ fn cli(root: &std::path::Path) -> Command {
     c.env("PATRONUS_DATA_DIR", root);
     c
 }
+#[cfg(unix)]
+#[test]
+fn status_reads_installed_claude_even_when_snapshot_has_no_host() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let bin = root.path().join("claude");
+    std::fs::write(&bin, "#!/bin/sh\nprintf '%s\\n' '[{\"id\":\"patronus-security@patronus-local\",\"scope\":\"user\",\"enabled\":true}]'\n").unwrap();
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(
+        root.path().join("onboarding.json"),
+        r#"{"installed_hosts":null,"restart_required":null}"#,
+    )
+    .unwrap();
+    let output = cli(root.path())
+        .env("PATRONUS_CLAUDE_BIN", &bin)
+        .env("PATH", root.path())
+        .args(["onboarding", "--status", "--format", "json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: Value = serde_json::from_slice(&output).unwrap();
+    assert!(status["installed_hosts"]
+        .as_array()
+        .unwrap()
+        .contains(&serde_json::json!("claude")));
+    assert_eq!(status["restart_required"], true);
+    let marketplace = root.path().join("marketplace");
+    std::fs::create_dir_all(marketplace.join(".claude-plugin")).unwrap();
+    std::fs::write(marketplace.join(".claude-plugin/marketplace.json"), "{}").unwrap();
+    cli(root.path())
+        .env("PATRONUS_CLAUDE_BIN", &bin)
+        .args([
+            "integration",
+            "claude",
+            "install",
+            "--source",
+            marketplace.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let saved: Value =
+        serde_json::from_slice(&std::fs::read(root.path().join("onboarding.json")).unwrap())
+            .unwrap();
+    assert_eq!(saved["installed_hosts"], serde_json::json!(["claude"]));
+    assert_eq!(saved["restart_required"], true);
+}
 #[test]
 fn setup_is_resumable_and_check_is_real_and_persisted() {
     let root = tempfile::tempdir().unwrap();
@@ -99,7 +147,7 @@ fn dashboard_has_setup_and_remote_activity_after_restart() {
         assert!(html.contains("Set up Patronus"));
         assert!(html.contains("URL &amp; MCP scans"));
         assert!(html.contains("24 ms"));
-        assert!(html.contains(">Help</label>"));
+        assert!(html.contains(">Commands</label>"));
         assert!(!html.contains("Access Rules"));
     }
 }

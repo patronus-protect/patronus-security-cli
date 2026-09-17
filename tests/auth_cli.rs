@@ -7,6 +7,27 @@ fn cli(root: &std::path::Path) -> Command {
     command
 }
 
+#[cfg(unix)]
+#[test]
+fn repeated_login_reuses_the_existing_token_without_overwriting_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let auth = root.path().join("auth");
+    std::fs::create_dir(&auth).unwrap();
+    std::fs::set_permissions(&auth, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let path = auth.join("credentials.json");
+    let expires_at = chrono::Utc::now().timestamp() + 3600;
+    let original = serde_json::json!({"issuer":"https://control.patronus.studio","access_token":"test_existing_token_123456789","user_id":"user_test","expires_at":expires_at}).to_string();
+    std::fs::write(&path, &original).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    cli(root.path())
+        .args(["auth", "login", "--no-browser"])
+        .assert()
+        .success()
+        .stdout(contains("Already signed in"));
+    assert_eq!(std::fs::read_to_string(path).unwrap(), original);
+}
+
 #[test]
 fn signed_out_status_token_and_local_logout_are_safe() {
     let root = tempfile::tempdir().unwrap();
@@ -26,7 +47,7 @@ fn signed_out_status_token_and_local_logout_are_safe() {
         .success();
     assert!(!root.path().join("auth/credentials.json").exists());
     let index = std::fs::read_to_string(root.path().join("index.html")).unwrap();
-    assert!(index.contains(">Sign in</a>"));
+    assert!(index.contains(">Connect Control Plane</a>"));
     assert!(index.contains("14 days"));
     assert!(index.contains("Scanner commands"));
     for command in [
