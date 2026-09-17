@@ -51,7 +51,7 @@
     "@types/node": "22.20.0",
     "esbuild": "0.28.1",
     "js-yaml": "4.2.0",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "patronusProbe": {
     "harnessCommit": "76fda729799fe9b3848dbe2c211d4b231032b81e",
