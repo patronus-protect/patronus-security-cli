@@ -7,5 +7,5 @@
   "type": "module",
   "engines": { "node": ">=22.19.0" },
   "scripts": { "build": "node scripts/build.mjs", "test": "node scripts/test.mjs", "typecheck": "node scripts/typecheck.mjs" },
-  "devDependencies": { "esbuild": "0.28.1", "typescript": "6.0.3", "@types/node": "22.20.0" }
+  "devDependencies": { "esbuild": "0.28.1", "typescript": "7.0.2", "@types/node": "22.20.0" }
 }
