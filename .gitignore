@@ -43,3 +43,4 @@ __pycache__/
 /plugins/**/*validation*.md
 /plugins/codex/submission/
 *.log
+node_modules/

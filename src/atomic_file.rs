@@ -22,17 +22,25 @@ pub(crate) fn replace(source: &Path, target: &Path) -> std::io::Result<()> {
         .encode_wide()
         .chain(Some(0))
         .collect::<Vec<_>>();
-    let moved = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            target.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if moved == 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
+    let mut retries = 0;
+    loop {
+        let moved = unsafe {
+            MoveFileExW(
+                source.as_ptr(),
+                target.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        };
+        if moved != 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        // Concurrent replacements can briefly hold the destination on Windows.
+        if retries == 9 || !matches!(error.raw_os_error(), Some(5 | 32 | 33)) {
+            return Err(error);
+        }
+        retries += 1;
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 

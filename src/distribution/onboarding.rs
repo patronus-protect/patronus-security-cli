@@ -175,11 +175,13 @@ pub fn status() -> Result<Value> {
         .unwrap_or(Value::Null);
     let auth = crate::auth::status(&crate::config::user_root()?)?;
     let valid = saved["fingerprint"] == fingerprint(&config)?;
+    let detected = detected_hosts();
+    let installed = crate::integrations::installed_hosts();
     Ok(
-        json!({"cli_version":crate::VERSION,"mode":config.provider.mode,"auth":auth,"detected_hosts":detected_hosts(),
+        json!({"cli_version":crate::VERSION,"mode":config.provider.mode,"auth":auth,"detected_hosts":detected,
         "model_dir":config.ark.model_dir.clone().unwrap_or(crate::model_assets::default_directory()?),
         "check":if valid {saved["check"].clone()}else{Value::Null},"configuration_verified":valid && saved["check"]["detected"]==true,
-        "installed_hosts":saved["installed_hosts"],"restart_required":saved["restart_required"],
+        "installed_hosts":installed,"restart_required":saved["restart_required"].as_bool().unwrap_or(!installed.is_empty()),
         "setup_command":"patronus-security-scanner onboarding"}),
     )
 }
@@ -265,7 +267,10 @@ pub fn install(host: &str, source: Option<PathBuf>) -> Result<()> {
         scope: IntegrationScope::User,
         profile: None,
         keep_data: false,
-    })?;
+    })
+}
+
+pub(crate) fn record_install(host: &str) -> Result<()> {
     let path = state_path()?;
     let mut value = std::fs::read(&path)
         .ok()
@@ -344,7 +349,8 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     if !std::io::stdin().is_terminal() {
         return Err(fail("Open an interactive terminal and run patronus-security-scanner onboarding. For diagnostics use --status --format json."));
     }
-    println!("\nPatronus setup\nAccount → mode → models → performance → injection check → integration\nYou can rerun this setup at any time. Existing policies and reports are preserved.\n");
+    println!("Patronus setup\nAccount → mode → models → performance → injection check → integration\nYou can rerun this setup at any time. Existing policies and reports are preserved.");
+    println!("\n  1 / 5  Account\n  ─────────────────────────────────────────");
     let state = status()?;
     if state["auth"]["state"] != "signed_in"
         && ask(
@@ -354,6 +360,7 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     {
         crate::auth::execute(AuthCommand::Login { no_browser: false })?;
     }
+    println!("\n  2 / 5  Processing mode\n  ─────────────────────────────────────────");
     println!("Local: runtime text and files on this device.\nHybrid: prompts local; results and files ≤1024 tokens local, every chunk of larger inputs via API.\nAPI: text scans in the cloud. Explicit URL/MCP audits always use the API.");
     let current = state["mode"].as_str().unwrap_or("local");
     let mut mode = match ask("Processing mode: local / hybrid / api", current)?.as_str() {
@@ -364,6 +371,7 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     };
     configure(mode, "l3")?;
     println!("Analysis: L3");
+    println!("\n  3 / 5  Models and performance\n  ─────────────────────────────────────────");
     if mode != ProviderMode::Api {
         println!(
             "Models: {}",
@@ -393,6 +401,7 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
             format: OutputFormat::Human,
         })?;
     }
+    println!("\n  4 / 5  Injection check\n  ─────────────────────────────────────────");
     println!("\nVisible injection test: {PROBE}");
     let result = check()?;
     println!(
@@ -404,6 +413,7 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
             "Injection check did not pass. Review enabled rules/models before activating plugins.",
         ));
     }
+    println!("\n  5 / 5  Agent integration\n  ─────────────────────────────────────────");
     println!("\nAgent integration:\n  full    Scanner + skills + automatic runtime hooks\n  scanner Scanner + skills, without automatic hooks\n  cli     CLI only, without agent integration");
     let agent_setup = select_agent_setup(&ask("Integration mode: full / scanner / cli", "full")?)?;
     let hosts = detected_hosts();

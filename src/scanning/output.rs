@@ -251,24 +251,27 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("index.html");
         atomic_write(&path, b"initial").unwrap();
-        let barrier = Arc::new(Barrier::new(3));
-        let workers = [b"first".as_slice(), b"second".as_slice()]
-            .into_iter()
-            .map(|contents| {
-                let path = path.clone();
-                let barrier = Arc::clone(&barrier);
-                std::thread::spawn(move || {
-                    barrier.wait();
-                    atomic_write(&path, contents).unwrap();
+        let rounds = if cfg!(windows) { 25 } else { 1 };
+        for _ in 0..rounds {
+            let barrier = Arc::new(Barrier::new(3));
+            let workers = [b"first".as_slice(), b"second".as_slice()]
+                .into_iter()
+                .map(|contents| {
+                    let path = path.clone();
+                    let barrier = Arc::clone(&barrier);
+                    std::thread::spawn(move || {
+                        barrier.wait();
+                        atomic_write(&path, contents).unwrap();
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
-        barrier.wait();
-        for worker in workers {
-            worker.join().unwrap();
+                .collect::<Vec<_>>();
+            barrier.wait();
+            for worker in workers {
+                worker.join().unwrap();
+            }
+            let result = std::fs::read(&path).unwrap();
+            assert!(result == b"first" || result == b"second");
         }
-        let result = std::fs::read(&path).unwrap();
-        assert!(result == b"first" || result == b"second");
         assert!(!dir.path().read_dir().unwrap().any(|entry| entry
             .unwrap()
             .file_name()

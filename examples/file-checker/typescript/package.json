@@ -1,0 +1,16 @@
+{
+  "name": "patronus-file-checker-typescript",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@patronus-protect/api-client": "file:../../../sdk/typescript"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

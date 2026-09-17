@@ -21,7 +21,7 @@ async function fixture(): Promise<{ root: string; config: BrokerConfig }> {
   const cwd = join(root, 'project')
   await mkdir(cwd)
   const configPath = join(root, 'scanner.toml')
-  await writeFile(configPath, '[provider]\nmode="local"\n[ark]\nmax_level="l1"\ndownload_files=false\n')
+  await writeFile(configPath, '[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
   return { root, config: { host: 'codex', sessionId: crypto.randomUUID(), cwd, stateDir: join(root, 'state'), executable: installed, configPath, responseWaitMs: 0 } }
 }
 
@@ -62,7 +62,7 @@ test('installed Ark keeps pending jobs across hooks, separates host sessions and
   try {
     const payload = 'A tree grows in the garden. BROKERBENIGNCANARY731.'
     const pending = await hook(config, { method: 'response', tool: 'read_file', callId: 'safe', payload })
-    assert.equal(pending.status, 'pending')
+    assert.equal(pending.status, 'pending', JSON.stringify(pending))
     assert.equal(pending.job_status, 'queued')
     assert(!JSON.stringify(pending).includes('BROKERBENIGNCANARY731'))
     assert.equal((await hook(other, { method: 'check', scanId: pending.scan_id })).code, 'scan_not_available')
@@ -260,7 +260,7 @@ test('dispatches static scans through the existing engine with installed Ark', {
   await writeFile(path, 'The garden contains three green trees. BROKERSTATICPRIVATE731.')
   try {
     const result = await hook(config, { method: 'static', kind: 'file', path })
-    assert.equal(result.status, 'CLEAN')
+    assert.equal(result.status, 'CLEAN', JSON.stringify(result))
     assert.equal(result.approved, true)
     assert(!JSON.stringify(result).includes('BROKERSTATICPRIVATE731'))
   } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }

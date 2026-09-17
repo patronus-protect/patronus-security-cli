@@ -1,6 +1,6 @@
 {
   "name": "@patronus/native-hooks",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared Patronus Runtime Protection for Codex and Claude Code",
   "license": "Apache-2.0",
   "private": true,

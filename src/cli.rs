@@ -26,8 +26,8 @@ pub enum Command {
         open: bool,
         #[arg(long)]
         status: bool,
-        #[arg(long, value_enum, default_value = "human")]
-        format: OutputFormat,
+        #[arg(long, value_enum)]
+        format: Option<OutputFormat>,
     },
     /// Update or uninstall the CLI and its integrations.
     Maintenance {
@@ -157,7 +157,7 @@ pub enum ScanTarget {
     /// Scan a public HTTPS URL through the API.
     Url(RemoteScanArgs),
     /// Scan a public HTTPS MCP endpoint, optionally selected from a config file.
-    Mcp(RemoteScanArgs),
+    Mcp(McpScanArgs),
     /// Scan a Git repository, including its supported source and text files.
     Repo {
         #[arg(default_value = ".")]
@@ -175,6 +175,9 @@ pub enum ScanTarget {
     /// Scan one explicit file and report its coverage and findings.
     File {
         path: PathBuf,
+        /// Upload this one file to the rate-limited anonymous API.
+        #[arg(long)]
+        anonymous_api: bool,
         #[command(flatten)]
         options: ScanOptions,
     },
@@ -188,7 +191,7 @@ impl ScanTarget {
             Self::Directory { path, options } => {
                 (crate::target::TargetKind::Directory, path, options)
             }
-            Self::File { path, options } => (crate::target::TargetKind::File, path, options),
+            Self::File { path, options, .. } => (crate::target::TargetKind::File, path, options),
         }
     }
 }
@@ -196,8 +199,6 @@ impl ScanTarget {
 #[derive(Debug, Args)]
 pub struct RemoteScanArgs {
     pub target: String,
-    #[arg(long)]
-    pub server: Option<String>,
     #[arg(long)]
     pub config: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "human")]
@@ -208,11 +209,16 @@ pub struct RemoteScanArgs {
     pub category: Vec<String>,
 }
 
+#[derive(Debug, Args)]
+pub struct McpScanArgs {
+    #[command(flatten)]
+    pub scan: RemoteScanArgs,
+    #[arg(long)]
+    pub server: Option<String>,
+}
+
 #[derive(Debug, Clone, Args, Default)]
 pub struct ScanOptions {
-    /// Upload this one file to the rate-limited anonymous API instead of scanning it locally.
-    #[arg(long)]
-    pub anonymous_api: bool,
     /// Retain analyzed chunk content in output artifacts.
     #[arg(long)]
     pub activate_store_content: bool,
@@ -227,8 +233,6 @@ pub struct ScanOptions {
     pub format: OutputFormat,
     #[arg(long, value_enum)]
     pub progress: Option<ProgressMode>,
-    #[arg(long, value_enum, default_value = "auto")]
-    pub color: ColorMode,
     #[arg(long)]
     pub quiet: bool,
     #[arg(long)]
@@ -239,8 +243,8 @@ pub struct ScanOptions {
     pub max_level: Option<MaxLevel>,
     #[arg(long)]
     pub category: Vec<String>,
-    #[arg(long, value_enum, default_value = "incomplete")]
-    pub fail_on: FailOn,
+    #[arg(long, value_enum)]
+    pub fail_on: Option<FailOn>,
 }
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum, PartialEq, Eq)]
@@ -266,12 +270,17 @@ mod anonymous_api_tests {
         ])
         .unwrap();
         let Command::Scan {
-            target: ScanTarget::File { options, .. },
+            target:
+                ScanTarget::File {
+                    anonymous_api,
+                    options,
+                    ..
+                },
         } = cli.command
         else {
             panic!("expected file scan")
         };
-        assert!(options.anonymous_api);
+        assert!(anonymous_api);
         assert!(!options.activate_store_content);
 
         let cli = Cli::try_parse_from([
@@ -283,12 +292,17 @@ mod anonymous_api_tests {
         ])
         .unwrap();
         let Command::Scan {
-            target: ScanTarget::File { options, .. },
+            target:
+                ScanTarget::File {
+                    anonymous_api,
+                    options,
+                    ..
+                },
         } = cli.command
         else {
             panic!("expected file scan")
         };
-        assert!(!options.anonymous_api);
+        assert!(!anonymous_api);
         assert!(options.activate_store_content);
     }
 }
@@ -301,14 +315,6 @@ pub enum ProgressMode {
     Plain,
     Json,
     Off,
-}
-
-#[derive(Debug, Clone, Copy, Default, ValueEnum, PartialEq, Eq)]
-pub enum ColorMode {
-    #[default]
-    Auto,
-    Always,
-    Never,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

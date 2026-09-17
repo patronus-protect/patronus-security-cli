@@ -549,20 +549,21 @@ fn render_index(root: &Path, scans: &[(PathBuf, Report)], sessions: &[ProtocolSu
         "Patronus activity",
         &format!(
             r##"<main>
-      <div class="hero"><div><span class="eyebrow">Security overview</span><h1>Your security.<br><em>In one place.</em></h1><p>Review scan results and the text checks made by your agent plugins.</p></div><span class="pill">Stored on this device</span></div>
+      <div class="hero"><div><span class="eyebrow">Patronus Scanner</span><h1>Security activity</h1><p>Scan results and checks from your agent plugins, stored on this device.</p></div><span class="pill">Local dashboard</span></div>
       <div class="dashboard-tabs">
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-get-started"><label for="tab-get-started">Get started</label>
       <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-overview" checked><label for="tab-overview">Activity</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-api"><label for="tab-api">API</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-policies"><label for="tab-policies">Policies</label>
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-api"><label for="tab-api">Scan</label>
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-policies"><label for="tab-policies">Protection</label>
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-get-started"><label for="tab-get-started">Setup</label>
       <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-settings"><label for="tab-settings">Settings</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-commands"><label for="tab-commands">Help</label>
-      <div class="tab-content activity-content"><div class="control-toolbar"><label>Search activity<input id="activity-search" type="search" placeholder="Host, category or scan"></label><label>Source<select id="activity-type"><option value="">All sources</option><option value="runtime">Plugin runtime</option><option value="file">Files &amp; repositories</option><option value="url">URL</option><option value="mcp">MCP server</option></select></label><label>Result<select id="activity-result"><option value="">All results</option><option value="approved">Approved</option><option value="findings">Findings</option><option value="failed">Failed</option><option value="incomplete">Incomplete</option><option value="pending">Pending</option></select></label></div>
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-commands"><label for="tab-commands">Commands</label>
+      <div class="tab-content activity-content">
       <div class="metrics"><div class="metric"><span>Scanned targets</span><strong>{}</strong></div><div class="metric"><span>Recorded findings</span><strong>{}</strong></div><div class="metric"><span>Agent sessions</span><strong>{}</strong></div><div class="metric"><span>Protocol events</span><strong>{}</strong></div></div>
+      <div class="control-toolbar"><label>Search activity<input id="activity-search" type="search" placeholder="Host, category or scan"></label><label>Source<select id="activity-type"><option value="">All sources</option><option value="runtime">Plugin runtime</option><option value="file">Files &amp; repositories</option><option value="url">URL</option><option value="mcp">MCP server</option></select></label><label>Result<select id="activity-result"><option value="">All results</option><option value="approved">Approved</option><option value="findings">Findings</option><option value="failed">Failed</option><option value="incomplete">Incomplete</option><option value="pending">Pending</option></select></label></div>
       <section class="panel"><div class="panel-head"><div><h2>Static scans</h2><p>Latest result for each file or repository you explicitly checked</p></div><span class="pill">{} targets</span></div><div class="table-wrap"><table><thead><tr><th>Scan / target</th><th>Status</th><th>Started</th><th>Files checked</th><th>Findings</th></tr></thead><tbody>{}</tbody></table></div></section>
       <section class="panel"><div class="panel-head"><div><h2>Protocol sessions</h2><p>Input and result checks across your agents</p></div><span class="pill">{} sessions</span></div><div class="table-wrap"><table><thead><tr><th>Host</th><th>Session</th><th>Last activity</th><th>Last status</th><th>Events</th></tr></thead><tbody>{}</tbody></table></div></section>
-      <section class="panel" data-scan-kind="remote"><div class="panel-head"><div><h2>URL &amp; MCP scans</h2><p>Explicit API checks. Public MCP metadata is inspected without executing tools.</p></div></div><div class="table-wrap"><table><thead><tr><th>Recorded</th><th>Type</th><th>Result</th><th>Categories</th><th>Findings</th><th>Latency</th></tr></thead><tbody>{remote}</tbody></table></div></section>
-      </div>{onboarding}{api_panel}{controls}<div class="tab-content commands-content"><section class="panel"><div class="panel-head"><div><h2>Use Patronus in your chat</h2><p>Automatic text protection and explicit security scans</p></div></div><div class="settings"><div><h3>Ask for a scan</h3><p>Check this file, folder or repository.<br>Check this URL: https://example.org<br>Check this MCP server: its HTTPS URL or configuration file and server name.</p><p>URL and MCP scans use the API. Local stdio MCP processes are not started by the scanner.</p></div><div><h3>Control protection</h3><p><code>patronus on / off / status</code> controls the current chat. Pending scan receipts mean the source tool already ran; the agent retrieves the scan result instead of repeating the action.</p><p>Select the <strong>Get started</strong> tab or run <code>patronus-security-scanner onboarding</code>.</p></div></div></section><section class="panel"><div class="panel-head"><div><h2>Scanner commands</h2><p>Every command in this scanner build, with its description and options</p></div></div><div class="command-list">{commands}</div></section></div></div>
+      <section class="panel" data-scan-kind="remote"><div class="panel-head"><div><h2>URL &amp; MCP scans</h2><p>Explicit API checks of public content</p></div></div><div class="table-wrap"><table><thead><tr><th>Recorded</th><th>Type</th><th>Result</th><th>Categories</th><th>Findings</th><th>Latency</th></tr></thead><tbody>{remote}</tbody></table></div></section>
+      </div>{onboarding}{api_panel}{controls}<div class="tab-content commands-content"><section class="panel"><div class="panel-head"><div><h2>Use Patronus in your chat</h2><p>Automatic text protection and explicit security scans</p></div></div><div class="settings"><div><h3>Ask for a scan</h3><p>Check this file, folder or repository.<br>Check this URL: https://example.org<br>Check this MCP server: its HTTPS URL or configuration file and server name.</p><p>URL and MCP scans use the API. Local stdio MCP processes are not started by the scanner.</p></div><div><h3>Control protection</h3><p><code>patronus on / off / status</code> controls the current chat. Pending scan receipts mean the source tool already ran; the agent retrieves the scan result instead of repeating the action.</p><p>Select the <strong>Setup</strong> tab or run <code>patronus-security-scanner onboarding</code>.</p></div></div></section><section class="panel"><div class="panel-head"><div><h2>Scanner commands</h2><p>Every command in this scanner build, with its description and options</p></div></div><div class="command-list">{commands}</div></section></div></div>
     </main>"##,
             scans.len(),
             findings,
@@ -679,14 +680,12 @@ fn page_with_account(title: &str, body: &str, root: Option<&Path>) -> String {
     let icon = encode(include_bytes!("../../plugins/codex/assets/icon.png"));
     let fonts = format!("@font-face{{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;src:url(data:font/woff2;base64,{}) format('woff2')}}@font-face{{font-family:Manrope;font-style:normal;font-weight:200 800;font-display:swap;src:url(data:font/woff2;base64,{}) format('woff2')}}", encode(include_bytes!("assets/inter-latin.woff2")), encode(include_bytes!("assets/manrope-latin.woff2")));
     let account = root.and_then(|path| crate::auth::status(path).ok());
-    let account_label = if account
+    let signed_in = account
         .as_ref()
-        .is_some_and(|status| status.state == "signed_in")
-    {
-        "Account"
-    } else {
-        "Sign in"
-    };
+        .is_some_and(|status| status.state == "signed_in");
+    let expired = account
+        .as_ref()
+        .is_some_and(|status| status.state == "expired");
     let account_status = match account {
         Some(status) if status.state == "signed_in" => format!("<p>Signed in when this snapshot was saved. Token expiry: <strong>{}</strong>. Check current status with <code>patronus-security-scanner auth status --check</code>.</p>", chrono::DateTime::from_timestamp(status.expires_at.unwrap_or_default(), 0).map(|date| date.to_rfc3339()).unwrap_or_default()),
         Some(status) if status.state == "expired" => "<p>Your token has expired. Sign in again to use the API and MCP.</p>".into(),
@@ -698,12 +697,23 @@ patronus-security-scanner auth logout</pre><p>This HTML file is a snapshot. Logi
     );
     let login = if root.is_some() { login } else { String::new() };
     let account_link = if root.is_some() {
-        format!(r##"<a class="button" href="#sign-in">{account_label}</a>"##)
+        if signed_in {
+            r##"<span class="account-status connected" id="account-status">Connected</span><a class="button" id="account-action" href="https://control.patronus.studio/" target="_blank" rel="noopener noreferrer">Open Control Plane</a>"##.to_string()
+        } else {
+            let (status, action) = if expired {
+                ("Session expired", "Reconnect")
+            } else {
+                ("Not connected", "Connect Control Plane")
+            };
+            format!(
+                r##"<span class="account-status" id="account-status">{status}</span><a class="button" id="account-action" href="#sign-in">{action}</a>"##
+            )
+        }
     } else {
         String::new()
     };
     format!(
-        r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"><link rel="icon" href="data:image/png;base64,{icon}"><title>{}</title><style>{fonts}{}</style></head><body><header><div class="topbar"><div class="brand"><img alt="Patronus" src="data:image/png;base64,{icon}"><span>Patronus<span style="font-weight:400;color:var(--muted)"> / Security</span></span></div><div class="header-actions"><span class="local">Local activity</span>{account_link}</div></div></header>{login}{}<footer>Patronus Security · This is a saved activity snapshot. Raw runtime payloads are not included in protocol logs.</footer></body></html>"##,
+        r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"><link rel="icon" href="data:image/png;base64,{icon}"><title>{}</title><style>{fonts}{}</style></head><body><header><div class="topbar"><div class="brand"><img alt="Patronus" src="data:image/png;base64,{icon}"><span>Patronus<span style="font-weight:400;color:var(--muted)"> / Scanner</span></span></div><div class="header-actions"><span class="local">Local activity</span>{account_link}</div></div></header>{login}{}<footer>Patronus Security · This is a saved activity snapshot. Raw runtime payloads are not included in protocol logs.</footer></body></html>"##,
         html(title),
         include_str!("dashboard.css"),
         body

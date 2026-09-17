@@ -71,16 +71,17 @@ let usageLoading=false;
 async function refreshUsage(){
  if(usageLoading)return;usageLoading=true;$('refresh-usage').disabled=true;
  try{
-  const result=await api('/api/usage'),grid=$('usage-values');grid.replaceChildren();
+  const result=await api('/api/usage'),grid=$('usage-values');grid.replaceChildren();$('upgrade-cta').hidden=true;
   $('usage-panel').hidden=false;
   if(result.state!=='available'){$('usage-status').textContent=result.state==='expired'?'Sign in again to see your usage limits.':result.message||'Sign in to see usage limits.';return;}
   const {plan,usage}=result.account;$('usage-status').textContent=`${plan[0].toUpperCase()+plan.slice(1)} plan · Shared account usage · Updated ${new Date().toLocaleTimeString()}`;
+  $('upgrade-cta').hidden=plan!=='free';
   for(const [label,used,limit,reset]of [['Today',usage.daily_requests,usage.daily_limit,usage.day_resets_at],['This month',usage.monthly_requests,usage.monthly_limit,usage.month_resets_at]]){
    const box=node('div');box.append(node('h3',label),node('p',`${used.toLocaleString()} / ${limit===null?'unlimited':limit.toLocaleString()} requests`));
    if(limit!==null)box.append(node('p',`${Math.max(0,limit-used).toLocaleString()} remaining`));
    box.append(node('p',`Resets ${new Date(reset).toLocaleString()}`));grid.append(box);
   }
- }catch(error){$('usage-values').replaceChildren();$('usage-panel').hidden=false;$('usage-status').textContent='Usage unavailable. Please refresh.';}
+ }catch(error){$('usage-values').replaceChildren();$('upgrade-cta').hidden=true;$('usage-panel').hidden=false;$('usage-status').textContent='Usage unavailable. Please refresh.';}
  finally{usageLoading=false;$('refresh-usage').disabled=false;}
 }
 on('refresh-usage','click',refreshUsage);

@@ -1,7 +1,8 @@
-use std::io::{Read, Write};
+use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+mod home;
 use patronus_security_scanner::ark::{ChunkInput, ContentAnalyzer};
 use patronus_security_scanner::chunk::chunk_content;
 use patronus_security_scanner::cli::{
@@ -17,7 +18,26 @@ use patronus_security_scanner::report::{build_report, exit_code, terminal_summar
 use patronus_security_scanner::target::{display_path, ScanTarget, TargetKind};
 
 fn main() {
-    let cli = Cli::parse();
+    let cli = if std::env::args_os().len() == 1 {
+        if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+            let _ = Cli::command().print_help();
+            println!();
+            return;
+        }
+        match home::choose() {
+            Ok(Some(args)) => Cli::parse_from(
+                std::iter::once(std::ffi::OsString::from("patronus-security-scanner"))
+                    .chain(args.into_iter().map(std::ffi::OsString::from)),
+            ),
+            Ok(None) => return,
+            Err(error) => {
+                eprintln!("error: {error}");
+                std::process::exit(4);
+            }
+        }
+    } else {
+        Cli::parse()
+    };
     match execute(cli) {
         Ok(code) => std::process::exit(code),
         Err(error) => {
@@ -41,6 +61,12 @@ fn execute(cli: Cli) -> Result<i32> {
             open,
             check,
         } => {
+            if !status && !check && format.is_some() {
+                return Err(ScannerError::Output(
+                    "onboarding --format is supported only with --status or --check".into(),
+                ));
+            }
+            let format = format.unwrap_or(OutputFormat::Human);
             if check {
                 return patronus_security_scanner::onboarding::check_command(format);
             }
@@ -52,15 +78,22 @@ fn execute(cli: Cli) -> Result<i32> {
         }
         Command::Scan {
             target: patronus_security_scanner::cli::ScanTarget::Url(args),
-        } => patronus_security_scanner::remote_scan::execute("url", args),
+        } => patronus_security_scanner::remote_scan::execute("url", args, None),
         Command::Scan {
             target: patronus_security_scanner::cli::ScanTarget::Mcp(args),
-        } => patronus_security_scanner::remote_scan::execute("mcp", args),
+        } => patronus_security_scanner::remote_scan::execute(
+            "mcp",
+            args.scan,
+            args.server.as_deref(),
+        ),
         Command::Scan {
-            target: patronus_security_scanner::cli::ScanTarget::File { path, options },
-        } if options.anonymous_api => {
-            patronus_security_scanner::remote_scan::execute_file(&path, options)
-        }
+            target:
+                patronus_security_scanner::cli::ScanTarget::File {
+                    path,
+                    anonymous_api: true,
+                    options,
+                },
+        } => patronus_security_scanner::remote_scan::execute_file(&path, options),
         Command::Maintenance { command } => {
             patronus_security_scanner::maintenance::execute(command)?;
             Ok(0)
@@ -216,6 +249,16 @@ fn scan(
     input: &Path,
     options: patronus_security_scanner::cli::ScanOptions,
 ) -> Result<i32> {
+    if kind != TargetKind::Repo && options.no_repo_config {
+        return Err(ScannerError::Output(
+            "--no-repo-config applies only to scan repo".into(),
+        ));
+    }
+    if kind == TargetKind::File && (!options.include.is_empty() || !options.ignore.is_empty()) {
+        return Err(ScannerError::Output(
+            "--include and --ignore apply only to scan repo or scan directory".into(),
+        ));
+    }
     let target = ScanTarget::resolve(kind, input)?;
     let repo_config =
         (kind == TargetKind::Repo && !options.no_repo_config).then_some(target.root.as_path());
@@ -472,7 +515,10 @@ fn scan(
                 .map_err(|error| ScannerError::Output(error.to_string()))?
         ),
     }
-    Ok(exit_code(report.status, options.fail_on))
+    Ok(exit_code(
+        report.status,
+        options.fail_on.unwrap_or_default(),
+    ))
 }
 
 #[cfg(test)]

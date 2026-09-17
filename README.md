@@ -84,6 +84,12 @@ Run onboarding again at any time:
 patronus-security-scanner onboarding
 ```
 
+Run `patronus-security-scanner` without arguments in an interactive terminal to
+open quick actions for scans, setup status, the dashboard and onboarding.
+Arrow keys and Enter select an action; number keys select one directly. In
+non-interactive use, the same command prints CLI help. Choosing onboarding keeps
+the setup steps and their output in the terminal.
+
 If you install another host later, either rerun onboarding or use one direct command:
 
 ```sh

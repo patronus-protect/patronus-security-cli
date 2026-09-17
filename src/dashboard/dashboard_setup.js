@@ -1,8 +1,16 @@
 let setupState, setupHandoff, setupPoll;
 async function loadSetup(){
  const data=await api('/api/onboarding');setupState=data.setup;
+ const authState=setupState.auth.state,connected=authState==='signed_in',accountAction=$('account-action');
+ $('account-status').textContent=connected?'Connected':authState==='expired'?'Session expired':'Not connected';
+ $('account-status').classList.toggle('connected',connected);
+ accountAction.textContent=connected?'Open Control Plane':authState==='expired'?'Reconnect':'Connect Control Plane';
+ accountAction.setAttribute('href',connected?'https://control.patronus.studio/':'#sign-in');
+ if(connected){accountAction.setAttribute('target','_blank');accountAction.setAttribute('rel','noopener noreferrer');}
+ else{accountAction.removeAttribute('target');accountAction.removeAttribute('rel');}
  $('setup-account').textContent=setupState.auth.state==='signed_in'?'Account connected. Usage is shown below.':'No active API login.';
  $('setup-logout').hidden=setupState.auth.state!=='signed_in';
+ $('setup-login').hidden=setupState.auth.state==='signed_in';
  $('setup-mode').value=setupState.mode;$('setup-level').value=state.config.ark.max_level;
  $('setup-model-dir').textContent=`Model folder: ${setupState.model_dir}`;
  $('setup-models').disabled=setupState.mode==='api';
@@ -17,6 +25,10 @@ async function loadSetup(){
  for(const host of setupState.detected_hosts){const b=button(`Protect ${host}`,()=>startSetupJob('install',host));b.disabled=!setupState.configuration_verified;hosts.append(b);}
  showSetupJob(data.job);
 }
+on('account-action','click',event=>{
+ if(!setupState||setupState.auth.state==='signed_in')return;
+ event.preventDefault();$('tab-get-started').checked=true;$('onboarding').scrollIntoView({behavior:'smooth',block:'start'});$('setup-login').click();
+});
 function showCheck(b){$('setup-check-result').textContent=`${b.detected?'Injection detected':'Detection failed — review your enabled rules'} · ${b.provider}`;}
 function showSetupJob(job){
  clearTimeout(setupPoll);

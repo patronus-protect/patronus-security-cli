@@ -446,6 +446,12 @@ pub fn execute(command: AuthCommand) -> Result<()> {
     let client = Client::new();
     match command {
         AuthCommand::Login { no_browser } => {
+            if status(&root)?.state == "signed_in" {
+                println!(
+                    "Already signed in. Run auth logout before signing in to another account."
+                );
+                return Ok(());
+            }
             let login = Login::new();
             let url = login.url();
             println!("Open this link, sign in and authorize this CLI:\n\n{url}\n\nPaste the one-time login code below. Your API/MCP token will be valid for 14 days.");
@@ -590,6 +596,11 @@ fn handoffs() -> &'static std::sync::Mutex<std::collections::HashMap<String, Bro
     PENDING.get_or_init(Default::default)
 }
 pub fn begin_browser_login() -> Result<serde_json::Value> {
+    if status(&crate::config::user_root()?)?.state == "signed_in" {
+        return Err(error(
+            "already signed in; sign out before starting a new login",
+        ));
+    }
     let mut pending = handoffs()
         .lock()
         .map_err(|_| error("login state unavailable"))?;
@@ -618,8 +629,13 @@ pub fn finish_browser_login(id: &str, code: &str) -> Result<AuthStatus> {
     if pending.created.elapsed() >= Duration::from_secs(300) {
         return Err(error("login expired; start again"));
     }
-    let credentials = Client::new().exchange(&pending.login, code.trim())?;
     let root = crate::config::user_root()?;
+    if status(&root)?.state == "signed_in" {
+        return Err(error(
+            "already signed in; sign out before starting a new login",
+        ));
+    }
+    let credentials = Client::new().exchange(&pending.login, code.trim())?;
     save(&root, &credentials)?;
     refresh_dashboard(&root);
     status(&root)
@@ -655,7 +671,8 @@ mod tests {
             .contains("test_bearer"));
         crate::dashboard::rebuild_index(dir.path(), &dir.path().join("output")).unwrap();
         let index = std::fs::read_to_string(dir.path().join("index.html")).unwrap();
-        assert!(index.contains(">Account</a>"));
+        assert!(index.contains("account-status connected"));
+        assert!(index.contains(">Open Control Plane</a>"));
         assert!(!index.contains("test_bearer"));
         save(dir.path(), &credentials(1)).unwrap();
         assert_eq!(status(dir.path()).unwrap().state, "expired");

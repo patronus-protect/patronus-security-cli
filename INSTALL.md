@@ -5,14 +5,14 @@ perform the download, checksum verification, CLI installation and integration
 checks. The user must approve writes outside the current project and personally
 complete interactive onboarding and browser authentication.
 
-Patronus installs from the fixed public GitHub release `v0.1.0`. You do not need Git, Cargo, a repository checkout, or a manually extracted plugin archive.
+Patronus installs from the versioned GitHub release `v0.1.1`. You do not need Git, Cargo, a repository checkout, or a manually extracted plugin archive.
 
 ## Install and configure
 
 Download and verify the installer before running it in an interactive macOS or Linux terminal:
 
 ```sh
-version=v0.1.0
+version=v0.1.1
 base="https://github.com/patronus-protect/patronus-security-cli/releases/download/$version"
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' 0 HUP INT TERM
@@ -31,7 +31,7 @@ fi
 PATRONUS_VERSION="$version" sh "$work_dir/install.sh"
 ```
 
-The installer fetches only the matching `v0.1.0` artifact, verifies it against the checksum published with that release, places the CLI in `~/.local/bin`, verifies that it starts, and launches onboarding. The checksum establishes integrity within the GitHub release channel; it is not an independent signature. Onboarding always configures L3. Local mode first measures a 256-token L3 check and recommends Hybrid above 200 ms, then runs the visible safety check in the final mode. Finally choose Full protection, Scanner + skills without automatic hooks, or CLI only; plugin downloads and installation for selected hosts are automatic.
+The installer fetches only the matching `v0.1.1` artifact, verifies it against the checksum published with that release, places the CLI in `~/.local/bin`, verifies that it starts, and launches onboarding. The checksum establishes integrity within the GitHub release channel; it is not an independent signature. Onboarding always configures L3. Local mode first measures a 256-token L3 check and recommends Hybrid above 200 ms, then runs the visible safety check in the final mode. Finally choose Full protection, Scanner + skills without automatic hooks, or CLI only; plugin downloads and installation for selected hosts are automatic.
 
 Start a new agent chat when onboarding asks you to. Try:
 
@@ -55,7 +55,7 @@ request or expose API keys, login tokens or anonymous identity cookies in chat.
 If the agent cannot attach onboarding to an interactive terminal, it may install first and open setup visibly:
 
 ```sh
-curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.0/install.sh | PATRONUS_VERSION=v0.1.0 sh -s -- --no-onboarding
+curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.1/install.sh | PATRONUS_VERSION=v0.1.1 sh -s -- --no-onboarding
 patronus-security-scanner onboarding --open
 ```
 

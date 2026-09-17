@@ -303,8 +303,9 @@ export class StaticScanner {
       await writeFile(configPath, Object.entries(config).map(([key, value]) => `${JSON.stringify(key)} = ${toml(value)}`).join('\n'), { mode: 0o600, flag: 'wx' })
       phase = 'scan_unavailable'
       const result = await run(executable, [
-        'scan', input.kind as string, '--no-repo-config', '--config', configPath, '--output', output,
-        '--format', 'json', '--progress', 'off', '--color', 'never', '--fail-on', 'incomplete', '--', target,
+        'scan', input.kind as string, ...(input.kind === 'repo' ? ['--no-repo-config'] : []),
+        '--config', configPath, '--output', output, '--format', 'json', '--progress', 'off',
+        '--fail-on', 'incomplete', '--', target,
       ], scratch, MAX_REPORT_BYTES, signal)
       const projected = summary(result.value, result.code, input.kind as string, printed.value.provider.mode === 'api' ? 'api' : 'local', this.staticRedaction)
       if (register) await this.registerReferences(result.value, target, input.kind as string, projected)

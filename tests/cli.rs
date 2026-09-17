@@ -3,6 +3,17 @@ use std::path::Path;
 use assert_cmd::Command;
 
 #[test]
+fn bare_command_prints_help_without_a_terminal() {
+    Command::cargo_bin("patronus-security-scanner")
+        .unwrap()
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "Usage: patronus-security-scanner",
+        ));
+}
+
+#[test]
 fn version_contract_is_stable() {
     Command::cargo_bin("patronus-security-scanner")
         .unwrap()
@@ -10,6 +21,57 @@ fn version_contract_is_stable() {
         .assert()
         .success()
         .stdout(predicates::str::contains("patronus-ark 0.1.7"));
+}
+
+#[test]
+fn unsupported_scan_and_update_flags_fail_before_running() {
+    for args in [
+        vec!["scan", "repo", ".", "--anonymous-api"],
+        vec!["scan", "directory", ".", "--anonymous-api"],
+        vec!["scan", "url", "https://example.org", "--server", "unused"],
+        vec!["scan", "file", "example.txt", "--color", "always"],
+    ] {
+        Command::cargo_bin("patronus-security-scanner")
+            .unwrap()
+            .args(args)
+            .assert()
+            .failure();
+    }
+    Command::cargo_bin("patronus-security-scanner")
+        .unwrap()
+        .args([
+            "scan",
+            "file",
+            "example.txt",
+            "--anonymous-api",
+            "--fail-on",
+            "never",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Anonymous file uploads support only",
+        ));
+    Command::cargo_bin("patronus-security-scanner")
+        .unwrap()
+        .args(["integration", "claude", "update", "--source", "example.tgz"])
+        .assert()
+        .code(6)
+        .stderr(predicates::str::contains("--source is supported only"));
+    Command::cargo_bin("patronus-security-scanner")
+        .unwrap()
+        .args(["scan", "file", "example.txt", "--include", "*.txt"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "--include and --ignore apply only",
+        ));
+    Command::cargo_bin("patronus-security-scanner")
+        .unwrap()
+        .args(["onboarding", "--format", "json"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("--format is supported only"));
 }
 
 #[test]

@@ -13,7 +13,7 @@ export function handleMcp(value: unknown): object | undefined {
   const id = typeof request.id === 'number' && Number.isSafeInteger(request.id) || typeof request.id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(request.id) ? request.id : null
   const result = (data: object) => ({ jsonrpc: '2.0', id, result: data })
   if (request.jsonrpc !== '2.0' || id === null) return { jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid request.' } }
-  if (request.method === 'initialize') return result({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'patronus-native', version: '0.1.0' } })
+  if (request.method === 'initialize') return result({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'patronus-native', version: '0.1.1' } })
   if (request.method === 'ping') return result({})
   if (request.method === 'tools/list') return result({ tools })
   if (request.method === 'tools/call') {

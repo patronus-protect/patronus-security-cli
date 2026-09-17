@@ -380,6 +380,19 @@ fn remote_file(path: &Path, options: &ScanOptions) -> Result<RemoteReport> {
 }
 
 pub fn execute_file(path: &Path, options: ScanOptions) -> Result<i32> {
+    if options.activate_store_content
+        || options.no_repo_config
+        || options.output.is_some()
+        || options.progress.is_some()
+        || options.quiet
+        || !options.include.is_empty()
+        || !options.ignore.is_empty()
+        || options.fail_on.is_some()
+    {
+        return Err(error(
+            "Anonymous file uploads support only --config, --format, --max-level and --category",
+        ));
+    }
     execute_result("file", options.format, remote_file(path, &options))
 }
 
@@ -485,7 +498,7 @@ fn summarize(kind: &str, categories: &[String], jobs: &[Value]) -> Result<Remote
         scanned_at: None,
     })
 }
-pub fn execute(kind: &str, args: RemoteScanArgs) -> Result<i32> {
+pub fn execute(kind: &str, args: RemoteScanArgs, server: Option<&str>) -> Result<i32> {
     let format = args.format;
     let report = (|| {
         let mut config = Config::load(args.config.as_deref(), None)?;
@@ -495,7 +508,7 @@ pub fn execute(kind: &str, args: RemoteScanArgs) -> Result<i32> {
         if !args.category.is_empty() {
             config.ark.categories = args.category;
         }
-        scan(&config, kind, &args.target, args.server.as_deref())
+        scan(&config, kind, &args.target, server)
     })();
     execute_result(kind, format, report)
 }
