@@ -18,5 +18,5 @@
     "test": "npm run build && node --test test/client.test.mjs",
     "test:live": "npm run build && node --test test/live.test.mjs"
   },
-  "devDependencies": { "typescript": "^5.8.0" }
+  "devDependencies": { "typescript": "^7.0.2" }
 }
