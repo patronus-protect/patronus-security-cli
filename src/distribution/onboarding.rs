@@ -196,12 +196,16 @@ pub fn configure(mode: ProviderMode, level: &str) -> Result<()> {
         config.ark.model_dir = Some(crate::model_assets::default_directory()?);
     }
     config.ark.download_files = false;
-    if level == "l1" {
-        config.ark.categories.retain(|c| c != "threat");
-    } else if !config.ark.categories.iter().any(|c| c == "threat") {
-        config.ark.categories.push("threat".into());
-    }
+    select_level_categories(&mut config.ark.categories, level);
     crate::local_settings::save(&config)
+}
+
+/// Threat detection is opt-in: onboarding never enables it, keeps an explicit
+/// choice, and removes it at L1 because Ark has no L1 threat detector.
+fn select_level_categories(categories: &mut Vec<String>, level: &str) {
+    if level == "l1" {
+        categories.retain(|c| c != "threat");
+    }
 }
 pub fn check() -> Result<InjectionCheck> {
     let config = Config::load(None, None)?;
@@ -563,6 +567,29 @@ pub fn check_command(format: OutputFormat) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn categories(items: &[&str]) -> Vec<String> {
+        items.iter().map(|item| item.to_string()).collect()
+    }
+    #[test]
+    fn onboarding_leaves_threat_off_by_default_at_every_level() {
+        for level in ["l1", "l2", "l3"] {
+            let mut selected = categories(&["prompt_injection", "dlp", "pii"]);
+            select_level_categories(&mut selected, level);
+            assert_eq!(
+                selected,
+                categories(&["prompt_injection", "dlp", "pii"]),
+                "{level}"
+            );
+        }
+    }
+    #[test]
+    fn onboarding_keeps_an_explicit_threat_opt_in_except_at_l1() {
+        for (level, kept) in [("l2", true), ("l3", true), ("l1", false)] {
+            let mut selected = categories(&["prompt_injection", "threat"]);
+            select_level_categories(&mut selected, level);
+            assert_eq!(selected.iter().any(|c| c == "threat"), kept, "{level}");
+        }
+    }
     #[test]
     fn failed_or_partial_probe_is_not_ready() {
         let outcome = crate::ark::AnalysisOutcome {

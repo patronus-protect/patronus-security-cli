@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Threat detection is now opt-in: onboarding no longer enables it at L2/L3 and keeps an explicit choice.
 - When the Patronus API usage or rate limit is exhausted, scan locally instead in hybrid and API mode, and tell users and agents why (Claude, Codex, DeepSeek, CLI reports). If local scanning is unavailable, report the usage limit instead of "protection is inactive".
 - Claude returns Patronus tool results as ordinary MCP results and shows a readable reason for blocked prompts.
 - Changing the working directory no longer disables Claude runtime protection.
