@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { handleHook as runHook } from '../src/hooks.ts'
+import { handleMcp } from '../src/mcp.ts'
 
 const noProtocol = async (_config: unknown, _request: unknown, run: () => Promise<any>) => run()
 const handleHook: typeof runHook = (host, event, value, overrides, rpc) => runHook(host, event, value, overrides, rpc, noProtocol)
 
 const base = { session_id: 'native-session-731', cwd: '/private/tmp', tool_name: 'Bash', tool_use_id: 'call-731', tool_input: { command: 'true' } }
 const input = (event: string, extra = {}) => ({ ...base, hook_event_name: event, ...extra })
+/** Claude runs Patronus tools in its MCP server, which knows the session from its environment. */
+const claudeTool = async (name: string, args: unknown, rpc: (config: any, request: any) => Promise<any>) => {
+  const response: any = await handleMcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
+    { host: 'claude', cwd: base.cwd, scan: request => rpc({ host: 'claude', sessionId: base.session_id, cwd: base.cwd }, request) })
+  return response.result as { isError: boolean; content: { type: string; text: string }[] }
+}
 
 test('ordinary tool requests are outside the runtime text contract for every host', async () => {
   const calls: unknown[] = []
@@ -49,10 +56,13 @@ test('queued receipts tell Codex and Claude to preserve the scan id and poll lat
 })
 
 test('queued status retrieval retains the queue guidance for every native host', async () => {
-  for (const host of ['codex', 'claude'] as const) {
-    const result: any = await handleHook(host, 'PreToolUse', input('PreToolUse', {
-      tool_name: 'mcp__patronus__patronus_check_result', tool_input: { scan_id: 'scan-queued-731' },
-    }), {}, async () => ({ scan_id: 'scan-queued-731', status: 'pending', job_status: 'queued' }))
+  const rpc = async () => ({ scan_id: 'scan-queued-731', status: 'pending', job_status: 'queued' })
+  const codex = await handleHook('codex', 'PreToolUse', input('PreToolUse', {
+    tool_name: 'mcp__patronus__patronus_check_result', tool_input: { scan_id: 'scan-queued-731' },
+  }), {}, rpc)
+  const claude = await claudeTool('patronus_check_result', { scan_id: 'scan-queued-731' }, rpc)
+  assert.equal(claude.isError, false)
+  for (const result of [codex, claude]) {
     const visible = JSON.stringify(result)
     assert.match(visible, /scanner_queue/)
     assert.match(visible, /not a scan failure or expiry/)
@@ -79,6 +89,31 @@ test('retrieval rejects extra session and file arguments before contacting the b
   assert.equal(result.hookSpecificOutput.permissionDecision, 'deny')
 })
 
+test('Claude lets its own tools run as ordinary MCP calls and never rescans their results', async () => {
+  const rpc = async () => assert.fail('the hook must not contact the broker for Patronus tools')
+  for (const tool_name of ['mcp__patronus__patronus_check_result', 'mcp__plugin_patronus-security_patronus__patronus_check_result']) {
+    assert.deepEqual(await handleHook('claude', 'PreToolUse', input('PreToolUse', { tool_name, tool_input: { scan_id: 'scan-731' } }), {}, rpc), {})
+    assert.deepEqual(await handleHook('claude', 'PostToolUse', input('PostToolUse', { tool_name, tool_response: 'APPROVED-DOCUMENT' }), {}, rpc), {})
+  }
+})
+
+test('Claude returns an approved original as a normal MCP result for its session', async () => {
+  let config: any, request: any
+  const result = await claudeTool('patronus_check_result', { scan_id: 'scan-731' }, async (c, r) => {
+    config = c; request = r; return { scan_id: 'scan-731', status: 'approved', result: 'APPROVED-DOCUMENT' }
+  })
+  assert.equal(config.sessionId, base.session_id)
+  assert.deepEqual(request, { method: 'check', scanId: 'scan-731' })
+  assert.equal(result.isError, false)
+  assert.match(result.content[0]!.text, /APPROVED-DOCUMENT/)
+})
+
+test('hooks bind the broker to the configured project directory, not the current cwd', async () => {
+  let config: any
+  await handleHook('claude', 'PostToolUse', input('PostToolUse', { tool_response: 'TEXT-731' }), { cwd: '/private/project' }, async c => { config = c; return { status: 'approved' } })
+  assert.equal(config.cwd, '/private/project')
+})
+
 test('static scope reaches the scanner as an absolute path, without source bytes', async () => {
   let request: any
   const result: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', { tool_name: 'mcp__patronus__patronus_scan', tool_input: { kind: 'file', path: 'notes.txt' } }), {}, async (_c, r) => { request = r; return { status: 'CLEAN', approved: true } })
@@ -89,11 +124,10 @@ test('static scope reaches the scanner as an absolute path, without source bytes
 
 test('invalid static arguments return actionable validation without contacting the broker', async () => {
   let calls = 0
-  const result: any = await handleHook('claude', 'PreToolUse', input('PreToolUse', {
-    tool_name: 'mcp__patronus__patronus_scan', tool_input: { path: '/private/tmp/notes.txt' },
-  }), {}, async () => { calls++; return {} })
+  const result = await claudeTool('patronus_scan', { path: '/private/tmp/notes.txt' }, async () => { calls++; return {} })
   assert.equal(calls, 0)
-  const receipt = JSON.parse(result.hookSpecificOutput.permissionDecisionReason)
+  assert.equal(result.isError, true)
+  const receipt = JSON.parse(result.content[0]!.text)
   assert.deepEqual(receipt, {
     status: 'invalid_arguments', code: 'missing_required_arguments', required: ['kind', 'path'], missing: ['kind'],
     next_tool: null, message: 'Call the same Patronus tool once with exactly these required arguments: kind, path.',
@@ -105,10 +139,9 @@ test('static file redaction uses file_id while runtime redaction keeps scan_id',
   const fileId = `file_${'a'.repeat(64)}`
   const requests: unknown[] = []
   for (const args of [{ file_id: fileId }, { scan_id: 'scan-731' }]) {
-    const result: any = await handleHook('claude', 'PreToolUse', input('PreToolUse', {
-      tool_name: 'mcp__patronus__patronus_read_redacted', tool_input: args,
-    }), {}, async (_config, request) => { requests.push(request); return { status: 'redacted', result: '[REDACTED]' } })
-    assert.equal(result.hookSpecificOutput.permissionDecision, 'deny')
+    const result = await claudeTool('patronus_read_redacted', args, async (_config, request) => { requests.push(request); return { status: 'redacted', result: '[REDACTED]' } })
+    assert.equal(result.isError, false)
+    assert.match(result.content[0]!.text, /\[REDACTED\]/)
   }
   assert.deepEqual(requests, [
     { method: 'read_static_redacted', fileId },
@@ -135,10 +168,10 @@ test('failed URL audits fall open with degraded context', async () => {
 })
 
 test('remote audit failures report their cause without claiming the integration is inactive', async () => {
-  const result: any = await handleHook('claude', 'PreToolUse', input('PreToolUse', {
-    tool_name: 'mcp__patronus__patronus_scan', tool_input: { kind: 'url', path: 'https://example.org/' },
-  }), {}, async () => ({ schema: 'patronus.deepseek.static.v1', status: 'FAILED', approved: false, reason: 'authentication_missing' }))
-  const message = result.hookSpecificOutput.additionalContext
+  const result = await claudeTool('patronus_scan', { kind: 'url', path: 'https://example.org/' },
+    async () => ({ schema: 'patronus.deepseek.static.v1', status: 'FAILED', approved: false, reason: 'authentication_missing' }))
+  assert.equal(result.isError, true)
+  const message = result.content[0]!.text
   assert.match(message, /auth login/)
   assert.doesNotMatch(message, /integration is inactive/)
 })
@@ -217,9 +250,20 @@ test('Claude blocks a non-approved user prompt without returning its raw text', 
   const result: any = await handleHook('claude', 'UserPromptSubmit', input('UserPromptSubmit', {
     prompt_id: 'prompt-731', prompt,
   }), {}, async () => ({ scan_id: 'scan-731', status: 'dangerous' }))
-  assert.equal(result.continue, false)
+  assert.equal(result.decision, 'block')
   assert(!JSON.stringify(result).includes(prompt))
-  assert.match(result.stopReason, /"status":"dangerous"/)
+  assert.match(result.reason, /^Patronus blocked this message \(scan status: dangerous\)\. It was not sent to Claude\./)
+  assert.doesNotMatch(result.reason, /[{}]/)
+})
+
+test('Claude names detected categories in the readable prompt block reason', async () => {
+  const result: any = await handleHook('claude', 'UserPromptSubmit', input('UserPromptSubmit', {
+    prompt_id: 'prompt-732', prompt: 'RAW-USER-PROMPT-732',
+  }), {}, async () => ({ scan_id: 'scan-732', status: 'dangerous', findings: [
+    { category: 'prompt_injection', level: 'l3' }, { category: 'threat', level: 'l3' }, { category: 'threat', level: 'l2' },
+  ] }))
+  assert.equal(result.decision, 'block')
+  assert.match(result.reason, /^Patronus blocked this message: prompt injection, threat detected\. It was not sent to Claude\./)
 })
 
 test('Claude scans exact tool failure text and admits an approved error', async () => {

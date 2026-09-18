@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+import { consumeIgnoreOnce, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
+import { handleHook } from '../src/hooks.ts'
+
+test('one-time command is scoped to host, chat and original text, then expires on use', () => {
+  const root = mkdtempSync(join(tmpdir(), 'patronus-ignore-once-'))
+  const previous = process.env.PATRONUS_DATA_DIR
+  process.env.PATRONUS_DATA_DIR = root
+  try {
+    const token = issueIgnoreOnce('codex', 'chat-1', 'blocked prompt')
+    assert.equal(consumeIgnoreOnce('claude', 'chat-1', `blocked prompt ${token}`), false)
+    assert.equal(consumeIgnoreOnce('codex', 'chat-2', `blocked prompt ${token}`), false)
+    assert.equal(consumeIgnoreOnce('codex', 'chat-1', `blocked prompt ${token}`), true)
+    assert.equal(consumeIgnoreOnce('codex', 'chat-1', `blocked prompt ${token}`), false)
+    const second = issueIgnoreOnce('codex', 'chat-1', 'blocked prompt')
+    assert.equal(consumeIgnoreOnce('codex', 'chat-1', `changed prompt ${second}`), false)
+  } finally {
+    if (previous === undefined) delete process.env.PATRONUS_DATA_DIR
+    else process.env.PATRONUS_DATA_DIR = previous
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('Codex and Claude block an injection, then accept exactly one matching retry', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'patronus-ignore-hook-'))
+  const previous = process.env.PATRONUS_DATA_DIR
+  process.env.PATRONUS_DATA_DIR = root
+  try {
+    for (const host of ['codex', 'claude'] as const) {
+      let scans = 0
+      const rpc = async () => {
+        scans++
+        return { scan_id: 'scan-1', status: 'dangerous', findings: [{ category: 'prompt_injection' }] }
+      }
+      const input = (prompt: string) => ({ hook_event_name: 'UserPromptSubmit', session_id: `chat-${host}`, cwd: tmpdir(), prompt })
+      const protocol = async (_config: unknown, _request: unknown, run: () => Promise<any>) => run()
+      const blocked: any = await handleHook(host, 'UserPromptSubmit', input('blocked prompt'), {}, rpc, protocol)
+      const visible = JSON.stringify(blocked)
+      const token = visible.match(/ignore_once chat-[a-z]+_[a-f0-9]{32}/)?.[0]
+      assert(token)
+      assert.equal(scans, 1)
+      assert.deepEqual(await handleHook(host, 'UserPromptSubmit', input(`blocked prompt ${token}`), {}, rpc, protocol), {})
+      assert.equal(scans, 1)
+      await handleHook(host, 'UserPromptSubmit', input(`blocked prompt ${token}`), {}, rpc, protocol)
+      assert.equal(scans, 2)
+    }
+  } finally {
+    if (previous === undefined) delete process.env.PATRONUS_DATA_DIR
+    else process.env.PATRONUS_DATA_DIR = previous
+    rmSync(root, { recursive: true, force: true })
+  }
+})
