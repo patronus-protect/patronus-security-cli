@@ -7,6 +7,13 @@
 - Keep installed agent hosts visible in setup status and prevent repeated sign-in from replacing an active token.
 - Tighten scan option validation and add local Rust, TypeScript and Python file-checker examples.
 
+### Breaking CLI changes
+
+- Remove the unused `--color` option from local scans.
+- Accept `--server` only on `scan mcp`; `scan url` rejects it.
+- Accept `--anonymous-api` only on `scan file`, and reject scan options that the anonymous upload ignores.
+- Reject `--no-repo-config` outside `scan repo`, `--include`/`--ignore` on `scan file`, and `onboarding --format` without `--status` or `--check`.
+
 ## 0.1.0 - 2026-09-14
 
 - Add package validation and gated crates.io, npm, and PyPI publishing for the three API clients.

@@ -50,8 +50,20 @@ fn status_reads_installed_claude_even_when_snapshot_has_no_host() {
     let saved: Value =
         serde_json::from_slice(&std::fs::read(root.path().join("onboarding.json")).unwrap())
             .unwrap();
-    assert_eq!(saved["installed_hosts"], serde_json::json!(["claude"]));
-    assert_eq!(saved["restart_required"], true);
+    assert!(saved["installed_at"].is_i64());
+    assert!(saved.get("installed_hosts").is_none());
+    std::fs::write(root.path().join("onboarding.json"), r#"{"installed_at":0}"#).unwrap();
+    let output = cli(root.path())
+        .env("PATRONUS_CLAUDE_BIN", &bin)
+        .env("PATH", root.path())
+        .args(["onboarding", "--status", "--format", "json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let status: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(status["restart_required"], false);
 }
 #[test]
 fn setup_is_resumable_and_check_is_real_and_persisted() {
