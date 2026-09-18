@@ -1,8 +1,8 @@
-// src/cli.ts
+// plugins/native/src/cli.ts
 import { resolve as resolve4, isAbsolute as isAbsolute7 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
-// ../deepseek/src/settings.ts
+// plugins/deepseek/src/settings.ts
 import { constants, closeSync, fstatSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -49,7 +49,7 @@ function hookEnabled(settings, host, chat, surface) {
   return settings.enabled && settings.hooks[surface] && !settings.disabled_chats[host].includes(chat);
 }
 
-// src/broker.ts
+// plugins/native/src/broker.ts
 import { spawn as spawn2 } from "node:child_process";
 import { createHash as createHash2, randomUUID as randomUUID3 } from "node:crypto";
 import { constants as constants4 } from "node:fs";
@@ -59,12 +59,12 @@ import { dirname as dirname2, isAbsolute as isAbsolute3, join as join4, relative
 import { setTimeout as delay2 } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-// ../deepseek/src/sessions.ts
+// plugins/deepseek/src/sessions.ts
 import { createHash, randomUUID as randomUUID2 } from "node:crypto";
 import { closeSync as closeSync2, constants as constants3, fsyncSync, fstatSync as fstatSync2, lstatSync, mkdirSync, openSync as openSync2, readFileSync as readFileSync2, writeFileSync } from "node:fs";
 import { dirname, join as join3 } from "node:path";
 
-// ../deepseek/src/client.ts
+// plugins/deepseek/src/client.ts
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, constants as constants2, realpathSync, existsSync } from "node:fs";
@@ -261,7 +261,7 @@ var LocalClient = class {
   }
 };
 
-// ../deepseek/src/wait.ts
+// plugins/deepseek/src/wait.ts
 import { setTimeout as delay } from "node:timers/promises";
 async function waitForScan(client, job, milliseconds, signal) {
   const deadline = Date.now() + milliseconds;
@@ -292,7 +292,7 @@ function boundedMilliseconds(value, label, minimum = 0) {
   return value;
 }
 
-// ../deepseek/src/sessions.ts
+// plugins/deepseek/src/sessions.ts
 var privateFailure = () => new Error("Patronus private session state is unavailable or invalid.");
 var SessionState = class {
   constructor(config) {
@@ -406,7 +406,7 @@ var SessionState = class {
   }
 };
 
-// src/broker.ts
+// plugins/native/src/broker.ts
 var MAX_PAYLOAD = 10 * 1024 * 1024;
 var MAX_FRAME = 16 * 1024 * 1024;
 var CALL_TIMEOUT = 32e4;
@@ -695,7 +695,7 @@ async function callBroker(config, request, signal) {
   }
 }
 
-// ../deepseek/src/references.ts
+// plugins/deepseek/src/references.ts
 function invalidScanReference(scanId) {
   const file = typeof scanId === "string" && /^(?:file_)?[a-f0-9]{64}$/.test(scanId);
   if (!file && typeof scanId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(scanId)) return void 0;
@@ -715,7 +715,7 @@ function unavailableScanReference() {
   };
 }
 
-// src/daemon.ts
+// plugins/native/src/daemon.ts
 import { execFile } from "node:child_process";
 import { randomUUID as randomUUID4, timingSafeEqual } from "node:crypto";
 import { constants as constants6 } from "node:fs";
@@ -724,7 +724,7 @@ import { createServer } from "node:net";
 import { isAbsolute as isAbsolute5, join as join6, relative as relative4, sep as sep3 } from "node:path";
 import { promisify } from "node:util";
 
-// ../deepseek/src/static.ts
+// plugins/deepseek/src/static.ts
 import { spawn as spawn3 } from "node:child_process";
 import { createHash as createHash3 } from "node:crypto";
 import { constants as constants5 } from "node:fs";
@@ -1081,7 +1081,7 @@ var StaticScanner = class {
   }
 };
 
-// ../deepseek/src/auto-redaction.ts
+// plugins/deepseek/src/auto-redaction.ts
 var record4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 async function autoRedact(result, read) {
   const coverage = result.coverage;
@@ -1096,7 +1096,7 @@ async function autoRedact(result, read) {
   return result;
 }
 
-// src/daemon.ts
+// plugins/native/src/daemon.ts
 var IDLE_MS = 30 * 6e4;
 var run2 = promisify(execFile);
 async function processIdentity(pid) {
@@ -1438,7 +1438,7 @@ async function serveBroker(input) {
   }
 }
 
-// ../deepseek/src/chat-control.ts
+// plugins/deepseek/src/chat-control.ts
 import { execFile as execFile2 } from "node:child_process";
 import { promisify as promisify2 } from "node:util";
 var run3 = promisify2(execFile2);
@@ -1469,10 +1469,10 @@ async function controlChat(host, session, action, executable) {
   return `Patronus is ON for future text in this chat. Active hooks: ${enabled.join(", ")}. Earlier result history is not scanned retroactively. Send "patronus off" to pause.`;
 }
 
-// src/hooks.ts
+// plugins/native/src/hooks.ts
 import { isAbsolute as isAbsolute6, resolve as resolve3 } from "node:path";
 
-// ../deepseek/src/receipts.ts
+// plugins/deepseek/src/receipts.ts
 function hostProfile() {
   const index = process.argv.findIndex((value) => value === "--profile");
   const candidate = index >= 0 ? process.argv[index + 1] : process.argv.find((value) => value.startsWith("--profile="))?.slice(10);
@@ -1514,7 +1514,7 @@ function receipt(result, direction = "response", profile = hostProfile()) {
   return metadata;
 }
 
-// ../deepseek/src/ignore-once.ts
+// plugins/deepseek/src/ignore-once.ts
 import { createHash as createHash4, randomBytes } from "node:crypto";
 import { closeSync as closeSync3, constants as constants7, fstatSync as fstatSync3, mkdirSync as mkdirSync2, openSync as openSync3, readFileSync as readFileSync3, renameSync, rmSync, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join7 } from "node:path";
@@ -1578,7 +1578,7 @@ function consumeIgnoreOnce(host, chat, payload) {
   }
 }
 
-// src/hosts/codex.ts
+// plugins/native/src/hosts/codex.ts
 function record5(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -1611,7 +1611,7 @@ function mapCodex(event, decision) {
   return { continue: false, stopReason: decision.text };
 }
 
-// src/hosts/claude.ts
+// plugins/native/src/hosts/claude.ts
 function record6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -1750,7 +1750,7 @@ function mapClaude(event, decision, input) {
   return { continue: false, stopReason: decision.text };
 }
 
-// src/protocol.ts
+// plugins/native/src/protocol.ts
 import { spawn as spawn4 } from "node:child_process";
 import { createHash as createHash5 } from "node:crypto";
 import { mkdir as mkdir3 } from "node:fs/promises";
@@ -1844,7 +1844,7 @@ async function recordProtocolScan(config, request, run4, append = appendProtocol
   }
 }
 
-// src/hooks.ts
+// plugins/native/src/hooks.ts
 var record8 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 var id = (value) => typeof value === "string" && /^[A-Za-z0-9_.:-]{1,256}$/.test(value);
 var ownPrefixes = {
@@ -1993,7 +1993,7 @@ async function handleHook(host, event, value, overrides = {}, rpc = callBroker, 
   }
 }
 
-// src/mcp.ts
+// plugins/native/src/mcp.ts
 var tools = [
   { name: "patronus_check_result", description: "Patronus session status tool. Check a pending receipt using its scan_id; this never reruns the source tool. If still pending, call this tool again directly rather than using Bash, Monitor, or another tool to wait. Approved responses include the verified original; completed PII/DLP-only responses automatically include a redacted result. Continue with status=redacted text. Pending and dangerous responses never include an original.", inputSchema: { type: "object", properties: { scan_id: { type: "string" } }, required: ["scan_id"], additionalProperties: false } },
   { name: "patronus_read_redacted", description: "Retrieve verified masked text. Pass exactly one reference: scan_id for a completed dangerous runtime response, or file_id from a static file/directory/repository finding. Never releases the original.", inputSchema: { type: "object", properties: { scan_id: { type: "string", description: "Runtime receipt scan_id." }, file_id: { type: "string", description: "Static finding file_id." } }, additionalProperties: false } },
@@ -2037,7 +2037,7 @@ async function handleMcp(value, session) {
   return { jsonrpc: "2.0", id: id2, error: { code: -32601, message: "Method not found." } };
 }
 
-// src/cli.ts
+// plugins/native/src/cli.ts
 var emit = (value) => process.stdout.write(JSON.stringify(value) + "\n");
 function configuration() {
   const path = (key) => {
