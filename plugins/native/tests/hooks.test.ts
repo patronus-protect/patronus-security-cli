@@ -366,3 +366,41 @@ test('deep Claude metadata is ignored while adjacent text still reaches the brok
     assert.equal(calls, 1)
   }
 })
+
+test('an API usage-limit fallback is announced instead of passing silently', async () => {
+  const notice = { code: 'api_usage_limit', fallback: 'local', retry_after: 300 }
+  for (const host of ['codex', 'claude'] as const) {
+    for (const [event, extra] of [['PostToolUse', { tool_response: 'LARGE-TEXT-731' }], ['UserPromptSubmit', { prompt: 'hello' }]] as const) {
+      const result: any = await handleHook(host, event, input(event, extra), {}, async () => ({ scan_id: 'scan-731', status: 'approved', notice }))
+      const visible = JSON.stringify(result)
+      assert.match(visible, /API usage limit reached/, `${host} ${event}`)
+      assert.match(visible, /scanned locally/, `${host} ${event}`)
+      assert.match(visible, /300 seconds/, `${host} ${event}`)
+      assert.doesNotMatch(visible, /inactive/, `${host} ${event}`)
+      assert(!visible.includes('LARGE-TEXT-731'))
+      assert.equal(result.decision, undefined)
+      assert.equal(result.continue, undefined)
+      assert.match(result.systemMessage, /API usage limit reached/, `${host} ${event} tells the user`)
+    }
+  }
+})
+
+test('an exhausted API usage limit without local fallback names its cause', async () => {
+  for (const host of ['codex', 'claude'] as const) {
+    const result: any = await handleHook(host, 'PostToolUse', input('PostToolUse', { tool_response: 'LARGE-TEXT-731' }), {}, async () => ({
+      scan_id: 'scan-731', status: 'failed', reason: 'usage_limit_reached', notice: { code: 'api_usage_limit', fallback: 'none' },
+    }))
+    const visible = JSON.stringify(result)
+    assert.match(visible, /API usage limit reached/)
+    assert.match(visible, /not scanned/)
+    assert.doesNotMatch(visible, /protection is inactive/)
+    assert.match(result.systemMessage, /API usage limit reached/)
+  }
+})
+
+test('the MCP status tool returns the fallback notice with the approved result', async () => {
+  const notice = { code: 'api_usage_limit', fallback: 'local' }
+  const result = await claudeTool('patronus_check_result', { scan_id: 'scan-731' }, async () => ({ scan_id: 'scan-731', status: 'approved', result: 'DOC', notice }))
+  assert.equal(result.isError, false)
+  assert.deepEqual(JSON.parse(result.content[0]!.text).notice, notice)
+})

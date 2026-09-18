@@ -59,6 +59,8 @@ pub struct ScanOutcome {
     pub coverage: PayloadCoverage,
     pub redacted: Option<Value>,
     pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<crate::ark::ScanNotice>,
 }
 
 impl ScanOutcome {
@@ -70,6 +72,7 @@ impl ScanOutcome {
             coverage: PayloadCoverage::default(),
             redacted: None,
             reason: Some(reason.into()),
+            notice: None,
         }
     }
 }

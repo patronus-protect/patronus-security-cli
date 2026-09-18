@@ -9,6 +9,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+/// Failure reasons that are safe to show to agents and users.
+const PUBLIC_REASONS: &[&str] = &["usage_limit_reached"];
+
 #[derive(Debug, Clone)]
 pub struct StoreLimits {
     pub max_payload_bytes: usize,
@@ -346,7 +349,14 @@ impl Store {
         };
         let mut outcome = outcome.clone();
         // Backend error strings are not part of the public protocol or persisted metadata.
-        outcome.reason = None;
+        // Only fixed reason codes that tell the user how to recover are kept.
+        if !outcome
+            .reason
+            .as_deref()
+            .is_some_and(|reason| PUBLIC_REASONS.contains(&reason))
+        {
+            outcome.reason = None;
+        }
         let mut redacted = outcome.redacted.take();
         if outcome.status == JobStatus::Completed
             && (!complete_coverage(&outcome)
@@ -410,9 +420,14 @@ impl Store {
                 &direction,
                 policy_scope.as_deref(),
             );
+            // A notice describes this run (for example a local fallback), not the content.
+            let cached = ScanOutcome {
+                notice: None,
+                ..outcome.clone()
+            };
             let _ = self
                 .cache
-                .store(&key, expires_ms, &outcome, redacted_value.as_ref());
+                .store(&key, expires_ms, &cached, redacted_value.as_ref());
         }
         Ok(())
     }
@@ -429,6 +444,14 @@ impl Store {
         let mut result = json!({"scan_id":scan_id, "status":status, "job_status":job.status, "cached":job.cached,
             "findings":outcome.as_ref().map(|o| &o.findings).cloned().unwrap_or_default(),
             "coverage":outcome.as_ref().map(|o| &o.coverage), "redacted_available":redacted_available});
+        if let Some(notice) = outcome.as_ref().and_then(|o| o.notice.as_ref()) {
+            result["notice"] = json!(notice);
+        }
+        if let Some(reason) = outcome.as_ref().and_then(|o| o.reason.as_deref()) {
+            if status == "failed" && PUBLIC_REASONS.contains(&reason) {
+                result["reason"] = json!(reason);
+            }
+        }
         if status == "approved" && job.direction == "response" {
             result["result"] = self.read_payload(scan_id, "original", &job.payload_hash)?;
         }
@@ -916,6 +939,7 @@ mod tests {
             },
             redacted: Some(json!("[redacted]")),
             reason: None,
+            notice: None,
         };
         FAIL_DIRECTORY_SYNC.with(|fail| fail.set(true));
         assert!(store.complete(&id, &outcome).is_err());

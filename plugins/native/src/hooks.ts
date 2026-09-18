@@ -2,6 +2,7 @@ import { chatCommand, controlChat } from '../../deepseek/src/chat-control.ts'
 import { readPluginSettings, hookEnabled, type PluginSettings } from '../../deepseek/src/settings.ts'
 import { isAbsolute, resolve } from 'node:path'
 import { receipt } from '../../deepseek/src/receipts.ts'
+import { degradedText, noticeText, scanNotice, DEGRADED_TEXT } from '../../deepseek/src/notice.ts'
 import { consumeIgnoreOnce, injectionFinding, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
 import type { ScanResult } from '../../deepseek/src/protocol.ts'
 import { invalidScanReference } from '../../deepseek/src/references.ts'
@@ -46,6 +47,16 @@ function invalidArguments(required: string[], missing: string[] = required): Jso
 }
 
 const degraded = new Set(['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
+
+/** Why a completed or failed scan needs a note: a local fallback or a named failure cause. */
+function scanNote(result: ScanResult, host: Host): string | undefined {
+  if (degraded.has(result.status)) {
+    const text = degradedText(result)
+    return text === DEGRADED_TEXT ? inactiveMessage(host) : text
+  }
+  const notice = result.status === 'approved' ? scanNotice(result.notice) : undefined
+  return notice ? noticeText(notice) : undefined
+}
 
 function visibleResult(result: ScanResult, host: Host, direction: 'request' | 'response' = 'response'): JsonValue {
   const value = receipt(result, direction)
@@ -101,7 +112,7 @@ type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateD
 /** Hooks supply session attribution. Model arguments never carry a capability. */
 export async function handleHook(host: Host, event: string, value: unknown, overrides: Overrides = {}, rpc: typeof callBroker = callBroker, protocol: ProtocolRecorder = recordProtocolScan, settings: () => PluginSettings = readPluginSettings, control: typeof controlChat = controlChat): Promise<object> {
   const map = (decision: HookDecision) => host === 'codex' ? mapCodex(event, decision) : mapClaude(event, decision, value as HookInput)
-  const warn = () => map({ kind: 'warn', text: inactiveMessage(host) })
+  const warn = (text = inactiveMessage(host)) => map({ kind: 'warn', text })
   try {
     if (!record(value) || value.hook_event_name !== event || !id(value.session_id) ||
         typeof value.cwd !== 'string' || !isAbsolute(value.cwd)) return warn()
@@ -125,8 +136,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       const payload = claudeExternalTextPayload(event, input)
       if (payload === undefined) return {}
       const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
-      if (result.status === 'approved') return {}
-      if (degraded.has(result.status)) return warn()
+      if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
       return map({ kind: 'stop', text: JSON.stringify(visibleResult(result, host)) })
     }
     if (event === 'UserPromptSubmit') {
@@ -136,8 +146,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       if (consumeIgnoreOnce(host, input.session_id, payload)) return {}
       const callId = id(input.prompt_id) ? input.prompt_id : 'user-prompt'
       const result = await scan({ method: 'request', tool: 'UserPromptSubmit', callId, payload }) as unknown as ScanResult
-      if (result.status === 'approved') return {}
-      if (degraded.has(result.status)) return warn()
+      if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
       const visible = visibleResult(result, host, 'request')
       if (injectionFinding(result) && record(visible)) {
         const command = issueIgnoreOnce(host, input.session_id, payload)
@@ -167,8 +176,8 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
     if (payload === undefined) return {}
     const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
-    if (result.status === 'approved') return {}
-    return degraded.has(result.status) ? warn() : map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host)) })
+    if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
+    return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host)) })
   } catch {
     return warn()
   }

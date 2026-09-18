@@ -1,3 +1,4 @@
+import { scanNotice, USAGE_LIMIT_REASON } from '../../deepseek/src/notice.ts'
 import { unavailableScanReference } from '../../deepseek/src/references.ts'
 import { execFile } from 'node:child_process'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
@@ -165,6 +166,9 @@ function scanResult(value: unknown, allowOriginal: boolean): JsonValue {
   if (typeof value.cached === 'boolean') result.cached = value.cached
   if (typeof value.redacted_available === 'boolean') result.redacted_available = value.redacted_available
   if (allowOriginal && value.status === 'approved' && Object.hasOwn(value, 'result')) result.result = value.result as JsonValue
+  const notice = scanNotice(value.notice)
+  if (notice) result.notice = notice as unknown as JsonValue
+  if (value.reason === USAGE_LIMIT_REASON) result.reason = USAGE_LIMIT_REASON
   return result
 }
 

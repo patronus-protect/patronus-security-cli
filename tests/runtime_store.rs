@@ -1,3 +1,4 @@
+use patronus_security_scanner::ark::ScanNotice;
 use patronus_security_scanner::runtime::protocol::{
     Direction, JobStatus, PayloadCoverage, ScanOutcome, Verdict,
 };
@@ -36,6 +37,7 @@ fn approved() -> ScanOutcome {
         },
         redacted: None,
         reason: None,
+        notice: None,
     }
 }
 
@@ -706,4 +708,49 @@ fn privacy_redaction_is_immediate_without_a_refinement_job() {
             "unavailable"
         );
     }
+}
+
+#[test]
+fn local_fallback_notice_reaches_the_caller_but_is_not_replayed_from_cache() {
+    let (_temp, mut store) = setup();
+    let first = store.enqueue(job(json!("large tool output"))).unwrap();
+    let mut outcome = approved();
+    outcome.notice = Some(ScanNotice::api_usage_limit("local", Some(120)));
+    finish(&mut store, &first, &outcome);
+    let result = store.check(&first, "session-a").unwrap();
+    assert_eq!(result["status"], "approved");
+    assert_eq!(
+        result["notice"],
+        json!({"code":"api_usage_limit","fallback":"local","retry_after":120})
+    );
+
+    let second = store.enqueue(job(json!("large tool output"))).unwrap();
+    let cached = store.check(&second, "session-a").unwrap();
+    assert_eq!(cached["cached"], true);
+    assert!(cached.get("notice").is_none());
+}
+
+#[test]
+fn usage_limit_failure_exposes_only_its_fixed_reason() {
+    let (_temp, mut store) = setup();
+    let id = store.enqueue(job(json!("large tool output"))).unwrap();
+    let mut outcome = ScanOutcome::failed("usage_limit_reached");
+    outcome.notice = Some(ScanNotice::api_usage_limit("none", None));
+    finish(&mut store, &id, &outcome);
+    let result = store.check(&id, "session-a").unwrap();
+    assert_eq!(result["status"], "failed");
+    assert_eq!(result["reason"], "usage_limit_reached");
+    assert_eq!(
+        result["notice"],
+        json!({"code":"api_usage_limit","fallback":"none"})
+    );
+
+    let other = store.enqueue(job(json!("other output"))).unwrap();
+    finish(
+        &mut store,
+        &other,
+        &ScanOutcome::failed("SECRET backend output"),
+    );
+    let hidden = store.check(&other, "session-a").unwrap();
+    assert!(hidden.get("reason").is_none());
 }

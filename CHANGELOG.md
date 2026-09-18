@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- When the Patronus API usage or rate limit is exhausted, scan locally instead in hybrid and API mode, and tell users and agents why (Claude, Codex, DeepSeek, CLI reports). If local scanning is unavailable, report the usage limit instead of "protection is inactive".
+- Claude returns Patronus tool results as ordinary MCP results and shows a readable reason for blocked prompts.
+- Changing the working directory no longer disables Claude runtime protection.
+
 ## 0.1.1 - 2026-09-17
 
 - Add an interactive CLI start menu and show onboarding as five visible terminal steps.

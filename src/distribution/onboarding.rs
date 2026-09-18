@@ -569,6 +569,7 @@ mod tests {
             classifications: vec![],
             failures: vec![],
             degraded: false,
+            notice: None,
         };
         assert!(!complete_detection(&outcome));
     }

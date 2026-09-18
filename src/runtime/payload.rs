@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use serde_json::Value;
 
-use crate::ark::{ChunkInput, ContentAnalyzer, FinalClassification};
+use crate::ark::{ChunkInput, ContentAnalyzer, FinalClassification, ScanNotice};
 use crate::chunk::text_ranges;
 use crate::config::ChunkingConfig;
 use crate::runtime::protocol::{JobStatus, PayloadCoverage, RuntimeFinding, ScanOutcome, Verdict};
@@ -25,6 +25,7 @@ pub fn analyze_payload(
         findings: Vec::new(),
         next_field: 0,
         input_tokens: 0,
+        notice: None,
     };
     let unsupported = inspect(payload, &mut scan.coverage);
     let result = if unsupported {
@@ -70,6 +71,7 @@ pub fn analyze_payload(
         coverage: scan.coverage,
         redacted,
         reason,
+        notice: scan.notice,
     }
 }
 
@@ -86,6 +88,7 @@ struct PayloadScan<'a> {
     findings: Vec<RuntimeFinding>,
     next_field: usize,
     input_tokens: usize,
+    notice: Option<ScanNotice>,
 }
 
 impl PayloadScan<'_> {
@@ -141,7 +144,18 @@ impl PayloadScan<'_> {
                     path: &field,
                     content: chunk_text,
                 })
-                .map_err(|_| ScanError::Failed("scanner_error"))?;
+                .map_err(
+                    |error| match crate::inference::usage_limit_retry_after(&error) {
+                        Some(retry_after) => {
+                            self.notice = Some(ScanNotice::api_usage_limit("none", retry_after));
+                            ScanError::Failed("usage_limit_reached")
+                        }
+                        None => ScanError::Failed("scanner_error"),
+                    },
+                )?;
+            if outcome.notice.is_some() {
+                self.notice = outcome.notice.clone();
+            }
             self.check_deadline()?;
             if outcome.degraded
                 || !outcome.failures.is_empty()

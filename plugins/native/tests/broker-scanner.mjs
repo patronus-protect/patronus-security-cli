@@ -42,8 +42,8 @@ if (args[0] === 'config') {
       if (method === 'cancel') { reply({ scan_id: params.scan_id, status: 'cancelled' }); return }
       const dangerous = options.dangerous === true
       if (method === 'read_redacted') { reply(dangerous ? { scan_id: params.scan_id, status: 'redacted', result: '[REDACTED]' } : { scan_id: params.scan_id, status: 'unavailable' }); return }
-      const status = Date.now() < job.readyAt ? 'pending' : dangerous ? 'dangerous' : 'approved'
-      reply({ scan_id: params.scan_id, status, coverage, job_status: 'completed',
+      const status = Date.now() < job.readyAt ? 'pending' : options.status ?? (dangerous ? 'dangerous' : 'approved')
+      reply({ scan_id: params.scan_id, status, coverage, job_status: 'completed', ...(status === 'pending' ? {} : options.extra ?? {}),
         redacted_available: dangerous && job.direction === 'response',
         findings: dangerous ? [{ category: options.category ?? 'prompt_injection', level: 'l1', confidence: 1, label: canary }] : [],
         error: canary, metadata: canary,

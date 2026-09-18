@@ -1,6 +1,7 @@
 import type { PostToolDecision } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ScanResult } from './protocol.ts'
+import { degradedText, scanNotice, USAGE_LIMIT_REASON } from './notice.ts'
 
 function hostProfile(): string {
   const index = process.argv.findIndex(value => value === '--profile')
@@ -15,6 +16,9 @@ export function receipt(result: ScanResult, direction: 'request' | 'response' = 
   if (result.coverage !== undefined) metadata.coverage = result.coverage
   if (result.job_status !== undefined) metadata.job_status = result.job_status
   if (result.redacted_available !== undefined) metadata.redacted_available = result.redacted_available
+  const notice = scanNotice(result.notice)
+  if (notice) metadata.notice = notice as unknown as JsonValue
+  if (result.reason === USAGE_LIMIT_REASON) metadata.reason = USAGE_LIMIT_REASON
   if (result.status === 'unavailable') {
     metadata.message = 'Patronus is unavailable or inactive. Check the DeepSeek integration status, then enable it or disable/uninstall it if scanning is not wanted.'
     metadata.recovery = {
@@ -40,6 +44,8 @@ export function receipt(result: ScanResult, direction: 'request' | 'response' = 
     metadata.message = result.redacted_available
       ? 'The source tool already executed. Its original is permanently withheld. Call patronus_read_redacted with this scan_id to obtain the redacted result. Do not rerun the source tool.'
       : 'The source tool already executed. Its original is permanently withheld and no redacted result is available. Do not rerun the source tool.'
+  } else if (result.reason === USAGE_LIMIT_REASON) {
+    metadata.message = degradedText(result)
   } else if (result.status !== 'approved') {
     metadata.message = 'The scan did not provide complete approval. The original result is unavailable. The source tool may already have executed; do not repeat it merely to recover its result.'
   }

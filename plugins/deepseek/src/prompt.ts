@@ -10,6 +10,8 @@ import type { SessionState } from './sessions.ts'
 import { textPayload, userPromptText } from './text.ts'
 import { waitForScan } from './wait.ts'
 import { degradedMessage } from './degraded.ts'
+import { degradedText, noticeText, scanNotice } from './notice.ts'
+import type { ScanResult } from './protocol.ts'
 import { consumeIgnoreOnce, hasIgnoreOnce, injectionFinding, issueIgnoreOnce, stripIgnoreOnce } from './ignore-once.ts'
 
 const degraded = new Set(['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
@@ -27,10 +29,17 @@ function removeConsumedCommand(messages: readonly Message[], pending: ReadonlySe
   return { messages: cleanMessages, identities }
 }
 
-function warn(decision: PreStepDecision): PreStepDecision {
+function warn(decision: PreStepDecision, text?: string): PreStepDecision {
   return decision.kind === 'enter'
-    ? { ...decision, messages: [...decision.messages, degradedMessage()] }
+    ? { ...decision, messages: [...decision.messages, degradedMessage(text)] }
     : decision
+}
+
+/** The note to attach after a prompt scan, if any. */
+function promptNote(result: ScanResult): string | undefined {
+  if (degraded.has(result.status)) return degradedText(result)
+  const notice = scanNotice(result.notice)
+  return notice ? noticeText(notice) : undefined
 }
 
 export function registerPromptGate(
@@ -92,7 +101,8 @@ export function registerPromptGate(
       }
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
-      return degraded.has(result.status) || warnNow ? warn(await next()) : next()
+      const note = promptNote(result)
+      return note || warnNow ? warn(await next(), note) : next()
     } catch (error) {
       if (!completed) events.emit({ kind: 'scan_failed', direction: 'request', tool: 'user_prompt', session_id: session, ...(scanId ? { scan_id: scanId } : {}), status: 'failed', duration_ms: elapsed(started), payload_hash: payloadHash })
       if (completed) throw error
@@ -155,7 +165,9 @@ export function registerPromptGate(
       const result = await waitForScan(runtime.client, { session: sessions.capability(session), scan_id: scanId }, waitMs, signal)
       events.emit({ kind: 'scan_completed', direction: 'request', tool: 'user_prompt', session_id: session, scan_id: scanId, status: result.status, duration_ms: elapsed(started), payload_hash: payloadHash })
       completed = true
-      if (degraded.has(result.status)) { options.messages.push(degradedMessage()); yield* next(); return }
+      if (degraded.has(result.status)) { options.messages.push(degradedMessage(degradedText(result))); yield* next(); return }
+      const notice = result.status === 'approved' ? scanNotice(result.notice) : undefined
+      if (notice) options.messages.push(degradedMessage(noticeText(notice)))
       if (result.status !== 'approved') {
         const visible = receipt(result, 'request')
         if (injectionFinding(result) && typeof visible === 'object' && visible !== null && !Array.isArray(visible)) {
