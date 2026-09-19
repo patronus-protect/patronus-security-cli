@@ -35,6 +35,15 @@ export interface ScanResult {
   coverage?: JsonValue
   redacted_available?: boolean
   result?: JsonValue
+  /** Fixed public explanation, e.g. a local fallback after the API usage limit. */
+  notice?: ScanNotice
+  /** Only fixed, public failure codes such as usage_limit_reached. */
+  reason?: string
+}
+export interface ScanNotice {
+  code: 'api_usage_limit'
+  fallback: 'local' | 'none'
+  retry_after?: number
 }
 export interface RedactedResult {
   scan_id: string

@@ -54,6 +54,7 @@ fn clean(input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
         }],
         failures: vec![],
         degraded: false,
+        notice: None,
     })
 }
 

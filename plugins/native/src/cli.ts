@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { callBroker } from './broker.ts'
 import { serveBroker } from './daemon.ts'
 import { handleHook } from './hooks.ts'
-import { handleMcp } from './mcp.ts'
+import { handleMcp, type McpSession } from './mcp.ts'
+import { recordProtocolScan } from './protocol.ts'
 import { mapCodex } from './hosts/codex.ts'
 import { mapClaude } from './hosts/claude.ts'
 import type { HookInput, Host } from './types.ts'
@@ -38,7 +39,32 @@ async function readHook(): Promise<unknown> {
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)))
 }
 
+/** Claude starts one MCP server per session and passes its identity in the environment.
+ * Its project directory is fixed for the session, unlike the hook's current cwd. */
+function claudeSession(): { sessionId: string; cwd: string } | undefined {
+  const sessionId = process.env.CLAUDE_CODE_SESSION_ID
+  const cwd = process.env.CLAUDE_PROJECT_DIR
+  if (!sessionId || !/^[A-Za-z0-9_.:-]{1,256}$/.test(sessionId) || !cwd || !isAbsolute(cwd)) return undefined
+  return { sessionId, cwd }
+}
+
+function mcpSession(): McpSession | undefined {
+  const claude = claudeSession()
+  if (!claude) return undefined
+  const config = { ...configuration(), host: 'claude' as const, ...claude }
+  return { host: 'claude', cwd: claude.cwd, scan: request => recordProtocolScan(config, request, () => callBroker(config, request, AbortSignal.timeout(320_000))) }
+}
+
+/** Hosts can keep an idle MCP server alive after they stop using it; an orphaned one exits. */
+function exitWhenOrphaned(): void {
+  const parent = process.ppid
+  setInterval(() => { if (process.ppid !== parent || process.ppid === 1) process.exit(0) }, 5_000).unref()
+}
+
 async function mcp(): Promise<void> {
+  exitWhenOrphaned()
+  let session: McpSession | undefined
+  try { session = mcpSession() } catch { session = undefined }
   let buffer = Buffer.alloc(0)
   for await (const chunk of process.stdin) {
     buffer = Buffer.concat([buffer, chunk])
@@ -47,8 +73,11 @@ async function mcp(): Promise<void> {
     while ((newline = buffer.indexOf(10)) !== -1) {
       const frame = buffer.subarray(0, newline)
       buffer = buffer.subarray(newline + 1)
-      try { const response = handleMcp(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(frame))); if (response) emit(response) }
-      catch { emit({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Invalid JSON.' } }) }
+      let parsed: unknown
+      try { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(frame)) }
+      catch { emit({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Invalid JSON.' } }); continue }
+      // Scans can wait; answer each request when ready without blocking pings.
+      void handleMcp(parsed, session).then(response => { if (response) emit(response) })
     }
   }
 }
@@ -64,7 +93,8 @@ async function main(args: string[]): Promise<void> {
     input = await readHook()
     // Static audits can scan a whole repository; their broker budget is five minutes.
     const signal = AbortSignal.timeout(event === 'PreToolUse' ? 320_000 : 75_000)
-    const settings = configuration()
+    const projectDir = host === 'claude' ? claudeSession()?.cwd : undefined
+    const settings = { ...configuration(), ...(projectDir ? { cwd: projectDir } : {}) }
     const output = await handleHook(host, event, input, settings, (config, request) => callBroker(config, request, signal))
     await new Promise<void>((done, reject) => process.stdout.write(JSON.stringify(output) + '\n', error => error ? reject(error) : done()))
   } catch {

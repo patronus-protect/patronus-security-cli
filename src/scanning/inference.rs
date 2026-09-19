@@ -1,6 +1,7 @@
 use crate::{
     ark::{
         AnalysisOutcome, ArkAnalyzer, ChunkInput, ContentAnalyzer, Evidence, FinalClassification,
+        ScanNotice,
     },
     config::{Config, ProviderMode},
     error::{Result, ScannerError},
@@ -105,6 +106,7 @@ impl Inference {
             classifications,
             failures: vec![],
             degraded: false,
+            notice: None,
         })
     }
 }
@@ -150,6 +152,41 @@ impl ContentAnalyzer for Inference {
             &input,
             scope.ends_with(".user_input"),
         );
+        let scan_route = |local: bool, input: ChunkInput<'_>| -> Result<AnalysisOutcome> {
+            let cache_key = self.scoped_analyzers(scope, &profile, local)?;
+            let scoped = self.scoped.borrow();
+            let (l1, models) = &scoped[&cache_key];
+            let scan = |analyzer: &Inference, input| {
+                if scope.ends_with(".user_input") {
+                    analyzer.analyze_user_prompt(input)
+                } else {
+                    analyzer.analyze(input)
+                }
+            };
+            let mut outcome = scan(l1, input.clone())?;
+            if let Some(models) = models {
+                let assessed = crate::plugin_policies::assess(scan(models, input)?);
+                outcome.classifications.extend(assessed.classifications);
+                outcome.failures.extend(assessed.failures);
+                outcome.degraded |= assessed.degraded;
+            }
+            Ok(outcome)
+        };
+        if local {
+            return scan_route(true, input);
+        }
+        let fallback = input.clone();
+        with_usage_limit_fallback(|| scan_route(false, input), || scan_route(true, fallback))
+    }
+}
+impl Inference {
+    /// Builds, once per scope and route, the L1 and model analyzers for a plugin policy.
+    fn scoped_analyzers(
+        &self,
+        scope: &str,
+        profile: &crate::plugin_policies::Profile,
+        local: bool,
+    ) -> Result<String> {
         let cache_key = format!("{scope}:{local}");
         let mut base = self.config.clone();
         base.provider.mode = if local {
@@ -186,25 +223,9 @@ impl ContentAnalyzer for Inference {
             };
             scoped.insert(cache_key.clone(), (Box::new(l1), models));
         }
-        let (l1, models) = &scoped[&cache_key];
-        let scan = |analyzer: &Inference, input| {
-            if scope.ends_with(".user_input") {
-                analyzer.analyze_user_prompt(input)
-            } else {
-                analyzer.analyze(input)
-            }
-        };
-        let mut outcome = scan(l1, input.clone())?;
-        if let Some(models) = models {
-            let assessed = crate::plugin_policies::assess(scan(models, input)?);
-            outcome.classifications.extend(assessed.classifications);
-            outcome.failures.extend(assessed.failures);
-            outcome.degraded |= assessed.degraded;
-        }
-        Ok(outcome)
+        Ok(cache_key)
     }
-}
-impl Inference {
+
     fn local(&self, input: ChunkInput<'_>, user_prompt: bool) -> Result<AnalysisOutcome> {
         let mut local = self.local.borrow_mut();
         if local.is_none() {
@@ -230,15 +251,53 @@ impl Inference {
         if local_route(self.config.provider.mode, &input, false) {
             self.local(input, false)
         } else {
-            self.cloud(input, false)
+            let fallback = input.clone();
+            with_usage_limit_fallback(|| self.cloud(input, false), || self.local(fallback, false))
         }
     }
     fn analyze_prompt(&self, input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
         if self.config.provider.mode == ProviderMode::Api {
-            self.cloud(input, true)
+            let fallback = input.clone();
+            with_usage_limit_fallback(|| self.cloud(input, true), || self.local(fallback, true))
         } else {
             self.local(input, true)
         }
+    }
+}
+
+/// `Some(retry_after)` when the Patronus API refused work because the plan's usage
+/// or rate limit is exhausted; such failures can be retried locally.
+pub fn usage_limit_retry_after(error: &ScannerError) -> Option<Option<u64>> {
+    match error {
+        ScannerError::Api {
+            kind: patronus_api_client::ErrorKind::Quota | patronus_api_client::ErrorKind::RateLimit,
+            retry_after,
+            ..
+        } => Some(*retry_after),
+        _ => None,
+    }
+}
+
+/// Runs the API scan and, only when its usage limit is exhausted, the local scan
+/// instead. If the local scan is unavailable too, the usage-limit error is kept so
+/// callers can report the actual cause.
+pub(crate) fn with_usage_limit_fallback(
+    remote: impl FnOnce() -> Result<AnalysisOutcome>,
+    local: impl FnOnce() -> Result<AnalysisOutcome>,
+) -> Result<AnalysisOutcome> {
+    let error = match remote() {
+        Ok(outcome) => return Ok(outcome),
+        Err(error) => error,
+    };
+    let Some(retry_after) = usage_limit_retry_after(&error) else {
+        return Err(error);
+    };
+    match local() {
+        Ok(mut outcome) => {
+            outcome.notice = Some(ScanNotice::api_usage_limit("local", retry_after));
+            Ok(outcome)
+        }
+        Err(_) => Err(error),
     }
 }
 
@@ -438,5 +497,83 @@ mod hybrid_boundary_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod usage_limit_fallback_tests {
+    use super::*;
+
+    fn api_error(kind: patronus_api_client::ErrorKind) -> ScannerError {
+        ScannerError::Api {
+            kind,
+            message: "bounded".into(),
+            code: None,
+            retry_after: Some(45),
+            details: None,
+        }
+    }
+
+    fn scanned() -> Result<AnalysisOutcome> {
+        Ok(AnalysisOutcome {
+            classifications: vec![],
+            failures: vec![],
+            degraded: false,
+            notice: None,
+        })
+    }
+
+    #[test]
+    fn exhausted_api_quota_scans_locally_and_reports_why() {
+        let outcome = with_usage_limit_fallback(
+            || Err(api_error(patronus_api_client::ErrorKind::Quota)),
+            scanned,
+        )
+        .unwrap();
+        assert_eq!(
+            outcome.notice,
+            Some(ScanNotice::api_usage_limit("local", Some(45)))
+        );
+    }
+
+    #[test]
+    fn exhausted_rate_limit_also_scans_locally() {
+        let outcome = with_usage_limit_fallback(
+            || Err(api_error(patronus_api_client::ErrorKind::RateLimit)),
+            scanned,
+        )
+        .unwrap();
+        assert_eq!(outcome.notice.unwrap().fallback, "local");
+    }
+
+    #[test]
+    fn unavailable_local_model_keeps_the_usage_limit_error() {
+        let error = with_usage_limit_fallback(
+            || Err(api_error(patronus_api_client::ErrorKind::Quota)),
+            || Err(ScannerError::Ark("model missing".into())),
+        )
+        .unwrap_err();
+        assert_eq!(usage_limit_retry_after(&error), Some(Some(45)));
+    }
+
+    #[test]
+    fn other_api_failures_never_fall_back() {
+        let mut local_called = false;
+        let error = with_usage_limit_fallback(
+            || Err(api_error(patronus_api_client::ErrorKind::Transport)),
+            || {
+                local_called = true;
+                scanned()
+            },
+        )
+        .unwrap_err();
+        assert!(!local_called);
+        assert_eq!(usage_limit_retry_after(&error), None);
+    }
+
+    #[test]
+    fn successful_api_scans_carry_no_notice() {
+        let outcome = with_usage_limit_fallback(scanned, || panic!("local not needed")).unwrap();
+        assert_eq!(outcome.notice, None);
     }
 }

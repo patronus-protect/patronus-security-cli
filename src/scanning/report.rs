@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::ark::FinalClassification;
+use crate::ark::{FinalClassification, ScanNotice};
 use crate::chunk::{hash, ChunkRecord};
 use crate::cli::FailOn;
 use crate::discovery::FileRecord;
@@ -81,6 +81,8 @@ pub struct Report {
     pub failures: Vec<FailureRecord>,
     pub report_path: String,
     pub scope_disclaimer: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<ScanNotice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +98,7 @@ pub struct ReportBuilder {
     pub classification_count: usize,
     pub chunk_count: usize,
     pub degraded: bool,
+    pub notices: Vec<ScanNotice>,
 }
 
 struct ProjectedFinding<'a> {
@@ -116,6 +119,13 @@ impl ReportBuilder {
             classification_count: 0,
             chunk_count: 0,
             degraded: false,
+            notices: Vec::new(),
+        }
+    }
+
+    pub fn notice(&mut self, notice: &ScanNotice) {
+        if !self.notices.contains(notice) {
+            self.notices.push(notice.clone());
         }
     }
 
@@ -293,6 +303,7 @@ pub fn build_report(
             .map(|(reason, count)| SkippedSummary { reason, count })
             .collect(),
         failures: builder.failures,
+        notices: builder.notices,
         report_path,
         scope_disclaimer: [
             "SQL injection",
@@ -335,6 +346,9 @@ pub fn markdown(report: &Report) -> String {
         report.started_at.to_rfc3339(),
         report.duration_ms as f64 / 1000.0
     ));
+    for notice in &report.notices {
+        output.push_str(&format!("> **Note:** {}\n\n", notice_text(notice)));
+    }
     output.push_str("## Coverage\n\n| Metric | Value |\n|---|---:|\n");
     output.push_str(&format!("| Eligible bytes | {} |\n| Analyzed bytes | {} |\n| Eligible files | {} |\n| Analyzed files | {} |\n| Skipped files | {} |\n| Chunks | {} |\n| Classifier failures | {} |\n\n", report.coverage.eligible_bytes, report.coverage.analyzed_bytes, report.coverage.eligible_files, report.coverage.analyzed_files, report.coverage.skipped_files, report.coverage.chunks, report.coverage.failures));
     if report.status == ScanStatus::Incomplete {
@@ -399,7 +413,25 @@ pub fn terminal_summary(report: &Report) -> String {
         ),
         ScanStatus::Failed => format!("{status} — no valid completed report"),
     };
-    format!("{first}\nScanned {:.1} MB across {}/{} eligible files in {:.2}s\nCoverage: {} skipped, {} failures{}\nReport: {}", report.coverage.analyzed_bytes as f64 / 1_000_000.0, report.coverage.analyzed_files, report.coverage.eligible_files, report.duration_ms as f64 / 1000.0, report.coverage.skipped_files, report.coverage.failures, if report.coverage.degraded { ", Ark degraded" } else { "" }, report.report_path)
+    let notes: String = report
+        .notices
+        .iter()
+        .map(|notice| format!("\nNote: {}", notice_text(notice)))
+        .collect();
+    format!("{first}{notes}\nScanned {:.1} MB across {}/{} eligible files in {:.2}s\nCoverage: {} skipped, {} failures{}\nReport: {}", report.coverage.analyzed_bytes as f64 / 1_000_000.0, report.coverage.analyzed_files, report.coverage.eligible_files, report.duration_ms as f64 / 1000.0, report.coverage.skipped_files, report.coverage.failures, if report.coverage.degraded { ", Ark degraded" } else { "" }, report.report_path)
+}
+
+/// One user-facing sentence per notice; shared by the CLI summary and the report.
+pub fn notice_text(notice: &ScanNotice) -> String {
+    let retry = notice
+        .retry_after
+        .map(|seconds| format!(" The API is available again in about {seconds} seconds."))
+        .unwrap_or_default();
+    match (notice.code.as_str(), notice.fallback.as_str()) {
+        ("api_usage_limit", "local") => format!("Patronus API usage limit reached; content was scanned locally instead.{retry}"),
+        ("api_usage_limit", _) => format!("Patronus API usage limit reached and local scanning is unavailable; content was not scanned.{retry} Run `patronus-security-scanner auth login` or open https://control.patronus.studio/."),
+        _ => format!("Patronus notice: {}.", notice.code),
+    }
 }
 
 fn sanitize(value: &str, max: usize) -> String {

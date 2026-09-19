@@ -14,8 +14,8 @@ async function fixture(report: object, exit = 0) {
 }
 const signal=()=>new AbortController().signal
 
-test('native MCP schema exposes URL and named MCP checks',()=>{
- const result:any=handleMcp({jsonrpc:'2.0',id:1,method:'tools/list'})
+test('native MCP schema exposes URL and named MCP checks',async()=>{
+ const result:any=await handleMcp({jsonrpc:'2.0',id:1,method:'tools/list'})
  const scan=result.result.tools.find((tool:any)=>tool.name==='patronus_scan')
  assert(scan.inputSchema.properties.kind.enum.includes('url'))
  assert(scan.inputSchema.properties.kind.enum.includes('mcp'))

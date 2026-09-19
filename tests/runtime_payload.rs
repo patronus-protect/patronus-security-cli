@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use patronus_security_scanner::ark::{
     AnalysisOutcome, ArkAnalyzer, ChunkInput, ContentAnalyzer, Evidence, FinalClassification,
+    ScanNotice,
 };
 use patronus_security_scanner::config::{ArkConfig, ChunkingConfig};
 use patronus_security_scanner::error::{Result, ScannerError};
@@ -70,6 +71,7 @@ fn classify(input: ChunkInput<'_>, spans: Option<Vec<(usize, usize)>>) -> Analys
         }],
         failures: vec![],
         degraded: false,
+        notice: None,
     }
 }
 
@@ -729,4 +731,52 @@ fn original_result_token_count_survives_blocks_and_chunks() {
     assert_eq!(outcome.status, JobStatus::Completed);
     assert!(seen.borrow().len() > 2);
     assert!(seen.borrow().iter().all(|count| *count == Some(1025)));
+}
+
+fn quota_error() -> ScannerError {
+    ScannerError::Api {
+        kind: patronus_api_client::ErrorKind::Quota,
+        message: "API usage limit reached".into(),
+        code: Some("QUOTA_EXCEEDED".into()),
+        retry_after: Some(90),
+        details: None,
+    }
+}
+
+#[test]
+fn usage_limit_without_fallback_fails_with_a_fixed_reason_and_retry_hint() {
+    let analyzer = Analyzer(|_input: ChunkInput<'_>| Err(quota_error()));
+    let outcome = analyze_payload(
+        &analyzer,
+        &json!("large tool output"),
+        &chunking(),
+        Instant::now() + Duration::from_secs(5),
+    );
+    assert_eq!(outcome.status, JobStatus::Failed);
+    assert_eq!(outcome.reason.as_deref(), Some("usage_limit_reached"));
+    assert_eq!(
+        outcome.notice,
+        Some(ScanNotice::api_usage_limit("none", Some(90)))
+    );
+}
+
+#[test]
+fn local_fallback_notice_survives_payload_analysis() {
+    let analyzer = Analyzer(|input: ChunkInput<'_>| {
+        let mut outcome = classify(input, None);
+        outcome.notice = Some(ScanNotice::api_usage_limit("local", Some(90)));
+        Ok(outcome)
+    });
+    let outcome = analyze_payload(
+        &analyzer,
+        &json!("large tool output"),
+        &chunking(),
+        Instant::now() + Duration::from_secs(5),
+    );
+    assert_eq!(outcome.status, JobStatus::Completed);
+    assert_eq!(outcome.verdict, Some(Verdict::Approved));
+    assert_eq!(
+        outcome.notice,
+        Some(ScanNotice::api_usage_limit("local", Some(90)))
+    );
 }

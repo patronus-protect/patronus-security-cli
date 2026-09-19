@@ -1,11 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Threat detection is now opt-in: onboarding no longer enables it at L2/L3 and keeps an explicit choice.
+- When the Patronus API usage or rate limit is exhausted, scan locally instead in hybrid and API mode, and tell users and agents why (Claude, Codex, DeepSeek, CLI reports). If local scanning is unavailable, report the usage limit instead of "protection is inactive".
+- Claude returns Patronus tool results as ordinary MCP results and shows a readable reason for blocked prompts.
+- Changing the working directory no longer disables Claude runtime protection.
+
 ## 0.1.1 - 2026-09-17
 
 - Add an interactive CLI start menu and show onboarding as five visible terminal steps.
 - Refresh the local dashboard layout, account controls and scan entry point.
 - Keep installed agent hosts visible in setup status and prevent repeated sign-in from replacing an active token.
 - Tighten scan option validation and add local Rust, TypeScript and Python file-checker examples.
+
+### Breaking CLI changes
+
+- Remove the unused `--color` option from local scans.
+- Accept `--server` only on `scan mcp`; `scan url` rejects it.
+- Accept `--anonymous-api` only on `scan file`, and reject scan options that the anonymous upload ignores.
+- Reject `--no-repo-config` outside `scan repo`, `--include`/`--ignore` on `scan file`, and `onboarding --format` without `--status` or `--check`.
 
 ## 0.1.0 - 2026-09-14
 

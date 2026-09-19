@@ -4,7 +4,7 @@ use std::time::Duration;
 use patronus_ark::{
     QueuedSecurityEvent, SecurityGateway, SecurityLevel, SecurityRequestCompletion,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{ark_category, ArkConfig};
 use crate::error::{Result, ScannerError};
@@ -57,6 +57,29 @@ pub struct AnalysisOutcome {
     pub classifications: Vec<FinalClassification>,
     pub failures: Vec<String>,
     pub degraded: bool,
+    /// Set when the scan still completed, but not the way the provider mode intended.
+    pub notice: Option<ScanNotice>,
+}
+
+/// A fixed, public explanation for how a scan was processed. It never carries
+/// backend error text, so it may cross the runtime protocol to agents and users.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScanNotice {
+    pub code: String,
+    /// `local` when the scan completed on this device instead, `none` when it could not.
+    pub fallback: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after: Option<u64>,
+}
+
+impl ScanNotice {
+    pub fn api_usage_limit(fallback: &str, retry_after: Option<u64>) -> Self {
+        Self {
+            code: "api_usage_limit".into(),
+            fallback: fallback.into(),
+            retry_after,
+        }
+    }
 }
 
 pub trait ContentAnalyzer {
@@ -251,6 +274,7 @@ impl ArkAnalyzer {
             classifications: Vec::new(),
             failures: Vec::new(),
             degraded: false,
+            notice: None,
         };
         for category in requested {
             let outcome = self.analyze_category(input.clone(), category)?;
@@ -383,6 +407,7 @@ impl ArkAnalyzer {
             classifications,
             failures,
             degraded,
+            notice: None,
         })
     }
 }

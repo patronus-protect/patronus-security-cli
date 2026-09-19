@@ -4,6 +4,7 @@ import { autoRedact } from '../../deepseek/src/auto-redaction.ts'
 import { receipt } from '../../deepseek/src/receipts.ts'
 import type { ScanResult } from '../../deepseek/src/protocol.ts'
 import { handleHook } from '../src/hooks.ts'
+import { handleMcp } from '../src/mcp.ts'
 
 const original = 'PRIVATE-EMAIL-CANARY'
 const safe = 'version = "0.1.0"\nauthor = "[REDACTED]"'
@@ -58,7 +59,11 @@ for (const host of ['codex','claude'] as const) {
   test(`${host} delivers automatic masked output at the native tool boundary and status retrieval`, async()=>{
     const result=await autoRedact(dangerous,masked)
     for(const event of ['PostToolUse','PreToolUse']) {
-      const value=await handleHook(host,event,{
+      // Claude retrieves status through its MCP server; Codex through the hook.
+      const value=host==='claude'&&event==='PreToolUse'
+        ?await handleMcp({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'patronus_check_result',arguments:{scan_id:dangerous.scan_id}}},
+          {host,cwd:'/private/tmp',scan:async()=>result as any})
+        :await handleHook(host,event,{
         hook_event_name:event,session_id:'redaction-test',cwd:'/private/tmp',tool_use_id:'call-1',
         tool_name:event==='PreToolUse'?'mcp__patronus__patronus_check_result':'mcp__fixture__read',
         tool_input:{scan_id:dangerous.scan_id},tool_response:{content:[{type:'text',text:original},{type:'image',data:'MEDIA'}]},

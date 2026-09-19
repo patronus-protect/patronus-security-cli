@@ -181,7 +181,7 @@ pub fn status() -> Result<Value> {
         json!({"cli_version":crate::VERSION,"mode":config.provider.mode,"auth":auth,"detected_hosts":detected,
         "model_dir":config.ark.model_dir.clone().unwrap_or(crate::model_assets::default_directory()?),
         "check":if valid {saved["check"].clone()}else{Value::Null},"configuration_verified":valid && saved["check"]["detected"]==true,
-        "installed_hosts":installed,"restart_required":saved["restart_required"].as_bool().unwrap_or(!installed.is_empty()),
+        "installed_hosts":installed,"restart_required":restart_required(&saved, !installed.is_empty()),
         "setup_command":"patronus-security-scanner onboarding"}),
     )
 }
@@ -196,12 +196,16 @@ pub fn configure(mode: ProviderMode, level: &str) -> Result<()> {
         config.ark.model_dir = Some(crate::model_assets::default_directory()?);
     }
     config.ark.download_files = false;
-    if level == "l1" {
-        config.ark.categories.retain(|c| c != "threat");
-    } else if !config.ark.categories.iter().any(|c| c == "threat") {
-        config.ark.categories.push("threat".into());
-    }
+    select_level_categories(&mut config.ark.categories, level);
     crate::local_settings::save(&config)
+}
+
+/// Threat detection is opt-in: onboarding never enables it, keeps an explicit
+/// choice, and removes it at L1 because Ark has no L1 threat detector.
+fn select_level_categories(categories: &mut Vec<String>, level: &str) {
+    if level == "l1" {
+        categories.retain(|c| c != "threat");
+    }
 }
 pub fn check() -> Result<InjectionCheck> {
     let config = Config::load(None, None)?;
@@ -232,7 +236,7 @@ pub fn check() -> Result<InjectionCheck> {
         .ok()
         .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
         .unwrap_or(Value::Null);
-    let value = json!({"fingerprint":fingerprint(&config)?,"check":result,"installed_hosts":previous["installed_hosts"],"restart_required":previous["restart_required"]});
+    let value = json!({"fingerprint":fingerprint(&config)?,"check":result,"installed_at":previous["installed_at"]});
     crate::output::atomic_write(
         &state_path()?,
         &serde_json::to_vec_pretty(&value).map_err(|_| fail("Could not save setup status"))?,
@@ -270,21 +274,27 @@ pub fn install(host: &str, source: Option<PathBuf>) -> Result<()> {
     })
 }
 
-pub(crate) fn record_install(host: &str) -> Result<()> {
+/// Agents pick up new hooks on their next session, so the reminder fades after a day.
+fn restart_required(saved: &Value, any_installed: bool) -> bool {
+    const REMINDER_SECS: i64 = 24 * 60 * 60;
+    any_installed
+        && saved["installed_at"]
+            .as_i64()
+            .is_none_or(|at| chrono::Utc::now().timestamp() - at < REMINDER_SECS)
+}
+
+pub(crate) fn record_install() -> Result<()> {
     let path = state_path()?;
     let mut value = std::fs::read(&path)
         .ok()
         .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
         .unwrap_or(json!({}));
-    let mut hosts = value["installed_hosts"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    if !hosts.iter().any(|v| v == host) {
-        hosts.push(json!(host));
+    if let Some(object) = value.as_object_mut() {
+        // Installed hosts are read live from each integration; only the time is kept.
+        object.remove("installed_hosts");
+        object.remove("restart_required");
     }
-    value["installed_hosts"] = json!(hosts);
-    value["restart_required"] = json!(true);
+    value["installed_at"] = json!(chrono::Utc::now().timestamp());
     crate::output::atomic_write(
         &path,
         &serde_json::to_vec(&value).map_err(|_| fail("Could not save setup status"))?,
@@ -557,12 +567,36 @@ pub fn check_command(format: OutputFormat) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn categories(items: &[&str]) -> Vec<String> {
+        items.iter().map(|item| item.to_string()).collect()
+    }
+    #[test]
+    fn onboarding_leaves_threat_off_by_default_at_every_level() {
+        for level in ["l1", "l2", "l3"] {
+            let mut selected = categories(&["prompt_injection", "dlp", "pii"]);
+            select_level_categories(&mut selected, level);
+            assert_eq!(
+                selected,
+                categories(&["prompt_injection", "dlp", "pii"]),
+                "{level}"
+            );
+        }
+    }
+    #[test]
+    fn onboarding_keeps_an_explicit_threat_opt_in_except_at_l1() {
+        for (level, kept) in [("l2", true), ("l3", true), ("l1", false)] {
+            let mut selected = categories(&["prompt_injection", "threat"]);
+            select_level_categories(&mut selected, level);
+            assert_eq!(selected.iter().any(|c| c == "threat"), kept, "{level}");
+        }
+    }
     #[test]
     fn failed_or_partial_probe_is_not_ready() {
         let outcome = crate::ark::AnalysisOutcome {
             classifications: vec![],
             failures: vec![],
             degraded: false,
+            notice: None,
         };
         assert!(!complete_detection(&outcome));
     }

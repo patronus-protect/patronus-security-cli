@@ -1,9 +1,11 @@
 use chrono::Utc;
-use patronus_security_scanner::ark::{Evidence, FinalClassification};
+use patronus_security_scanner::ark::{Evidence, FinalClassification, ScanNotice};
 use patronus_security_scanner::chunk::ChunkRecord;
 use patronus_security_scanner::cli::FailOn;
 use patronus_security_scanner::discovery::FileRecord;
-use patronus_security_scanner::report::{build_report, exit_code, ReportBuilder, ScanStatus};
+use patronus_security_scanner::report::{
+    build_report, exit_code, markdown, terminal_summary, ReportBuilder, ScanStatus,
+};
 use patronus_security_scanner::target::TargetKind;
 
 #[test]
@@ -81,6 +83,40 @@ fn any_skip_forces_incomplete_ahead_of_reassurance() {
     );
     assert_eq!(report.status, ScanStatus::Incomplete);
     assert_eq!(exit_code(report.status, FailOn::Incomplete), 3);
+}
+
+#[test]
+fn local_fallback_after_api_usage_limit_is_reported_once_without_failing_the_scan() {
+    let mut builder = ReportBuilder::new();
+    builder.notice(&ScanNotice::api_usage_limit("local", Some(600)));
+    builder.notice(&ScanNotice::api_usage_limit("local", Some(600)));
+    let files = vec![sample_file(true, None)];
+    let report = build_report(
+        "run".into(),
+        TargetKind::File,
+        "/tmp/example.txt".into(),
+        Utc::now(),
+        10,
+        &files,
+        1,
+        4,
+        1,
+        4,
+        vec!["dlp".into()],
+        "l1".into(),
+        builder,
+        "run/report.md".into(),
+    );
+    assert_eq!(
+        report.notices,
+        vec![ScanNotice::api_usage_limit("local", Some(600))]
+    );
+    assert_ne!(report.status, ScanStatus::Failed);
+    for text in [terminal_summary(&report), markdown(&report)] {
+        assert!(text.contains("API usage limit reached"), "{text}");
+        assert!(text.contains("scanned locally"), "{text}");
+        assert!(text.contains("600"), "{text}");
+    }
 }
 
 fn sample_classification() -> FinalClassification {

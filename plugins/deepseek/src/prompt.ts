@@ -1,6 +1,7 @@
 import { chatCommand, controlChat } from './chat-control.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
+import type { Message } from '@deepseek-ai/dsh-llm'
 import { createHash } from 'node:crypto'
 import type { ProtocolEventSink } from './protocol-events.ts'
 import { elapsed, hashProtocolValue } from './protocol-events.ts'
@@ -9,13 +10,36 @@ import type { SessionState } from './sessions.ts'
 import { textPayload, userPromptText } from './text.ts'
 import { waitForScan } from './wait.ts'
 import { degradedMessage } from './degraded.ts'
+import { degradedText, noticeText, scanNotice } from './notice.ts'
+import type { ScanResult } from './protocol.ts'
+import { consumeIgnoreOnce, hasIgnoreOnce, injectionFinding, issueIgnoreOnce, stripIgnoreOnce } from './ignore-once.ts'
 
 const degraded = new Set(['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
 
-function warn(decision: PreStepDecision): PreStepDecision {
+function removeConsumedCommand(messages: readonly Message[], pending: ReadonlySet<string>): { messages: Message[]; identities: string[] } {
+  const identities: string[] = []
+  const cleanMessages = messages.map(message => {
+    if (message.source.kind !== 'user') return message
+    const identity = createHash('sha256').update(JSON.stringify([String(message.id), userPromptText([message])])).digest('hex')
+    if (!pending.has(identity)) return message
+    const clean = { ...message, content: message.content.map(block => block.type === 'text' ? { ...block, text: stripIgnoreOnce(block.text) } : block) }
+    identities.push(createHash('sha256').update(JSON.stringify([String(message.id), userPromptText([clean])])).digest('hex'))
+    return clean
+  })
+  return { messages: cleanMessages, identities }
+}
+
+function warn(decision: PreStepDecision, text?: string): PreStepDecision {
   return decision.kind === 'enter'
-    ? { ...decision, messages: [...decision.messages, degradedMessage()] }
+    ? { ...decision, messages: [...decision.messages, degradedMessage(text)] }
     : decision
+}
+
+/** The note to attach after a prompt scan, if any. */
+function promptNote(result: ScanResult): string | undefined {
+  if (degraded.has(result.status)) return degradedText(result)
+  const notice = scanNotice(result.notice)
+  return notice ? noticeText(notice) : undefined
 }
 
 export function registerPromptGate(
@@ -47,6 +71,7 @@ export function registerPromptGate(
     const text = pending.flatMap(message => message.text)
     const identity = createHash('sha256').update(JSON.stringify(pending.map(message => message.identity))).digest('hex')
     const payload = textPayload(text)
+    if (hasIgnoreOnce(payload)) return next() // The llm/stream gate validates and strips it before model access.
     const payloadHash = hashProtocolValue(payload)
     const started = performance.now()
     let scanId = ''
@@ -63,10 +88,21 @@ export function registerPromptGate(
       const result = await waitForScan(runtime.client, { session: sessions.capability(session), scan_id: scanId }, waitMs, signal)
       events.emit({ kind: 'scan_completed', direction: 'request', tool: 'user_prompt', session_id: session, scan_id: scanId, status: result.status, duration_ms: elapsed(started), payload_hash: payloadHash })
       completed = true
-      if (result.status !== 'approved' && !degraded.has(result.status)) throw new Error(JSON.stringify(receipt(result, 'request')))
+      if (result.status !== 'approved' && !degraded.has(result.status)) {
+        const visible = receipt(result, 'request')
+        if (injectionFinding(result) && typeof visible === 'object' && visible !== null && !Array.isArray(visible)) {
+          const command = issueIgnoreOnce('deepseek', session, payload)
+          if (command) {
+            visible.ignore_once = command
+            visible.message = 'Injection risk blocked this prompt. Add ignore_once to the same message and resend it within 15 minutes to allow that message once.'
+          }
+        }
+        throw new Error(JSON.stringify(visible))
+      }
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
-      return degraded.has(result.status) || warnNow ? warn(await next()) : next()
+      const note = promptNote(result)
+      return note || warnNow ? warn(await next(), note) : next()
     } catch (error) {
       if (!completed) events.emit({ kind: 'scan_failed', direction: 'request', tool: 'user_prompt', session_id: session, ...(scanId ? { scan_id: scanId } : {}), status: 'failed', duration_ms: elapsed(started), payload_hash: payloadHash })
       if (completed) throw error
@@ -105,6 +141,14 @@ export function registerPromptGate(
     const text = pending.flatMap(message => message.text)
     const identity = createHash('sha256').update(JSON.stringify(pending.map(message => message.identity))).digest('hex')
     const payload = textPayload(text)
+    if (consumeIgnoreOnce('deepseek', session, payload)) {
+      const clean = removeConsumedCommand(options.messages, new Set(pending.map(message => message.identity)))
+      options.messages = clean.messages
+      for (const identity of clean.identities) sessionApproved.add(identity)
+      approved.set(session, sessionApproved)
+      yield* next()
+      return
+    }
     const payloadHash = hashProtocolValue(payload)
     const started = performance.now()
     let scanId = ''
@@ -121,8 +165,20 @@ export function registerPromptGate(
       const result = await waitForScan(runtime.client, { session: sessions.capability(session), scan_id: scanId }, waitMs, signal)
       events.emit({ kind: 'scan_completed', direction: 'request', tool: 'user_prompt', session_id: session, scan_id: scanId, status: result.status, duration_ms: elapsed(started), payload_hash: payloadHash })
       completed = true
-      if (degraded.has(result.status)) { options.messages.push(degradedMessage()); yield* next(); return }
-      if (result.status !== 'approved') throw new Error(JSON.stringify(receipt(result, 'request')))
+      if (degraded.has(result.status)) { options.messages.push(degradedMessage(degradedText(result))); yield* next(); return }
+      const notice = result.status === 'approved' ? scanNotice(result.notice) : undefined
+      if (notice) options.messages.push(degradedMessage(noticeText(notice)))
+      if (result.status !== 'approved') {
+        const visible = receipt(result, 'request')
+        if (injectionFinding(result) && typeof visible === 'object' && visible !== null && !Array.isArray(visible)) {
+          const command = issueIgnoreOnce('deepseek', session, payload)
+          if (command) {
+            visible.ignore_once = command
+            visible.message = 'Injection risk blocked this prompt. Add ignore_once to the same message and resend it within 15 minutes to allow that message once.'
+          }
+        }
+        throw new Error(JSON.stringify(visible))
+      }
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
       yield* next()

@@ -40,7 +40,7 @@ export default defineConfig({
   plugins: [standardDecoratorPlugin(), tsconfigPaths({ projects: ['./tsconfig.base.json'] })],
   resolve: { alias: ${JSON.stringify(aliases)} },
   test: {
-    include: [${JSON.stringify(`${relative(harnessRoot, scratch)}/tests/${mode === 'local' || mode === 'models' || mode === 'static-local' ? mode : mode ? 'gpt' : '{pending,mcp,prompt,protocol-events,request,session-security,settings,static,text}'}.test.ts`)}],
+    include: [${JSON.stringify(`${relative(harnessRoot, scratch)}/tests/${mode === 'local' || mode === 'models' || mode === 'static-local' ? mode : mode ? 'gpt' : '{notice,pending,mcp,prompt,protocol-events,request,session-security,settings,static,text}'}.test.ts`)}],
     testTimeout: ${mode === 'login' ? 960000 : mode === 'live' || mode === 'models' ? 180000 : mode === 'local' || mode === 'static-local' ? 90000 : 10000},
     disableConsoleIntercept: ${Boolean(mode)},
     fileParallelism: false,

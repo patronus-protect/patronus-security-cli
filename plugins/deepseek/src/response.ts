@@ -3,6 +3,7 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { PostToolDecision, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import type { RuntimeClient } from './protocol.ts'
 import { degradedMessage } from './degraded.ts'
+import { degradedText, noticeText, scanNotice } from './notice.ts'
 import type { SessionRuntime } from './sessions.ts'
 import { fingerprint, projectResult, isNativeCancellation } from './host.ts'
 import { blocked, receipt } from './receipts.ts'
@@ -21,9 +22,9 @@ export interface Gate {
   events: ProtocolEventSink
 }
 
-function warn(decision: PostToolDecision): PostToolDecision {
+function warn(decision: PostToolDecision, text?: string): PostToolDecision {
   if (decision.kind !== 'accept') return decision
-  return { ...decision, additionalContexts: [...decision.additionalContexts ?? [], degradedMessage()] }
+  return { ...decision, additionalContexts: [...decision.additionalContexts ?? [], degradedMessage(text)] }
 }
 
 export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: number): void {
@@ -67,10 +68,11 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
       const scanned = await autoRedact(pending, () => client!.readRedacted(job!, signal))
       gate.events.emit({ kind: 'scan_completed', direction: 'response', tool: exec.name, session_id: session, scan_id: scanned.scan_id, status: scanned.status, duration_ms: elapsed(started), payload_hash: payloadHash })
       if (scanned.status === 'approved') {
-        return finish(exec, result, decision)
+        const notice = scanNotice(scanned.notice)
+        return finish(exec, result, notice ? warn(decision, noticeText(notice)) : decision)
       }
       if (['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'].includes(scanned.status)) {
-        return finish(exec, result, warn(decision))
+        return finish(exec, result, warn(decision, degradedText(scanned)))
       }
       const metadata = receipt(scanned) as Record<string, JsonValue>
       return finish(exec, result, blocked(metadata))

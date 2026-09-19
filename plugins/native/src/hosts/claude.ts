@@ -21,6 +21,27 @@ function securityContext(text: string): string | undefined {
   } catch { /* Non-receipt decisions need no agent instruction. */ }
 }
 
+const categoryLabels: Record<string, string> = {
+  prompt_injection: 'prompt injection', injection: 'injection', dlp: 'sensitive data', pii: 'personal data', threat: 'threat',
+}
+
+/** Claude shows a blocked prompt's reason verbatim to the user, so receipts become one readable sentence. */
+function promptBlockReason(text: string): string {
+  try {
+    const receipt = JSON.parse(text)
+    if (!record(receipt) || typeof receipt.status !== 'string') return text
+    const categories = Array.isArray(receipt.findings)
+      ? [...new Set(receipt.findings.flatMap((item) => record(item) && typeof item.category === 'string' ? [categoryLabels[item.category] ?? item.category] : []))]
+      : []
+    const lines = [receipt.status === 'dangerous' && categories.length
+      ? `Patronus blocked this message: ${categories.join(', ')} detected. It was not sent to Claude.`
+      : `Patronus blocked this message (scan status: ${receipt.status}). It was not sent to Claude.`]
+    if (typeof receipt.ignore_once === 'string') lines.push(`To send it once anyway, add ${receipt.ignore_once} to the same message and resend it within 15 minutes.`)
+    if (typeof receipt.scan_id === 'string' && receipt.scan_id) lines.push(`Scan ID: ${receipt.scan_id}`)
+    return lines.join('\n')
+  } catch { return text }
+}
+
 function visibleToolResult(text: string): string {
   try {
     const receipt = JSON.parse(text)
@@ -99,9 +120,11 @@ function replaceClaudeResponse(response: unknown, text: string): unknown {
 }
 
 export function mapClaude(event: string, decision: HookDecision, input?: HookInput): object {
-  if (decision.kind === 'warn') return { hookSpecificOutput: {
-    hookEventName: event, additionalContext: decision.text,
-  } }
+  if (decision.kind === 'warn') return {
+    systemMessage: decision.text,
+    hookSpecificOutput: { hookEventName: event, additionalContext: decision.text },
+  }
+  if (event === 'UserPromptSubmit') return { decision: 'block', reason: promptBlockReason(decision.text) }
   if (event === 'PreToolUse') {
     return {
       hookSpecificOutput: {

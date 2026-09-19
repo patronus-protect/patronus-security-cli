@@ -52,7 +52,7 @@ pub fn execute(mut args: IntegrationArgs) -> Result<()> {
         IntegrationHost::Deepseek => deepseek::execute(args),
     }?;
     if installed {
-        crate::onboarding::record_install(host.as_str())?;
+        crate::onboarding::record_install()?;
     }
     Ok(())
 }

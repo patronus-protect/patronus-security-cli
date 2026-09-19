@@ -408,6 +408,7 @@ fn sample_report() -> Report {
         failures: vec![],
         report_path: "output/run-1/report.md".into(),
         scope_disclaimer: vec![],
+        notices: vec![],
     }
 }
 

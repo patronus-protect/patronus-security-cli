@@ -2,6 +2,8 @@ import { chatCommand, controlChat } from '../../deepseek/src/chat-control.ts'
 import { readPluginSettings, hookEnabled, type PluginSettings } from '../../deepseek/src/settings.ts'
 import { isAbsolute, resolve } from 'node:path'
 import { receipt } from '../../deepseek/src/receipts.ts'
+import { degradedText, noticeText, scanNotice, DEGRADED_TEXT } from '../../deepseek/src/notice.ts'
+import { consumeIgnoreOnce, injectionFinding, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
 import type { ScanResult } from '../../deepseek/src/protocol.ts'
 import { invalidScanReference } from '../../deepseek/src/references.ts'
 import { callBroker, type BrokerConfig } from './broker.ts'
@@ -11,7 +13,6 @@ import { recordProtocolScan, type ProtocolRecorder } from './protocol.ts'
 import type { HookDecision, HookInput, Host, JsonValue } from './types.ts'
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-const failed = JSON.stringify(receipt({ scan_id: '', status: 'failed' }))
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,256}$/.test(value)
 const ownPrefixes: Record<Host, string[]> = {
   codex: ['mcp__patronus__'],
@@ -47,6 +48,16 @@ function invalidArguments(required: string[], missing: string[] = required): Jso
 
 const degraded = new Set(['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
 
+/** Why a completed or failed scan needs a note: a local fallback or a named failure cause. */
+function scanNote(result: ScanResult, host: Host): string | undefined {
+  if (degraded.has(result.status)) {
+    const text = degradedText(result)
+    return text === DEGRADED_TEXT ? inactiveMessage(host) : text
+  }
+  const notice = result.status === 'approved' ? scanNotice(result.notice) : undefined
+  return notice ? noticeText(notice) : undefined
+}
+
 function visibleResult(result: ScanResult, host: Host, direction: 'request' | 'response' = 'response'): JsonValue {
   const value = receipt(result, direction)
   if (result.status === 'unavailable' && record(value)) value.message = inactiveMessage(host)
@@ -57,18 +68,56 @@ function ownOperation(host: Host, name: string): string | undefined {
   for (const prefix of ownPrefixes[host]) if (name.startsWith(prefix)) return operations.get(name.slice(prefix.length))
 }
 
-type Overrides = Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'>
+export type OwnOperationOutcome = { kind: 'result' | 'invalid' | 'static_failed'; text: string }
+type Scan = (request: Parameters<typeof callBroker>[1]) => Promise<JsonValue>
+
+/** Runs a Patronus tool for one host session. Relative static paths resolve against cwd. */
+export async function runOwnOperation(host: Host, operation: string, args: unknown, cwd: string, scan: Scan): Promise<OwnOperationOutcome> {
+  if (!record(args)) return { kind: 'invalid', text: JSON.stringify(invalidArguments(operation === 'static' ? ['kind', 'path'] : operation === 'read_redacted' ? ['scan_id or file_id'] : ['scan_id'])) }
+  let result: JsonValue
+  if (operation === 'static') {
+    const missing = ['kind', 'path'].filter(key => typeof args[key] !== 'string' || !args[key])
+    if (missing.length) return { kind: 'invalid', text: JSON.stringify(invalidArguments(['kind', 'path'], missing)) }
+    if (Object.keys(args).some(key => !['kind', 'path', 'server'].includes(key)) ||
+        !['repo', 'directory', 'file', 'url', 'mcp'].includes(args.kind as string) || (args.path as string).includes('\0')) return { kind: 'invalid', text: JSON.stringify(invalidArguments(['kind', 'path'], [])) }
+    if (args.server !== undefined && (args.kind !== 'mcp' || typeof args.server !== 'string' || !args.server || args.server.length > 256)) return { kind: 'invalid', text: JSON.stringify(invalidArguments(['kind', 'path'], [])) }
+    const kind = args.kind as 'repo' | 'directory' | 'file' | 'url' | 'mcp'
+    const path = args.path as string
+    const target = kind === 'url' || kind === 'mcp' && path.startsWith('https://') ? path : resolve(cwd, path)
+    result = await scan({ method: 'static', kind, path: target, ...(args.server === undefined ? {} : {server: args.server as string}) })
+    if (record(result) && result.status === 'FAILED') return { kind: 'static_failed', text: staticFailureMessage(result) }
+  } else {
+    const keys = Object.keys(args)
+    const scanId = typeof args.scan_id === 'string' ? args.scan_id : ''
+    const staticRead = operation === 'read_redacted' && keys.length === 1 && typeof args.file_id === 'string' && /^file_[a-f0-9]{64}$/.test(args.file_id)
+    const runtimeRead = keys.length === 1 && id(scanId)
+    if (staticRead) result = await scan({ method: 'read_static_redacted', fileId: args.file_id as string })
+    else {
+      if (!runtimeRead) return { kind: 'invalid', text: JSON.stringify(invalidArguments(operation === 'read_redacted' ? ['scan_id or file_id'] : ['scan_id'])) }
+      const invalid = invalidScanReference(scanId)
+      if (invalid) return { kind: 'invalid', text: JSON.stringify(invalid) }
+      result = await scan({ method: operation as 'check' | 'read_redacted', scanId })
+    }
+  }
+  const visible = record(result) && result.status === 'unavailable'
+    ? { ...result, message: inactiveMessage(host) }
+    : operation === 'check' && record(result) && result.status === 'pending'
+      ? visibleResult(result as unknown as ScanResult, host)
+    : result
+  return { kind: 'result', text: JSON.stringify(visible) }
+}
+
+type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'>
 
 /** Hooks supply session attribution. Model arguments never carry a capability. */
 export async function handleHook(host: Host, event: string, value: unknown, overrides: Overrides = {}, rpc: typeof callBroker = callBroker, protocol: ProtocolRecorder = recordProtocolScan, settings: () => PluginSettings = readPluginSettings, control: typeof controlChat = controlChat): Promise<object> {
   const map = (decision: HookDecision) => host === 'codex' ? mapCodex(event, decision) : mapClaude(event, decision, value as HookInput)
-  const deny = (text = failed) => map({ kind: event === 'PreToolUse' ? 'deny' : 'replace', text })
-  const warn = () => map({ kind: 'warn', text: inactiveMessage(host) })
+  const warn = (text = inactiveMessage(host)) => map({ kind: 'warn', text })
   try {
     if (!record(value) || value.hook_event_name !== event || !id(value.session_id) ||
         typeof value.cwd !== 'string' || !isAbsolute(value.cwd)) return warn()
     const input = value as unknown as HookInput
-    const config: BrokerConfig = { ...overrides, host, sessionId: input.session_id, cwd: input.cwd }
+    const config: BrokerConfig = { ...overrides, host, sessionId: input.session_id, cwd: overrides.cwd ?? input.cwd }
     const scan = (request: Parameters<typeof rpc>[1]) => protocol(config!, request, () => rpc(config!, request))
     if (event === 'SessionEnd' || event === 'Stop') { await rpc(config, { method: 'close' }).catch(() => ({ closed: false })); return {} }
     if (event === 'UserPromptSubmit') {
@@ -87,68 +136,48 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       const payload = claudeExternalTextPayload(event, input)
       if (payload === undefined) return {}
       const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
-      if (result.status === 'approved') return {}
-      if (degraded.has(result.status)) return warn()
+      if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
       return map({ kind: 'stop', text: JSON.stringify(visibleResult(result, host)) })
     }
     if (event === 'UserPromptSubmit') {
       if (!enabled('user_input')) return {}
       const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
       if (payload === undefined) return {}
+      if (consumeIgnoreOnce(host, input.session_id, payload)) return {}
       const callId = id(input.prompt_id) ? input.prompt_id : 'user-prompt'
       const result = await scan({ method: 'request', tool: 'UserPromptSubmit', callId, payload }) as unknown as ScanResult
-      if (result.status === 'approved') return {}
-      return degraded.has(result.status) ? warn() : map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host, 'request')) })
+      if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
+      const visible = visibleResult(result, host, 'request')
+      if (injectionFinding(result) && record(visible)) {
+        const command = issueIgnoreOnce(host, input.session_id, payload)
+        if (command) {
+          visible.ignore_once = command
+          visible.message = 'Injection risk blocked this prompt. Add ignore_once to the same message and resend it within 15 minutes to allow that message once.'
+        }
+      }
+      return map({ kind: 'replace', text: JSON.stringify(visible) })
     }
     if (!['PreToolUse', 'PostToolUse'].includes(event)) return {}
     if (!id(input.tool_use_id) || typeof input.tool_name !== 'string' || !input.tool_name || input.tool_name.length > 256) throw Error('Invalid tool metadata.')
     const operation = ownOperation(host, input.tool_name)
     if (event === 'PreToolUse' && operation) {
-      const args = input.tool_input
-      if (!record(args)) return deny(JSON.stringify(invalidArguments(operation === 'static' ? ['kind', 'path'] : operation === 'read_redacted' ? ['scan_id or file_id'] : ['scan_id'])))
-      let result: JsonValue
-      if (operation === 'static') {
-        const missing = ['kind', 'path'].filter(key => typeof args[key] !== 'string' || !args[key])
-        if (missing.length) return deny(JSON.stringify(invalidArguments(['kind', 'path'], missing)))
-        if (Object.keys(args).some(key => !['kind', 'path', 'server'].includes(key)) ||
-            !['repo', 'directory', 'file', 'url', 'mcp'].includes(args.kind as string) || (args.path as string).includes('\0')) return deny(JSON.stringify(invalidArguments(['kind', 'path'], [])))
-        if (args.server !== undefined && (args.kind !== 'mcp' || typeof args.server !== 'string' || !args.server || args.server.length > 256)) return deny(JSON.stringify(invalidArguments(['kind', 'path'], [])))
-        const kind = args.kind as 'repo' | 'directory' | 'file' | 'url' | 'mcp'
-        const path = args.path as string
-        const target = kind === 'url' || kind === 'mcp' && path.startsWith('https://') ? path : resolve(input.cwd, path)
-        result = await scan({ method: 'static', kind, path: target, ...(args.server === undefined ? {} : {server: args.server as string}) })
-        if (record(result) && result.status === 'FAILED') return map({ kind: 'warn', text: staticFailureMessage(result) })
-      } else {
-        const keys = Object.keys(args)
-        const scanId = typeof args.scan_id === 'string' ? args.scan_id : ''
-        const staticRead = operation === 'read_redacted' && keys.length === 1 && typeof args.file_id === 'string' && /^file_[a-f0-9]{64}$/.test(args.file_id)
-        const runtimeRead = keys.length === 1 && id(scanId)
-        if (staticRead) result = await scan({ method: 'read_static_redacted', fileId: args.file_id as string })
-        else {
-          if (!runtimeRead) return deny(JSON.stringify(invalidArguments(operation === 'read_redacted' ? ['scan_id or file_id'] : ['scan_id'])))
-          const invalid = invalidScanReference(scanId)
-          if (invalid) return deny(JSON.stringify(invalid))
-          result = await scan({ method: operation as 'check' | 'read_redacted', scanId })
-        }
-      }
-      // Return a safe result as deny feedback; the placeholder never executes and
-      // no hidden session token is inserted into model-visible tool arguments.
-      const visible = record(result) && result.status === 'unavailable'
-        ? { ...result, message: inactiveMessage(host) }
-        : operation === 'check' && record(result) && result.status === 'pending'
-          ? visibleResult(result as unknown as ScanResult, host)
-        : result
-      return map({ kind: 'deny', text: JSON.stringify(visible) })
+      // Claude's MCP server knows its session and answers as an ordinary tool result.
+      // Codex gives its MCP server no session identity, so the hook answers as deny feedback.
+      if (host === 'claude') return {}
+      const outcome = await runOwnOperation(host, operation, input.tool_input, input.cwd, scan)
+      return map({ kind: outcome.kind === 'static_failed' ? 'warn' : 'deny', text: outcome.text })
     }
     if (event === 'PreToolUse') {
       return {}
     }
+    // Patronus' own results are already scan receipts; rescanning them would loop.
+    if (operation) return {}
     if (!responseEnabled()) return {}
     const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
     if (payload === undefined) return {}
     const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
-    if (result.status === 'approved') return {}
-    return degraded.has(result.status) ? warn() : map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host)) })
+    if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
+    return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host)) })
   } catch {
     return warn()
   }

@@ -85,6 +85,7 @@ fn scoped_model_policy_uses_arks_decision_candidate_without_rethresholding() {
         classifications: vec![rejected, accepted, classification("pii", "l2", 0.1)],
         failures: vec!["incomplete model".into()],
         degraded: true,
+        notice: None,
     };
     let result = plugin_policies::assess(outcome);
     assert_eq!(

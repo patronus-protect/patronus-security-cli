@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { LocalClient } from '../../deepseek/src/client.ts'
 import { handleHook } from '../src/hooks.ts'
+import { handleMcp } from '../src/mcp.ts'
 
 async function fixture(poisonPending = false) {
   const root = await mkdtemp(join(tmpdir(), 'patronus-redaction-client-'))
@@ -44,10 +45,14 @@ for (const host of ['codex', 'claude'] as const) {
   test(`${host} rejects static file IDs before any runtime lookup`, async () => {
     for (const scan_id of ['file_' + 'a'.repeat(64), 'a'.repeat(64)]) {
       let calls = 0
-      const result = await handleHook(host, 'PreToolUse', {
-        hook_event_name: 'PreToolUse', session_id: 'test-session', cwd: '/private/tmp',
-        tool_use_id: 'call-1', tool_name: 'mcp__patronus__patronus_read_redacted', tool_input: {scan_id},
-      }, {}, async () => { calls++; return {} })
+      const rpc = async () => { calls++; return {} }
+      const result = host === 'claude'
+        ? await handleMcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'patronus_read_redacted', arguments: { scan_id } } },
+          { host, cwd: '/private/tmp', scan: rpc })
+        : await handleHook(host, 'PreToolUse', {
+          hook_event_name: 'PreToolUse', session_id: 'test-session', cwd: '/private/tmp',
+          tool_use_id: 'call-1', tool_name: 'mcp__patronus__patronus_read_redacted', tool_input: {scan_id},
+        }, {}, rpc)
       assert.equal(calls, 0)
       assert.match(JSON.stringify(result), /wrong_id_type/)
       assert.doesNotMatch(JSON.stringify(result), /inactive|integration .* enable/)

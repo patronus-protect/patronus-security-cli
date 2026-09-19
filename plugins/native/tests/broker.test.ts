@@ -324,6 +324,42 @@ for (const delayMs of [0, 150]) {
   })
 }
 
+test('broker returns the fixed local-fallback notice and strips any other notice text', {timeout:30000}, async()=>{
+  const notice={code:'api_usage_limit',fallback:'local',retry_after:60}
+  const {root,config}=await stub({extra:{notice:{...notice,detail:'BROKER_PRIVATE_PROTOCOL_CANARY731'}}})
+  const clean=await stub({extra:{notice}})
+  config.responseWaitMs=1000; clean.config.responseWaitMs=1000
+  try {
+    const leaked=await hook(config,{method:'response',tool:'read',callId:'fallback',payload:'large text'})
+    assert.equal(leaked.status,'approved')
+    assert.equal(leaked.notice,undefined)
+    assert(!JSON.stringify(leaked).includes('CANARY731'))
+    const result=await hook(clean.config,{method:'response',tool:'read',callId:'fallback',payload:'large text'})
+    assert.equal(result.status,'approved')
+    assert.deepEqual(result.notice,notice)
+  } finally {
+    await hook(config,{method:'close'}); await hook(clean.config,{method:'close'})
+    await rm(root,{recursive:true,force:true}); await rm(clean.root,{recursive:true,force:true})
+  }
+})
+
+test('broker keeps only the fixed usage-limit failure reason', {timeout:30000}, async()=>{
+  const limited=await stub({status:'failed',extra:{reason:'usage_limit_reached',notice:{code:'api_usage_limit',fallback:'none'}}})
+  const other=await stub({status:'failed',extra:{reason:'BROKER_PRIVATE_PROTOCOL_CANARY731'}})
+  limited.config.responseWaitMs=1000; other.config.responseWaitMs=1000
+  try {
+    const result=await hook(limited.config,{method:'response',tool:'read',callId:'limited',payload:'large text'})
+    assert.equal(result.status,'failed')
+    assert.equal(result.reason,'usage_limit_reached')
+    assert.deepEqual(result.notice,{code:'api_usage_limit',fallback:'none'})
+    const hidden=await hook(other.config,{method:'response',tool:'read',callId:'other',payload:'large text'})
+    assert.equal(hidden.reason,undefined)
+    assert(!JSON.stringify(hidden).includes('CANARY731'))
+  } finally {
+    for (const {config,root} of [limited,other]) { await hook(config,{method:'close'}); await rm(root,{recursive:true,force:true}) }
+  }
+})
+
 test('static audit succeeds without starting a runtime worker', {timeout:30000}, async()=>{
   const {fakeCli}=await import('../../deepseek/tests/static-fixture.ts')
   const cli=await fakeCli()

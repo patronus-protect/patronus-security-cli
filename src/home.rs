@@ -1,57 +1,113 @@
-use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{self, Write};
 
 use patronus_security_scanner::error::{Result, ScannerError};
 
-const ACTIONS: [(&str, &str); 7] = [
-    ("Scan this repository", "scan repo"),
-    ("Scan a file", "scan file"),
-    ("Scan a directory", "scan directory"),
-    ("Scan a URL", "scan url"),
-    ("View setup status", "onboarding --status"),
-    ("Open dashboard", "dashboard"),
-    ("Run onboarding", "onboarding"),
+struct Action {
+    label: &'static str,
+    command: &'static str,
+    /// Prompt for the trailing target argument, with an optional default.
+    target: Option<(&'static str, Option<&'static str>)>,
+}
+
+const ACTIONS: [Action; 7] = [
+    Action {
+        label: "Scan this repository",
+        command: "scan repo",
+        target: Some(("Repository path", Some("."))),
+    },
+    Action {
+        label: "Scan a file",
+        command: "scan file",
+        target: Some(("File path", None)),
+    },
+    Action {
+        label: "Scan a directory",
+        command: "scan directory",
+        target: Some(("Directory path", None)),
+    },
+    Action {
+        label: "Scan a URL",
+        command: "scan url",
+        target: Some(("HTTPS URL", None)),
+    },
+    Action {
+        label: "View setup status",
+        command: "onboarding --status",
+        target: None,
+    },
+    Action {
+        label: "Open dashboard",
+        command: "dashboard",
+        target: None,
+    },
+    Action {
+        label: "Run onboarding",
+        command: "onboarding",
+        target: None,
+    },
 ];
 
 pub fn choose() -> Result<Option<Vec<String>>> {
-    let selection = select()?;
-    let Some(index) = selection else {
+    let Some(action) = select()?.map(|index| &ACTIONS[index]) else {
         return Ok(None);
     };
     print!(
         "\x1b[H\x1b[2J\n  Patronus Security / {}\n  ─────────────────────────────────────────\n\n",
-        ACTIONS[index].0
+        action.label
     );
     io::stdout().flush().map_err(output_error)?;
-    let mut args = ACTIONS[index]
-        .1
+    let mut args = action
+        .command
         .split_whitespace()
         .map(str::to_owned)
         .collect::<Vec<_>>();
-    let prompt = match index {
-        0 => Some("Repository path [.]"),
-        1 => Some("File path"),
-        2 => Some("Directory path"),
-        3 => Some("HTTPS URL"),
-        _ => None,
-    };
-    if let Some(prompt) = prompt {
-        print!("{prompt}: ");
+    if let Some((prompt, default)) = action.target {
+        match default {
+            Some(default) => print!("{prompt} [{default}]: "),
+            None => print!("{prompt}: "),
+        }
         io::stdout().flush().map_err(output_error)?;
         let mut value = String::new();
         if io::stdin().read_line(&mut value).map_err(output_error)? == 0 {
             return Ok(None);
         }
-        let value = value.trim();
-        if value.is_empty() && index != 0 {
+        let Some(value) = Some(value.trim()).filter(|v| !v.is_empty()).or(default) else {
             return Ok(None);
-        }
-        args.push(if value.is_empty() { "." } else { value }.to_owned());
+        };
+        args.push(value.to_owned());
     }
     Ok(Some(args))
 }
 
+/// Without raw mode input arrives line by line, so read a whole line and parse it.
+#[cfg(not(unix))]
 fn select() -> Result<Option<usize>> {
-    #[cfg(unix)]
+    loop {
+        draw(0)?;
+        let mut line = String::new();
+        if io::stdin().read_line(&mut line).map_err(output_error)? == 0 {
+            return Ok(None);
+        }
+        match line.trim() {
+            "" => return Ok(Some(0)),
+            "q" => return Ok(None),
+            value => {
+                if let Some(index) = value
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|n| (1..=ACTIONS.len()).contains(n))
+                {
+                    return Ok(Some(index - 1));
+                }
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn select() -> Result<Option<usize>> {
     let _terminal = RawTerminal::enter()?;
     let mut selected = 0;
     loop {
@@ -61,7 +117,9 @@ fn select() -> Result<Option<usize>> {
         match key[0] {
             b'\r' | b'\n' => return Ok(Some(selected)),
             b'q' | 3 => return Ok(None),
-            b'1'..=b'7' => return Ok(Some((key[0] - b'1') as usize)),
+            digit @ b'1'..=b'9' if usize::from(digit - b'1') < ACTIONS.len() => {
+                return Ok(Some(usize::from(digit - b'1')))
+            }
             27 => {
                 if let Some(b'[') = escape_byte()? {
                     selected = match escape_byte()? {
@@ -97,11 +155,6 @@ fn escape_byte() -> Result<Option<u8>> {
     Ok(Some(byte[0]))
 }
 
-#[cfg(not(unix))]
-fn escape_byte() -> Result<Option<u8>> {
-    Ok(None)
-}
-
 fn draw(selected: usize) -> Result<()> {
     let mut out = io::stdout().lock();
     write!(
@@ -109,14 +162,15 @@ fn draw(selected: usize) -> Result<()> {
         "\x1b[H\x1b[2J\n  Patronus Security\n  ─────────────────────────────────────────\n\n"
     )
     .map_err(output_error)?;
-    for (index, (label, _)) in ACTIONS.iter().enumerate() {
+    for (index, action) in ACTIONS.iter().enumerate() {
         let marker = if index == selected { "❯" } else { " " };
-        writeln!(out, "  {marker} {}. {label}", index + 1).map_err(output_error)?;
+        writeln!(out, "  {marker} {}. {}", index + 1, action.label).map_err(output_error)?;
     }
+    let count = ACTIONS.len();
     let controls = if cfg!(unix) {
-        "↑↓ select · Enter run · 1–7 quick select · Esc/q quit"
+        format!("↑↓ select · Enter run · 1–{count} quick select · Esc/q quit")
     } else {
-        "Enter run · Type 1–7 then Enter · q quit"
+        format!("Type 1–{count} then Enter · Enter runs 1 · q quit")
     };
     write!(out, "\n  {controls}\n").map_err(output_error)?;
     out.flush().map_err(output_error)

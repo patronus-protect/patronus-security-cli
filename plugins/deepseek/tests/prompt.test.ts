@@ -2,6 +2,10 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { MockAdapter, textResponse } from 'harness-test-mock'
 import { describe, expect, it } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { issueIgnoreOnce } from '../src/ignore-once.ts'
 import { FakeClient } from './fake-client.ts'
 import { createHarness } from './harness.ts'
 
@@ -10,6 +14,33 @@ async function consume(stream: AsyncIterable<unknown>): Promise<void> {
 }
 
 describe('user prompt gate', () => {
+  it('accepts a matching one-time retry without scanning it again', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'patronus-deepseek-ignore-'))
+    const previous = process.env.PATRONUS_DATA_DIR
+    process.env.PATRONUS_DATA_DIR = root
+    const client = new FakeClient({ async scan() { return { status: 'dangerous' } } })
+    const adapter = new MockAdapter([textResponse('done')])
+    const ctx = await createHarness(client, adapter)
+    try {
+      const session = 'prompt-ignore-once'
+      const token = issueIgnoreOnce('deepseek', session, 'blocked prompt')
+      const message = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `blocked prompt ${token}` }] })
+      await consume(ctx.llm.stream({ provider: 'probe', model: 'scripted', sessionId: SessionId(session), messages: [message] }))
+      expect(adapter.requests).toHaveLength(1)
+      expect(JSON.stringify(adapter.requests[0])).not.toContain('ignore_once')
+      expect(client.submissions).toHaveLength(0)
+      await expect(consume(ctx.llm.stream({ provider: 'probe', model: 'scripted', sessionId: SessionId(session), messages: [
+        createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: `blocked prompt ${token}` }] }),
+      ] }))).rejects.toThrow('dangerous')
+      expect(client.submissions).toHaveLength(1)
+    } finally {
+      await ctx.fiber.dispose()
+      if (previous === undefined) delete process.env.PATRONUS_DATA_DIR
+      else process.env.PATRONUS_DATA_DIR = previous
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('submits only ordered user text blocks when the prompt also contains media', async () => {
     const client = new FakeClient({ async scan() { return { status: 'approved' } } })
     const adapter = new MockAdapter([textResponse('done')])

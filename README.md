@@ -57,8 +57,12 @@ curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/do
 
 Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.
 
-For a checksum-first installation and explicit coding-agent boundaries, follow
-the [CLI installation runbook](INSTALL.md).
+**Installing with a coding agent?** Point it at the
+[agent installation runbook](https://github.com/patronus-protect/patronus-security-cli/blob/main/INSTALL.md),
+for example: *"Install Patronus by following
+https://github.com/patronus-protect/patronus-security-cli/blob/main/INSTALL.md"*.
+The runbook also covers checksum-first installation and what the agent may and
+may not do.
 
 ## API clients
 

@@ -393,6 +393,9 @@ fn scan(
                 }) {
                     Ok(outcome) => {
                         builder.degraded |= outcome.degraded;
+                        if let Some(notice) = &outcome.notice {
+                            builder.notice(notice);
+                        }
                         for message in outcome.failures {
                             builder.failure(
                                 &output.run_id,
