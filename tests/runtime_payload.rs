@@ -170,7 +170,7 @@ fn merges_unicode_spans_and_redacts_each_raw_text_block() {
 }
 
 #[test]
-fn no_evidence_redacts_the_entire_field_even_when_only_one_chunk_matches() {
+fn no_evidence_redacts_only_the_chunk_that_matched() {
     let analyzer = Analyzer(|input: ChunkInput<'_>| {
         Ok(classify(
             input.clone(),
@@ -190,7 +190,15 @@ fn no_evidence_redacts_the_entire_field_even_when_only_one_chunk_matches() {
         Instant::now() + Duration::from_secs(10),
     );
     assert_eq!(outcome.verdict, Some(Verdict::Dangerous));
-    assert_eq!(outcome.redacted.unwrap(), json!(["[REDACTED]", "hello"]));
+    // The other chunks were classified on their own and overlap the matching one.
+    assert_eq!(
+        outcome.redacted.unwrap(),
+        json!(["[REDACTED]rt and a long private tail", "hello"])
+    );
+    assert_eq!(
+        (outcome.findings[0].start_byte, outcome.findings[0].end_byte),
+        (0, 12)
+    );
     assert_eq!(outcome.coverage.bytes_scanned, outcome.coverage.bytes_total);
 }
 
@@ -617,10 +625,12 @@ fn refinement_errors_deadlines_and_multiple_injections_fail_closed() {
     let original = run(&analyzer, &payload);
     let refined = refine(&analyzer, &payload, &original).unwrap();
     assert!(!refined.to_string().contains("PWNED"));
+    // Scanner errors and spent deadlines keep the coarse redaction, never the original.
     let failed = Analyzer(|_: ChunkInput<'_>| Err(ScannerError::Ark("private failure".into())));
-    assert!(refine(&failed, &payload, &original).is_none());
-    assert!(
-        refine_redaction(&analyzer, &payload, &original, &chunking(), Instant::now()).is_none()
+    assert_eq!(refine(&failed, &payload, &original), original.redacted);
+    assert_eq!(
+        refine_redaction(&analyzer, &payload, &original, &chunking(), Instant::now()),
+        original.redacted
     );
 }
 
@@ -656,7 +666,7 @@ fn actual_l3_refinement_preserves_ticket_port_and_removes_injection() {
 }
 
 #[test]
-fn partition_refinement_stops_after_verified_halves_and_reuses_identical_checks() {
+fn bisection_narrows_to_the_flagged_part_and_reuses_identical_checks() {
     let seen = RefCell::new(Vec::new());
     let analyzer = Analyzer(|input: ChunkInput<'_>| {
         seen.borrow_mut().push(input.content.to_owned());
@@ -669,14 +679,17 @@ fn partition_refinement_stops_after_verified_halves_and_reuses_identical_checks(
     let original = run(&analyzer, &payload);
     seen.borrow_mut().clear();
     let recovered = refine(&analyzer, &payload, &original).unwrap();
-    assert_eq!(
-        recovered,
-        json!("Ticket OPS-8080: Set demo-api port to 8080. [REDACTED]")
+    let text = recovered.as_str().unwrap();
+    assert!(
+        text.starts_with("Ticket OPS-8080: Set demo-api port to 8080. Untrusted attachment:"),
+        "{text}"
     );
+    assert!(text.ends_with("[REDACTED]"), "{text}");
+    assert!(!text.contains("PWNED"));
     let calls = seen.borrow();
     assert!(
-        calls.len() <= 4,
-        "simple recovery performed {} checks",
+        calls.len() <= 8,
+        "bisection performed {} checks",
         calls.len()
     );
     assert_eq!(
@@ -686,10 +699,18 @@ fn partition_refinement_stops_after_verified_halves_and_reuses_identical_checks(
 }
 
 #[test]
-fn partition_refinement_tries_thirds_when_halves_lose_the_signal() {
-    let text = (0..36)
+fn only_the_flagged_half_is_split_again() {
+    let seen = RefCell::new(Vec::new());
+    let analyzer = Analyzer(|input: ChunkInput<'_>| {
+        seen.borrow_mut().push(input.content.to_owned());
+        Ok(classify(
+            input.clone(),
+            input.content.contains("PWNED").then(Vec::new),
+        ))
+    });
+    let text = (0..64)
         .map(|i| {
-            if i == 18 {
+            if i == 5 {
                 "PWNED".to_owned()
             } else {
                 format!("word{i}")
@@ -697,17 +718,77 @@ fn partition_refinement_tries_thirds_when_halves_lose_the_signal() {
         })
         .collect::<Vec<_>>()
         .join(" ");
+    let payload = json!(text);
+    let original = run(&analyzer, &payload);
+    seen.borrow_mut().clear();
+    let recovered = refine(&analyzer, &payload, &original).unwrap();
+    let recovered = recovered.as_str().unwrap();
+    assert!(!recovered.contains("PWNED"));
+    assert!(
+        recovered.contains("word10") && recovered.contains("word63"),
+        "{recovered}"
+    );
+    // The clean right half (word32..word63) is scanned once and never split further.
+    let right_half_scans = seen
+        .borrow()
+        .iter()
+        .filter(|call| call.starts_with("word32 "))
+        .count();
+    assert_eq!(right_half_scans, 1);
+}
+
+#[test]
+fn two_separate_injections_are_both_narrowed() {
     let analyzer = Analyzer(|input: ChunkInput<'_>| {
-        let bad = input.content == text
-            || (input.content.contains("PWNED") && input.content.split_whitespace().count() <= 12);
-        Ok(classify(input, bad.then(Vec::new)))
+        Ok(classify(
+            input.clone(),
+            input.content.contains("PWNED").then(Vec::new),
+        ))
+    });
+    let text = (0..64)
+        .map(|i| {
+            if i == 3 || i == 60 {
+                "PWNED".to_owned()
+            } else {
+                format!("word{i}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let payload = json!(text);
+    let original = run(&analyzer, &payload);
+    let recovered = refine(&analyzer, &payload, &original).unwrap();
+    let recovered = recovered.as_str().unwrap();
+    assert!(!recovered.contains("PWNED"));
+    assert!(recovered.contains("word32"), "{recovered}");
+    assert_eq!(recovered.matches("[REDACTED]").count(), 2, "{recovered}");
+}
+
+#[test]
+fn an_injection_across_the_cut_is_found_in_the_middle_half() {
+    let text = (0..40)
+        .map(|i| match i {
+            19 => "EVIL".to_owned(),
+            20 => "PWNED".to_owned(),
+            _ => format!("word{i}"),
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let analyzer = Analyzer(|input: ChunkInput<'_>| {
+        Ok(classify(
+            input.clone(),
+            input.content.contains("EVIL PWNED").then(Vec::new),
+        ))
     });
     let payload = json!(text);
     let original = run(&analyzer, &payload);
     let recovered = refine(&analyzer, &payload, &original).unwrap();
-    assert!(recovered.as_str().unwrap().contains("word0"));
-    assert!(recovered.as_str().unwrap().contains("word35"));
-    assert!(!recovered.as_str().unwrap().contains("PWNED"));
+    let recovered = recovered.as_str().unwrap();
+    assert!(
+        recovered.contains("word0") && recovered.contains("word39"),
+        "{recovered}"
+    );
+    assert!(!recovered.contains("EVIL PWNED"));
 }
 
 #[test]

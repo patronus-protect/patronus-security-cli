@@ -28,6 +28,19 @@ impl ContentAnalyzer for ScopedAnalyzer<'_> {
         self.inner.analyze_scoped(input, self.scope)
     }
 }
+/// Redaction refinement re-scans fragments of dangerous text on this device only.
+struct LocalAnalyzer<'a> {
+    inner: &'a dyn ContentAnalyzer,
+    scope: Option<&'a str>,
+}
+impl ContentAnalyzer for LocalAnalyzer<'_> {
+    fn prepare(&mut self) -> crate::error::Result<()> {
+        Ok(())
+    }
+    fn analyze(&self, input: ChunkInput<'_>) -> crate::error::Result<AnalysisOutcome> {
+        self.inner.analyze_local(input, self.scope)
+    }
+}
 impl ContentAnalyzer for UserPromptAnalyzer<'_> {
     fn prepare(&mut self) -> crate::error::Result<()> {
         Ok(())
@@ -130,8 +143,12 @@ impl Worker {
                             .map(|a| a as &dyn ContentAnalyzer)
                             .unwrap_or(analyzer.as_ref());
                         if let Some(mut original) = work.refinement.clone() {
+                            let local = LocalAnalyzer {
+                                inner: analyzer.as_ref(),
+                                scope: work.policy_scope.as_deref(),
+                            };
                             if let Some(refined) = refine_redaction(
-                                active,
+                                &local,
                                 &work.payload,
                                 &original,
                                 &config.chunking,

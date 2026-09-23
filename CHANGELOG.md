@@ -5,6 +5,7 @@
 - Threat detection is now opt-in: onboarding no longer enables it at L2/L3 and keeps an explicit choice.
 - When the Patronus API usage or rate limit is exhausted, scan locally instead in hybrid and API mode, and tell users and agents why (Claude, Codex, DeepSeek, CLI reports). If local scanning is unavailable, report the usage limit instead of "protection is inactive".
 - In hybrid mode, an expired, missing or rejected Patronus login no longer leaves large results unscanned: they are scanned locally instead. Scans that cannot complete report the fixed reasons `authentication_expired`, `authentication_missing` or `authentication_rejected` with `patronus-security-scanner auth login` as the fix, instead of "protection is inactive" (Claude, Codex, DeepSeek, CLI reports, remote audits).
+- Injection redaction narrows by iterative bisection on this device only: only still-flagged halves are split again, each finding has its own budget, and a finding that cannot be narrowed keeps its coarse mask without discarding the others. Findings without evidence spans now mask their chunk instead of the whole field.
 - Claude returns Patronus tool results as ordinary MCP results and shows a readable reason for blocked prompts.
 - Changing the working directory no longer disables Claude runtime protection.
 

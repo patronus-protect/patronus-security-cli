@@ -106,6 +106,15 @@ pub trait ContentAnalyzer {
             "user prompt scan policy is unsupported".into(),
         ))
     }
+    /// Analyze on this device only, never through the API. Redaction refinement
+    /// re-scans fragments of text that is already dangerous and must not upload them.
+    /// Analyzers without an API route are local already.
+    fn analyze_local(&self, input: ChunkInput<'_>, scope: Option<&str>) -> Result<AnalysisOutcome> {
+        match scope {
+            Some(scope) => self.analyze_scoped(input, scope),
+            None => self.analyze(input),
+        }
+    }
 }
 
 pub struct ArkAnalyzer {

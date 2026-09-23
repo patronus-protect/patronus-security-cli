@@ -134,10 +134,37 @@ impl ContentAnalyzer for Inference {
         self.analyze_prompt(input)
     }
     fn analyze_scoped(&self, input: ChunkInput<'_>, scope: &str) -> Result<AnalysisOutcome> {
+        let profile = self.scoped_profile(scope)?;
+        if local_route(
+            self.config.provider.mode,
+            &input,
+            scope.ends_with(".user_input"),
+        ) {
+            return self.scoped_scan(input, scope, &profile, true);
+        }
+        let fallback = input.clone();
+        with_api_fallback(
+            self.config.provider.mode,
+            || self.scoped_scan(input, scope, &profile, false),
+            || self.scoped_scan(fallback, scope, &profile, true),
+        )
+    }
+    fn analyze_local(&self, input: ChunkInput<'_>, scope: Option<&str>) -> Result<AnalysisOutcome> {
+        match scope {
+            Some(scope) => {
+                let profile = self.scoped_profile(scope)?;
+                self.scoped_scan(input, scope, &profile, true)
+            }
+            None => self.local(input, false),
+        }
+    }
+}
+impl Inference {
+    fn scoped_profile(&self, scope: &str) -> Result<crate::plugin_policies::Profile> {
         if !crate::plugin_policies::valid_scope(scope) {
             return Err(error("Invalid plugin policy scope"));
         }
-        let profile = self
+        Ok(self
             .config
             .plugin_policies
             .get(scope)
@@ -147,43 +174,38 @@ impl ContentAnalyzer for Inference {
                     &self.config,
                     scope.split_once('.').expect("validated scope").1,
                 )
-            });
-        let local = local_route(
-            self.config.provider.mode,
-            &input,
-            scope.ends_with(".user_input"),
-        );
-        let scan_route = |local: bool, input: ChunkInput<'_>| -> Result<AnalysisOutcome> {
-            let cache_key = self.scoped_analyzers(scope, &profile, local)?;
-            let scoped = self.scoped.borrow();
-            let (l1, models) = &scoped[&cache_key];
-            let scan = |analyzer: &Inference, input| {
-                if scope.ends_with(".user_input") {
-                    analyzer.analyze_user_prompt(input)
-                } else {
-                    analyzer.analyze(input)
-                }
-            };
-            let mut outcome = scan(l1, input.clone())?;
-            if let Some(models) = models {
-                let assessed = crate::plugin_policies::assess(scan(models, input)?);
-                outcome.classifications.extend(assessed.classifications);
-                outcome.failures.extend(assessed.failures);
-                outcome.degraded |= assessed.degraded;
+            }))
+    }
+
+    /// Runs a plugin policy's L1 and model analyzers on one route.
+    fn scoped_scan(
+        &self,
+        input: ChunkInput<'_>,
+        scope: &str,
+        profile: &crate::plugin_policies::Profile,
+        local: bool,
+    ) -> Result<AnalysisOutcome> {
+        let cache_key = self.scoped_analyzers(scope, profile, local)?;
+        let scoped = self.scoped.borrow();
+        let (l1, models) = &scoped[&cache_key];
+        let scan = |analyzer: &Inference, input| {
+            if scope.ends_with(".user_input") {
+                analyzer.analyze_user_prompt(input)
+            } else {
+                analyzer.analyze(input)
             }
-            Ok(outcome)
         };
-        if local {
-            return scan_route(true, input);
+        let mut outcome = scan(l1, input.clone())?;
+        if let Some(models) = models {
+            let assessed = crate::plugin_policies::assess(scan(models, input)?);
+            outcome.classifications.extend(assessed.classifications);
+            outcome.failures.extend(assessed.failures);
+            outcome.degraded |= assessed.degraded;
         }
-        let fallback = input.clone();
-        with_api_fallback(
-            self.config.provider.mode,
-            || scan_route(false, input),
-            || scan_route(true, fallback),
-        )
+        Ok(outcome)
     }
 }
+
 impl Inference {
     /// Builds, once per scope and route, the L1 and model analyzers for a plugin policy.
     fn scoped_analyzers(
