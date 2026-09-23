@@ -1599,14 +1599,15 @@ function receipt(result, direction = "response", profile = hostProfile()) {
 
 // plugins/deepseek/src/ignore-once.ts
 import { createHash as createHash4, randomBytes } from "node:crypto";
-import { closeSync as closeSync3, constants as constants7, fstatSync as fstatSync3, mkdirSync as mkdirSync2, openSync as openSync3, readFileSync as readFileSync3, renameSync, rmSync, writeFileSync as writeFileSync2 } from "node:fs";
+import { closeSync as closeSync3, constants as constants7, fstatSync as fstatSync3, linkSync, mkdirSync as mkdirSync2, openSync as openSync3, readFileSync as readFileSync3, renameSync, rmSync, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join7 } from "node:path";
 var command = /\bignore_once ([A-Za-z0-9_.:-]{1,256})_([a-f0-9]{32})\b/g;
-var digest = (text2) => createHash4("sha256").update(JSON.stringify(text2.map((part) => part.trim()))).digest("hex");
+var pasted = /[`'"(\[<]*\bignore_once [A-Za-z0-9_.:-]{1,256}_[a-f0-9]{32}\b[`'")\]>.,;:!?]*/g;
+var normalize = (part) => part.replace(pasted, " ").replace(/\s+/g, " ").trim();
+var digest = (text2) => createHash4("sha256").update(JSON.stringify(text2.map(normalize))).digest("hex");
 var parts = (payload) => typeof payload === "string" ? [payload] : payload;
 var directory = () => join7(patronusRoot(), "ignore-once");
 var pathFor = (host, chat) => join7(directory(), createHash4("sha256").update(`${host}:${chat}`).digest("hex"));
-var clean = (payload) => parts(payload).map((part) => part.replace(command, "").trim());
 function injectionFinding(result) {
   return result.status === "dangerous" && Array.isArray(result.findings) && result.findings.some((finding) => finding !== null && typeof finding === "object" && !Array.isArray(finding) && (finding.category === "prompt_injection" || finding.category === "injection"));
 }
@@ -1652,7 +1653,13 @@ function consumeIgnoreOnce(host, chat, payload) {
       } finally {
         closeSync3(fd);
       }
-      return state.nonce === nonce && state.expires > Date.now() && state.digest === digest(clean(payload));
+      if (state.expires <= Date.now()) return false;
+      if (state.nonce === nonce && state.digest === digest(text2)) return true;
+      try {
+        linkSync(claimed, file);
+      } catch {
+      }
+      return false;
     } finally {
       rmSync(claimed, { force: true });
     }
