@@ -3,7 +3,8 @@ import { readPluginSettings, hookEnabled, type PluginSettings } from '../../deep
 import { isAbsolute, resolve } from 'node:path'
 import { receipt } from '../../deepseek/src/receipts.ts'
 import { degradedText, noticeText, publicReason, scanNotice } from '../../deepseek/src/notice.ts'
-import { consumeIgnoreOnce, injectionFinding, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
+import { consumeIgnoreOnce, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
+import { PROMPT_WARNING_MODEL, PROMPT_WARNING_USER, promptDecision, SENSITIVE_PROMPT_MESSAGE, sensitiveFinding } from '../../deepseek/src/prompt-policy.ts'
 import type { ScanResult } from '../../deepseek/src/protocol.ts'
 import { invalidScanReference } from '../../deepseek/src/references.ts'
 import { callBroker, type BrokerConfig } from './broker.ts'
@@ -160,12 +161,13 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       const callId = id(input.prompt_id) ? input.prompt_id : 'user-prompt'
       const result = await scan({ method: 'request', tool: 'UserPromptSubmit', callId, payload }) as unknown as ScanResult
       if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
+      if (promptDecision(result) === 'warn') return map({ kind: 'warn', text: PROMPT_WARNING_USER, context: PROMPT_WARNING_MODEL })
       const visible = visibleResult(result, host, 'request')
-      if (injectionFinding(result) && record(visible)) {
+      if (sensitiveFinding(result) && record(visible)) {
         const command = issueIgnoreOnce(host, input.session_id, payload)
         if (command) {
           visible.ignore_once = command
-          visible.message = 'Injection risk blocked this prompt. Add ignore_once to the same message and resend it within 15 minutes to allow that message once.'
+          visible.message = SENSITIVE_PROMPT_MESSAGE
         }
       }
       return map({ kind: 'replace', text: JSON.stringify(visible) })

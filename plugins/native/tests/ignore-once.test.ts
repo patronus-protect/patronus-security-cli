@@ -25,7 +25,7 @@ test('one-time command is scoped to host, chat and original text, then expires o
   }
 })
 
-test('Codex and Claude block an injection, then accept exactly one matching retry', async () => {
+test('Codex and Claude block sensitive data, then accept exactly one matching retry', async () => {
   const root = mkdtempSync(join(tmpdir(), 'patronus-ignore-hook-'))
   const previous = process.env.PATRONUS_DATA_DIR
   process.env.PATRONUS_DATA_DIR = root
@@ -34,7 +34,7 @@ test('Codex and Claude block an injection, then accept exactly one matching retr
       let scans = 0
       const rpc = async () => {
         scans++
-        return { scan_id: 'scan-1', status: 'dangerous', findings: [{ category: 'prompt_injection' }] }
+        return { scan_id: 'scan-1', status: 'dangerous', findings: [{ category: 'dlp' }] }
       }
       const input = (prompt: string) => ({ hook_event_name: 'UserPromptSubmit', session_id: `chat-${host}`, cwd: tmpdir(), prompt })
       const protocol = async (_config: unknown, _request: unknown, run: () => Promise<any>) => run()
@@ -91,7 +91,7 @@ test('a blocked prompt is accepted once when the token is pasted in backticks', 
   process.env.PATRONUS_DATA_DIR = root
   try {
     for (const host of ['codex', 'claude'] as const) {
-      const rpc = async () => ({ scan_id: 'scan-1', status: 'dangerous', findings: [{ category: 'prompt_injection' }] })
+      const rpc = async () => ({ scan_id: 'scan-1', status: 'dangerous', findings: [{ category: 'dlp' }] })
       const input = (prompt: string) => ({ hook_event_name: 'UserPromptSubmit', session_id: `chat-${host}`, cwd: tmpdir(), prompt })
       const protocol = async (_config: unknown, _request: unknown, run: () => Promise<any>) => run()
       const blocked = JSON.stringify(await handleHook(host, 'UserPromptSubmit', input('blocked prompt'), {}, rpc, protocol))

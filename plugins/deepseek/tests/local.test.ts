@@ -9,6 +9,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { expect, it } from 'vitest'
 import { LocalClient } from '../src/client.ts'
+import { waitForScan } from '../src/wait.ts'
 import type { ScanResult } from '../src/protocol.ts'
 import { createHarness, execute, lastReceipt, registerTextTool } from './harness.ts'
 
@@ -25,6 +26,13 @@ async function checkUntilDone(ctx: Context, scanId: string, inspect?: (result: T
   }
   expect(lastReceipt(result).status).not.toBe('pending')
   return result
+}
+
+/** The scanner's own verdict on user-prompt text, independent of whether the gate sends it. */
+async function scanUserPrompt(client: LocalClient, text: string): Promise<ScanResult> {
+  const session = crypto.randomUUID()
+  const job = await client.submit({ session, direction: 'request', policy_scope: 'deepseek.user_input', tool: 'user_prompt', call_id: 'evidence', payload: text })
+  return waitForScan(client, { session, scan_id: job.scan_id }, 120_000, AbortSignal.timeout(120_000))
 }
 
 async function promptVerdict(ctx: Context, text: string): Promise<ScanResult | undefined> {
@@ -52,9 +60,11 @@ it('gates native user prompts and tool results using the real local scanner proc
       output: { schema: { type: 'string' }, render: (_args, text) => [{ type: 'text', text }] },
       async execute() { calls++; return 'Completed.' },
     }))
-    const prompt = await promptVerdict(ctx, injection)
-    expect(prompt?.status).toBe('dangerous')
-    expect(prompt?.result).toBeUndefined()
+    // An injection-only user prompt is the user's decision: it is sent with a warning.
+    expect(await promptVerdict(ctx, injection)).toBeUndefined()
+    const prompt = await scanUserPrompt(client, injection)
+    expect(prompt.status).toBe('dangerous')
+    expect(prompt.result).toBeUndefined()
     let sent = await execute(ctx, 'send_message', { message: injection })
     if (sent.isError) {
       const pending = lastReceipt(sent)
@@ -126,7 +136,8 @@ it.each([
   try {
     const hello = await client.hello()
     expect(hello).toMatchObject({ provider: 'local', ark_version: '0.1.8', ready: true })
-    const request = await promptVerdict(ctx, document) as ScanResult
+    expect(await promptVerdict(ctx, document)).toBeUndefined()
+    const request = await scanUserPrompt(client, document)
     console.log('Full-document prompt evidence:', { filename, documentBytes, requestTimeoutMs: hello.runtime.request_timeout_ms, ...request })
     expect(request.status).toBe('dangerous')
     expect(request.result).toBeUndefined()
