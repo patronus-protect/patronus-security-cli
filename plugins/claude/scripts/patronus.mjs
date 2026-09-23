@@ -1,4 +1,5 @@
 // plugins/native/src/cli.ts
+import { realpathSync as realpathSync2 } from "node:fs";
 import { resolve as resolve4, isAbsolute as isAbsolute7 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
@@ -2142,7 +2143,7 @@ async function handleMcp(value, session) {
   const id2 = typeof request.id === "number" && Number.isSafeInteger(request.id) || typeof request.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(request.id) ? request.id : null;
   const result = (data) => ({ jsonrpc: "2.0", id: id2, result: data });
   if (request.jsonrpc !== "2.0" || id2 === null) return { jsonrpc: "2.0", id: id2, error: { code: -32600, message: "Invalid request." } };
-  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.1" } });
+  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.2" } });
   if (request.method === "ping") return result({});
   if (request.method === "tools/list") return result({ tools });
   if (request.method === "tools/call") {
@@ -2270,7 +2271,16 @@ async function main(args) {
     emit(host === "codex" ? mapCodex(event, decision) : mapClaude(event, decision, input));
   }
 }
-if (process.argv[1] && resolve4(process.argv[1]) === fileURLToPath2(import.meta.url)) {
+function invokedDirectly() {
+  if (!process.argv[1]) return false;
+  const self = fileURLToPath2(import.meta.url);
+  try {
+    return realpathSync2(process.argv[1]) === realpathSync2(self);
+  } catch {
+    return resolve4(process.argv[1]) === self;
+  }
+}
+if (invokedDirectly()) {
   main(process.argv.slice(2)).catch(() => {
     process.stderr.write("Patronus native integration unavailable.\n");
     process.exitCode = 2;

@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { resolve, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { callBroker } from './broker.ts'
@@ -103,6 +104,15 @@ async function main(args: string[]): Promise<void> {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/** Hosts may start the bundle through a symlinked path (macOS /var and /tmp, linked
+ * home or plugin directories). Node reports the module's real path, so compare real
+ * paths; a mismatch would otherwise exit silently and leave every hook inactive. */
+function invokedDirectly(): boolean {
+  if (!process.argv[1]) return false
+  const self = fileURLToPath(import.meta.url)
+  try { return realpathSync(process.argv[1]) === realpathSync(self) } catch { return resolve(process.argv[1]) === self }
+}
+
+if (invokedDirectly()) {
   main(process.argv.slice(2)).catch(() => { process.stderr.write('Patronus native integration unavailable.\n'); process.exitCode = 2 })
 }
