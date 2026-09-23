@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 const fixture = fileURLToPath(new URL('./hook-fixture.mjs', import.meta.url));
 const mcpFixture = fileURLToPath(new URL('./mcp-fixture.mjs', import.meta.url));
+// Patronus answers its own tools from the plugin's MCP server. A user approves them
+// once; the headless contract test pre-approves them as that user would.
+const patronusTools = ['patronus_check_result', 'patronus_read_redacted', 'patronus_scan']
+  .map(name => `mcp__plugin_patronus-security_patronus__${name}`);
 const pluginRoot = process.env.PATRONUS_CLAUDE_PLUGIN_ROOT || fileURLToPath(new URL('../', import.meta.url));
 const root = process.env.PATRONUS_CLAUDE_PROOF_ROOT ||
   (process.platform === 'darwin' ? '/private/tmp/patronus-claude-native-proof' : join(tmpdir(), 'patronus-claude-native-proof'));
@@ -153,7 +157,7 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
       '--model', 'claude-sonnet-4-20250514', '--system-prompt', 'Local scripted hook contract test.',
       '--settings', join(directory, 'settings.json'), '--setting-sources', '',
       ...(!plugin ? ['--strict-mcp-config'] : []), '--mcp-config', join(directory, 'mcp.json'), '--no-chrome',
-      '--tools', 'Bash,Read', '--allowedTools', `Bash,Read,${tool}`, '--permission-mode', 'dontAsk',
+      '--tools', 'Bash,Read', '--allowedTools', [`Bash,Read,${tool}`, ...(plugin ? patronusTools : [])].join(','), '--permission-mode', 'dontAsk',
       ...(plugin ? ['--plugin-dir', join(directory, 'plugin')] : []),
       ...extra,
       userPrompt,

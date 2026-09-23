@@ -55,7 +55,7 @@ test('built native bundle scans and admits approved MCP errors on resume', { tim
 });
 
 for (const placeholder of [false, true]) {
-  test(`built native ${placeholder ? 'placeholder denial' : 'ordinary request execution'} preserves session safety`, { timeout: 100000 }, async () => {
+  test(`built native ${placeholder ? 'unknown scan_id check' : 'ordinary request execution'} preserves session safety`, { timeout: 100000 }, async () => {
     const result = await runHost({
       name: placeholder ? 'runtime-placeholder-deny' : 'runtime-request-deny', runtime: { responseWaitMs: 10000 }, timeout: 90000,
       tool: placeholder ? 'mcp__plugin_patronus-security_patronus__patronus_check_result' : 'Read',
@@ -67,11 +67,12 @@ for (const placeholder of [false, true]) {
     assert.equal(result.messages.length, 2, `denial unexpectedly stopped session: ${result.directory}`);
     const events = (await readFile(join(result.directory, 'hooks.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
     assert.ok(events.some(event => event.hook_event_name === 'PreToolUse'));
-    assert.equal(events.some(event => event.hook_event_name === 'PostToolUseFailure'), !placeholder, `unexpected tool execution: ${result.directory}`);
+    // Both calls end as tool errors: a missing file, or Patronus' MCP server rejecting an unknown scan_id.
+    assert.ok(events.some(event => event.hook_event_name === 'PostToolUseFailure'), `missing tool failure: ${result.directory}`);
     const responses = (await readFile(join(result.directory, 'hook-outputs.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
     const pre = JSON.parse(responses.find(response => response.event === 'PreToolUse').output);
-    if (placeholder) assert.equal(pre.hookSpecificOutput.permissionDecision, 'deny');
-    else assert.deepEqual(pre, {});
+    // Claude's MCP server answers Patronus tools itself; the hook never denies them.
+    assert.deepEqual(pre, {});
     assert.ok(responses.filter(response => response.event === 'PostToolBatch').every(response => JSON.parse(response.output).continue !== false));
     process.stdout.write(`runtime deny proof: ${result.directory}\n`);
   });
