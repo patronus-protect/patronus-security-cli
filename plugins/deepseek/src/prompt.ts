@@ -11,8 +11,9 @@ import { textPayload, userPromptText } from './text.ts'
 import { waitForScan } from './wait.ts'
 import { degradedMessage } from './degraded.ts'
 import { degradedText, noticeText, scanNotice } from './notice.ts'
-import type { ScanResult } from './protocol.ts'
-import { consumeIgnoreOnce, hasIgnoreOnce, injectionFinding, issueIgnoreOnce, stripIgnoreOnce } from './ignore-once.ts'
+import type { ScanResult, TextPayload } from './protocol.ts'
+import { consumeIgnoreOnce, hasIgnoreOnce, issueIgnoreOnce, stripIgnoreOnce } from './ignore-once.ts'
+import { PROMPT_WARNING_MODEL, promptDecision, SENSITIVE_PROMPT_MESSAGE, sensitiveFinding } from './prompt-policy.ts'
 
 const degraded = new Set(['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
 
@@ -33,6 +34,19 @@ function warn(decision: PreStepDecision, text?: string): PreStepDecision {
   return decision.kind === 'enter'
     ? { ...decision, messages: [...decision.messages, degradedMessage(text)] }
     : decision
+}
+
+/** A blocked prompt's receipt; only sensitive data may be released once by the user. */
+function blockedPrompt(result: ScanResult, session: string, payload: TextPayload): Error {
+  const visible = receipt(result, 'request')
+  if (sensitiveFinding(result) && typeof visible === 'object' && visible !== null && !Array.isArray(visible)) {
+    const command = issueIgnoreOnce('deepseek', session, payload)
+    if (command) {
+      visible.ignore_once = command
+      visible.message = SENSITIVE_PROMPT_MESSAGE
+    }
+  }
+  return new Error(JSON.stringify(visible))
 }
 
 /** The note to attach after a prompt scan, if any. */
@@ -88,19 +102,11 @@ export function registerPromptGate(
       const result = await waitForScan(runtime.client, { session: sessions.capability(session), scan_id: scanId }, waitMs, signal)
       events.emit({ kind: 'scan_completed', direction: 'request', tool: 'user_prompt', session_id: session, scan_id: scanId, status: result.status, duration_ms: elapsed(started), payload_hash: payloadHash })
       completed = true
-      if (result.status !== 'approved' && !degraded.has(result.status)) {
-        const visible = receipt(result, 'request')
-        if (injectionFinding(result) && typeof visible === 'object' && visible !== null && !Array.isArray(visible)) {
-          const command = issueIgnoreOnce('deepseek', session, payload)
-          if (command) {
-            visible.ignore_once = command
-            visible.message = 'Injection risk blocked this prompt. Add ignore_once to the same message and resend it within 15 minutes to allow that message once.'
-          }
-        }
-        throw new Error(JSON.stringify(visible))
-      }
+      const warned = result.status === 'dangerous' && promptDecision(result) === 'warn'
+      if (result.status !== 'approved' && !degraded.has(result.status) && !warned) throw blockedPrompt(result, session, payload)
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
+      if (warned) return warn(await next(), PROMPT_WARNING_MODEL)
       const note = promptNote(result)
       return note || warnNow ? warn(await next(), note) : next()
     } catch (error) {
@@ -168,17 +174,8 @@ export function registerPromptGate(
       if (degraded.has(result.status)) { options.messages.push(degradedMessage(degradedText(result))); yield* next(); return }
       const notice = result.status === 'approved' ? scanNotice(result.notice) : undefined
       if (notice) options.messages.push(degradedMessage(noticeText(notice)))
-      if (result.status !== 'approved') {
-        const visible = receipt(result, 'request')
-        if (injectionFinding(result) && typeof visible === 'object' && visible !== null && !Array.isArray(visible)) {
-          const command = issueIgnoreOnce('deepseek', session, payload)
-          if (command) {
-            visible.ignore_once = command
-            visible.message = 'Injection risk blocked this prompt. Add ignore_once to the same message and resend it within 15 minutes to allow that message once.'
-          }
-        }
-        throw new Error(JSON.stringify(visible))
-      }
+      if (result.status === 'dangerous' && promptDecision(result) === 'warn') options.messages.push(degradedMessage(PROMPT_WARNING_MODEL))
+      else if (result.status !== 'approved') throw blockedPrompt(result, session, payload)
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
       yield* next()

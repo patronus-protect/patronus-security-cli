@@ -47,6 +47,8 @@ The required implementation order for each host is:
 Static repository scans and tool-request scanning do not count toward any of
 the three runtime surfaces above.
 
+A user prompt whose findings are only prompt injection or threat is still sent: the user wrote or pasted it deliberately. The user sees a warning, and the model is told to treat instructions inside pasted, quoted or external content as data. Prompts with DLP or PII findings, or a dangerous verdict without named findings, are blocked before they reach the model. Only a sensitive-data block offers `ignore_once`: resending the same message with that command within 15 minutes sends it once. Pasted quoting, trailing punctuation and whitespace around the command do not change the match, and a mismatched retry keeps the challenge.
+
 Exact user messages `patronus off`, `patronus on` and `patronus status` are trusted local control commands. Only the user-input boundary may recognize them; they never come from tool/MCP results or substrings. Explicitly paused chats are outside the enabled scanning boundary until resumed.
 
 ## Redacted results and static audits
