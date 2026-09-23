@@ -122,7 +122,7 @@ function replaceClaudeResponse(response: unknown, text: string): unknown {
 export function mapClaude(event: string, decision: HookDecision, input?: HookInput): object {
   if (decision.kind === 'warn') return {
     systemMessage: decision.text,
-    hookSpecificOutput: { hookEventName: event, additionalContext: decision.text },
+    hookSpecificOutput: { hookEventName: event, additionalContext: decision.context ?? decision.text },
   }
   if (event === 'UserPromptSubmit') return { decision: 'block', reason: promptBlockReason(decision.text) }
   if (event === 'PreToolUse') {

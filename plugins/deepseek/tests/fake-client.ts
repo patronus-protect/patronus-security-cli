@@ -2,7 +2,7 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { JobParams, RuntimeClient, RuntimeHello, ScanResult, SubmitParams } from '../src/protocol.ts'
 
-export type TestVerdict = { status: 'approved' } | { status: 'dangerous'; redacted?: ContentBlock[] }
+export type TestVerdict = { status: 'approved' } | { status: 'dangerous'; redacted?: ContentBlock[]; findings?: JsonValue[] }
 export interface TestScanner { scan(text: JsonValue): Promise<TestVerdict> }
 
 export class FakeClient implements RuntimeClient {
@@ -25,7 +25,7 @@ export class FakeClient implements RuntimeClient {
       if (job.state.status !== 'pending') return
       if (verdict.status === 'approved') job.state = { scan_id, status: 'approved', result: input.payload }
       else {
-        job.state = { scan_id, status: 'dangerous', redacted_available: verdict.redacted !== undefined }
+        job.state = { scan_id, status: 'dangerous', redacted_available: verdict.redacted !== undefined, ...(verdict.findings ? { findings: verdict.findings } : {}) }
         if (verdict.redacted) job.redacted = { content: verdict.redacted as unknown as JsonValue, isError: false }
       }
     }, () => { job.state = { scan_id, status: 'failed' } }).finally(() => clearTimeout(timer))
