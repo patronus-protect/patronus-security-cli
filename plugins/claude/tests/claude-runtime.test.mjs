@@ -138,7 +138,7 @@ test('unavailable scanner warns and preserves the original result in the real CL
   assert.equal(result.exitCode, 0, result.directory);
   assert.equal(result.messages.length, 2, result.directory);
   const visible = JSON.stringify(result.messages[1]);
-  assert.match(visible, /No security scan was completed/);
+  assert.match(visible, /treat the original content as untrusted/i);
   assert.match(visible, /RAW_RESPONSE_ONLY_SENTINEL/);
   process.stdout.write(`runtime degraded proof: ${result.directory}\n`);
 });

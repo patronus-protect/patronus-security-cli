@@ -40,7 +40,7 @@ export function apply(ctx, config) {
       assert(!visible.includes('Patronus native hooks did not handle this call'), 'Retrieval reached placeholder')
       assert(++calls <= 120, 'Too many model calls')
       if (config.degraded) {
-        assert(visible.includes('No security scan was completed'), 'Inactive Patronus warning did not reach the model')
+        assert(/treat the original content as untrusted/i.test(visible), 'Degraded Patronus warning did not reach the model')
         if (calls === 1) {
           tools.push('degraded-source')
           yield* toolCallResponse('read', 'release_read_document', {}); return
