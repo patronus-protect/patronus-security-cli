@@ -9,7 +9,7 @@
       "name": "patronus-security",
       "source": "./plugins/claude",
       "description": "Patronus Runtime Protection and explicit security scans for Claude Code.",
-      "version": "0.1.1"
+      "version": "0.1.2"
     }
   ]
 }

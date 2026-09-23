@@ -2,7 +2,7 @@
 set -eu
 
 repository=${PATRONUS_GITHUB_REPOSITORY:-patronus-protect/patronus-security-cli}
-version=${PATRONUS_VERSION:-0.1.1}
+version=${PATRONUS_VERSION:-0.1.2}
 version=${version#v}
 case "$version" in
   *[!0-9A-Za-z.-]*|'') echo "Invalid release version" >&2; exit 1 ;;
