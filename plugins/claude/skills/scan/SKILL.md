@@ -23,7 +23,7 @@ The CLI resolves MCP configuration locally and sends only the public HTTPS
 endpoint. It does not start stdio servers or forward private MCP credentials.
 Scanning server metadata does not approve future responses or execute its tools.
 
-`local` scans text/files on this device. `hybrid` keeps files and prompts local; runtime tool/MCP results of at most 1024 tokens stay local, larger results go to the API. `api` sends text to the API. Explicit URL/MCP audits always use the API, including in `local` mode; this does not change the configured processing mode.
+`local` scans text/files on this device. `hybrid` keeps prompts local; tool/MCP results and files of at most 2048 tokens stay local, larger ones go to the API. `api` sends text to the API. Explicit URL/MCP audits always use the API, including in `local` mode; this does not change the configured processing mode.
 
 If the native scan tool is unavailable, resolve the separately installed trusted CLI from `PATH`, outside the repository under inspection. Inspect `config print --format json`, then use `patronus-security-scanner scan KIND TARGET --format json`; for a named MCP entry add `--server NAME`. Missing CLI/setup is handled by `patronus-setup` when installation is requested.
 

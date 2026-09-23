@@ -15,6 +15,10 @@ pub fn input_tokens(text: &str) -> usize {
         .len()
 }
 
+/// Hybrid mode analyzes tool/MCP results and files up to and including this many
+/// cl100k_base tokens on this device; larger inputs use the API.
+pub const HYBRID_LOCAL_TOKEN_LIMIT: usize = 2048;
+
 fn local_route(mode: ProviderMode, input: &ChunkInput<'_>, user_prompt: bool) -> bool {
     mode == ProviderMode::Local
         || (mode == ProviderMode::Hybrid
@@ -22,7 +26,7 @@ fn local_route(mode: ProviderMode, input: &ChunkInput<'_>, user_prompt: bool) ->
                 || input
                     .input_tokens
                     .unwrap_or_else(|| input_tokens(input.content))
-                    <= 1024))
+                    <= HYBRID_LOCAL_TOKEN_LIMIT))
 }
 
 type ScopedInference = std::collections::BTreeMap<String, (Box<Inference>, Option<Box<Inference>>)>;
@@ -513,7 +517,7 @@ mod hybrid_boundary_tests {
     use super::*;
     #[test]
     fn exact_boundary_and_prompt_routing() {
-        for count in [1024, 1025] {
+        for count in [HYBRID_LOCAL_TOKEN_LIMIT, HYBRID_LOCAL_TOKEN_LIMIT + 1] {
             let text = " hello".repeat(count);
             assert_eq!(input_tokens(&text), count);
             let input = ChunkInput {
@@ -526,7 +530,7 @@ mod hybrid_boundary_tests {
             };
             assert_eq!(
                 local_route(ProviderMode::Hybrid, &input, false),
-                count <= 1024
+                count <= HYBRID_LOCAL_TOKEN_LIMIT
             );
             assert!(local_route(ProviderMode::Hybrid, &input, true));
             assert!(!local_route(ProviderMode::Api, &input, true));
@@ -538,7 +542,7 @@ mod hybrid_boundary_tests {
             };
             assert_eq!(
                 local_route(ProviderMode::Hybrid, &chunk, false),
-                count <= 1024
+                count <= HYBRID_LOCAL_TOKEN_LIMIT
             );
         }
         assert!(input_tokens("<|endoftext|>") > 0);
@@ -546,7 +550,7 @@ mod hybrid_boundary_tests {
 
     #[test]
     fn hybrid_file_and_repo_chunks_use_the_same_token_boundary() {
-        for count in [1_024, 1_025] {
+        for count in [HYBRID_LOCAL_TOKEN_LIMIT, HYBRID_LOCAL_TOKEN_LIMIT + 1] {
             for run_id in ["file-scan", "repo-scan"] {
                 let input = ChunkInput {
                     run_id,
@@ -558,7 +562,7 @@ mod hybrid_boundary_tests {
                 };
                 assert_eq!(
                     local_route(ProviderMode::Hybrid, &input, false),
-                    count <= 1_024
+                    count <= HYBRID_LOCAL_TOKEN_LIMIT
                 );
             }
         }

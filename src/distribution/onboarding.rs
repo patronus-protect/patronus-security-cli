@@ -371,7 +371,7 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
         crate::auth::execute(AuthCommand::Login { no_browser: false })?;
     }
     println!("\n  2 / 5  Processing mode\n  ─────────────────────────────────────────");
-    println!("Local: runtime text and files on this device.\nHybrid: prompts local; results and files ≤1024 tokens local, every chunk of larger inputs via API.\nAPI: text scans in the cloud. Explicit URL/MCP audits always use the API.");
+    println!("Local: runtime text and files on this device.\nHybrid: prompts local; results and files ≤2048 tokens local, every chunk of larger inputs via API.\nAPI: text scans in the cloud. Explicit URL/MCP audits always use the API.");
     let current = state["mode"].as_str().unwrap_or("local");
     let mut mode = match ask("Processing mode: local / hybrid / api", current)?.as_str() {
         "local" => ProviderMode::Local,
