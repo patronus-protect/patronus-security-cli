@@ -237,7 +237,7 @@ fn assert_one_finding(report: &serde_json::Value, category: &str, label: &str, l
 }
 
 fn assert_complete_coverage(report: &serde_json::Value) {
-    assert_eq!(report["ark_version"], "0.1.7");
+    assert_eq!(report["ark_version"], "0.1.8");
     assert_eq!(report["coverage"]["eligible_files"], 1);
     assert_eq!(report["coverage"]["analyzed_files"], 1);
     assert_eq!(report["coverage"]["skipped_files"], 0);

@@ -29,7 +29,7 @@ if (args[0] === 'config') {
     if (options.noise) { process.stdout.write(canary + '\n'); return }
     if (options.error) { process.stdout.write(JSON.stringify({ id, error: { message: canary } }) + '\n'); return }
     if (method === 'hello') {
-      reply({ protocol_version: 1, provider: options.helloProvider ?? 'local', scanner_version: '0.1.0', ark_version: options.arkVersion ?? '0.1.7', ready: true,
+      reply({ protocol_version: 1, provider: options.helloProvider ?? 'local', scanner_version: '0.1.0', ark_version: options.arkVersion ?? '0.1.8', ready: true,
         runtime: { response_wait_ms: 0, request_timeout_ms: 1000, scan_timeout_ms: 60000, max_payload_bytes: options.payloadLimit ?? 10 * 1024 * 1024 } })
     } else if (method === 'submit') {
       const scan_id = randomBytes(16).toString('hex')

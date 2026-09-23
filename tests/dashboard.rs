@@ -231,7 +231,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
         "status": "FINDINGS",
         "scan_root": scan_root,
         "scanner_version": env!("CARGO_PKG_VERSION"),
-        "ark_version": "0.1.7",
+        "ark_version": "0.1.8",
         "artifact_hashes": {
             "report.json": report_hash
         },
@@ -279,7 +279,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
             "status": "FINDINGS",
             "scan_root": newer_attestation.scan_root.clone(),
             "scanner_version": env!("CARGO_PKG_VERSION"),
-            "ark_version": "0.1.7",
+            "ark_version": "0.1.8",
             "artifact_hashes": {"report.json": newer_hash},
             "attestation": newer_attestation,
             "authentication": newer_authentication
@@ -372,7 +372,7 @@ fn sample_report() -> Report {
         target_kind: TargetKind::Repo,
         target: ".".into(),
         scanner_version: env!("CARGO_PKG_VERSION").into(),
-        ark_version: "0.1.7".into(),
+        ark_version: "0.1.8".into(),
         ark_categories: vec!["prompt_injection".into()],
         ark_max_level: "l1".into(),
         ark_category_levels: Default::default(),

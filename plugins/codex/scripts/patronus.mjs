@@ -1329,7 +1329,7 @@ async function serveBroker(input) {
       await privateDirectory(join6(directory2, "scanner"));
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir });
       const connected = await runtimeSessions.runtime(id2, shutdown.signal);
-      if (connected.hello.ark_version !== "0.1.7" || connected.hello.provider !== frozen.provider) {
+      if (connected.hello.ark_version !== "0.1.8" || connected.hello.provider !== frozen.provider) {
         await runtimeSessions.close();
         throw brokerFailure();
       }

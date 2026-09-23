@@ -196,7 +196,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
       await privateDirectory(join(directory, 'scanner'))
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir })
       const connected = await runtimeSessions.runtime(id, shutdown.signal)
-      if (connected.hello.ark_version !== '0.1.7' || connected.hello.provider !== frozen.provider) { await runtimeSessions.close(); throw brokerFailure() }
+      if (connected.hello.ark_version !== '0.1.8' || connected.hello.provider !== frozen.provider) { await runtimeSessions.close(); throw brokerFailure() }
       return connected
     })()
     return runtime
