@@ -166,13 +166,7 @@ impl PayloadScan<'_> {
                 return Err(ScanError::Incomplete("incomplete_classification"));
             }
             for classification in outcome.classifications {
-                self.project(
-                    &classification,
-                    chunk_text,
-                    field_id,
-                    chunk.start,
-                    text.len(),
-                )?;
+                self.project(&classification, chunk_text, field_id, chunk.start)?;
             }
             self.coverage.bytes_scanned += chunk.end.saturating_sub(scanned_until);
             scanned_until = scanned_until.max(chunk.end);
@@ -187,7 +181,6 @@ impl PayloadScan<'_> {
         text: &str,
         field_id: usize,
         chunk_start: usize,
-        field_len: usize,
     ) -> Result<(), ScanError> {
         if !classification.terminal || !valid_confidence(classification.confidence) {
             return Err(ScanError::Incomplete("invalid_classification"));
@@ -223,8 +216,15 @@ impl PayloadScan<'_> {
                 confidence,
             });
         };
+        // A verdict without evidence spans still names its chunk: every other chunk
+        // was classified on its own, so masking the whole field would hide text the
+        // scanner judged separately.
         if classification.evidence.is_empty() {
-            push(0, field_len, classification.confidence);
+            push(
+                chunk_start,
+                chunk_start + text.len(),
+                classification.confidence,
+            );
         }
         for span in &classification.evidence {
             if span.start >= span.end

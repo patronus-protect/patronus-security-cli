@@ -67,6 +67,8 @@ injection findings do not qualify for automatic privacy redaction. The same
 behavior applies to the DeepSeek response gate and status tool. User prompts
 retain their existing policy.
 
+A finding without evidence spans covers the chunk that carried the verdict, not its whole field; every other chunk was classified on its own. `patronus_read_redacted` on a prompt-injection finding narrows it on this device only, never through the API: the region is halved, each half that is still flagged is halved again, and the middle half is tried once when an instruction crosses the cut. Each finding has its own scan budget. A narrowed result must scan clean in its region and in its whole field; otherwise that finding or field keeps its coarse redaction. The original is never released.
+
 Pending responses expose their current `job_status`. A queued response also
 includes `wait_reason=scanner_queue` and `next_tool=patronus_check_result` with
 explicit guidance that queue backpressure is neither failure nor expiry. Agents
