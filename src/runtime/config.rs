@@ -15,7 +15,7 @@ pub struct RuntimeConfig {
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
-            response_wait_ms: 500,
+            response_wait_ms: 1000,
             request_timeout_ms: 30_000,
             scan_timeout_ms: 60_000,
             retention_seconds: 30 * 86_400,

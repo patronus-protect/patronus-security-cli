@@ -28,7 +28,7 @@ max_level = "l1"
 download_files = false
 
 [runtime]
-response_wait_ms = 500
+response_wait_ms = 1000
 request_timeout_ms = 30000
 scan_timeout_ms = 60000
 retention_seconds = 2592000
@@ -41,7 +41,7 @@ The runtime requires local mode and uses **Ark 0.1.8** with downloads disabled. 
 
 | Runtime key | Meaning and valid range |
 | --- | --- |
-| `response_wait_ms` | Response scan wait after submission; 0 through `scan_timeout_ms`. Default 500; 300 is also supported. Zero immediately yields a pending receipt. |
+| `response_wait_ms` | Response scan wait after submission; 0 through `scan_timeout_ms`. Default 1000. Zero immediately yields a pending receipt. |
 | `request_timeout_ms` | Request analyzer budget; 1 through `scan_timeout_ms`. It starts when the worker claims the job. Completed findings stop the turn; infrastructure failure or timeout continues with degraded context. |
 | `scan_timeout_ms` | Response analyzer budget; 1–300000 ms. It starts when the worker claims the job, so queue contention cannot consume the scan budget. |
 | `retention_seconds` | Payload/job and shared result-cache retention from acceptance; 1–2592000 seconds. Default 30 days. Cleanup runs while the service is active or on restart. |
@@ -57,7 +57,7 @@ Plugin configuration uses **camelCase**, while the CLI's TOML and protocol use *
 
 | Plugin option | Purpose |
 | --- | --- |
-| `responseWaitMs` | Override the response wait in the adapter; otherwise use `hello.runtime.response_wait_ms`. The bundled profile explicitly sets 500. |
+| `responseWaitMs` | Override the response wait in the adapter; otherwise use `hello.runtime.response_wait_ms`. The bundled profile explicitly sets 1000. |
 | `requestTimeoutMs` | Override how long the adapter waits for request approval; otherwise use `hello.runtime.request_timeout_ms`. |
 | `executable` | Absolute path to an explicitly trusted installed CLI; otherwise resolve the installed CLI on PATH, excluding repository-local candidates. |
 | `configPath` | Explicit CLI configuration file. Use an absolute path for a stable setup. |

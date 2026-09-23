@@ -131,7 +131,7 @@ for (const options of [{ noise: true }, { error: true }, { provider: 'webmcp' },
     const { root, config, calls } = await stub(options)
     try {
       const result = await hook(config, { method: 'request', tool: 'user_prompt', callId: 'x', payload: '' })
-      assert.deepEqual(result, { scan_id: '', status: 'unavailable' })
+      assert.deepEqual(result, { scan_id: '', status: 'unavailable', reason: 'arkVersion' in options ? 'runtime_version_mismatch' : 'runtime_start_failed' })
       assert(!JSON.stringify(result).includes('CANARY'))
       if ('provider' in options || 'downloads' in options) assert.equal((await calls()).some(row => row.args[0] === 'serve'), false)
     } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }

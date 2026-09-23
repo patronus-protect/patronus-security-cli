@@ -778,3 +778,23 @@ fn authentication_failures_expose_their_fixed_reason() {
         );
     }
 }
+
+#[test]
+fn fixed_failure_and_incomplete_codes_are_exposed() {
+    let (_temp, mut store) = setup();
+    for (status, reason) in [
+        (JobStatus::Failed, "scan_timeout"),
+        (JobStatus::Failed, "local_scanner_error"),
+        (JobStatus::Failed, "api_unavailable"),
+        (JobStatus::Incomplete, "incomplete_classification"),
+    ] {
+        let id = store
+            .enqueue(job(json!(format!("output {reason}"))))
+            .unwrap();
+        let mut outcome = ScanOutcome::failed(reason);
+        outcome.status = status;
+        finish(&mut store, &id, &outcome);
+        let result = store.check(&id, "session-a").unwrap();
+        assert_eq!(result["reason"], reason, "{result}");
+    }
+}

@@ -78,3 +78,16 @@ describe('Patronus API authentication notices', () => {
     expect(failed.message).toMatch(/login has expired/)
   })
 })
+
+describe('Patronus failure codes', () => {
+  it('names the cause and code instead of reporting inactive protection', () => {
+    for (const reason of ['scan_timeout', 'local_scanner_error', 'api_unavailable', 'runtime_start_failed', 'scanner_connection_lost']) {
+      const text = degradedText({ scan_id, status: 'failed', reason } as ScanResult)
+      expect(text).toContain(`(${reason})`)
+      expect(text).toMatch(/untrusted/)
+      expect(text).not.toMatch(/inactive/)
+      expect(publicReason(reason)).toBe(reason)
+    }
+    expect(degradedText({ scan_id, status: 'failed', reason: 'PRIVATE backend text' } as unknown as ScanResult)).toBe(DEGRADED_TEXT)
+  })
+})

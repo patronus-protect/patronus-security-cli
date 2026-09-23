@@ -291,6 +291,26 @@ pub fn usage_limit_retry_after(error: &ScannerError) -> Option<Option<u64>> {
     }
 }
 
+/// A fixed public failure code for an analyzer error that has no dedicated
+/// notice (usage limit and authentication are handled by the caller). The code
+/// names the failing component and never carries backend text.
+pub fn scan_failure_reason(error: &ScannerError) -> &'static str {
+    match error {
+        ScannerError::Api { kind, .. } => match kind {
+            patronus_api_client::ErrorKind::Timeout => "api_timeout",
+            patronus_api_client::ErrorKind::Transport => "api_unavailable",
+            patronus_api_client::ErrorKind::Protocol => "api_invalid_response",
+            patronus_api_client::ErrorKind::Validation => "api_request_rejected",
+            patronus_api_client::ErrorKind::Authentication => "authentication_rejected",
+            patronus_api_client::ErrorKind::Quota | patronus_api_client::ErrorKind::RateLimit => {
+                "usage_limit_reached"
+            }
+        },
+        ScannerError::Config { .. } => "configuration_unavailable",
+        _ => "local_scanner_error",
+    }
+}
+
 /// Runs the API scan and falls back to the local scan when the usage limit is
 /// exhausted or, in Hybrid mode, when API authentication is missing, expired or
 /// rejected. Hybrid already scans locally, so a lost login must not leave large
@@ -631,6 +651,30 @@ mod usage_limit_fallback_tests {
             );
             assert_eq!(outcome.notice.unwrap().code, format!("api_{reason}"));
         }
+    }
+
+    #[test]
+    fn analyzer_failures_map_to_fixed_public_codes() {
+        use patronus_api_client::ErrorKind;
+        for (kind, reason) in [
+            (ErrorKind::Timeout, "api_timeout"),
+            (ErrorKind::Transport, "api_unavailable"),
+            (ErrorKind::Protocol, "api_invalid_response"),
+            (ErrorKind::Validation, "api_request_rejected"),
+        ] {
+            assert_eq!(scan_failure_reason(&api_error(kind)), reason);
+        }
+        assert_eq!(
+            scan_failure_reason(&ScannerError::Ark("PRIVATE model path".into())),
+            "local_scanner_error"
+        );
+        assert_eq!(
+            scan_failure_reason(&ScannerError::Config {
+                source_name: "config".into(),
+                message: "PRIVATE".into(),
+            }),
+            "configuration_unavailable"
+        );
     }
 
     #[test]

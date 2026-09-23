@@ -9,12 +9,27 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-/// Failure reasons that are safe to show to agents and users.
+/// Failure reasons that are safe to show to agents and users. Each is a fixed
+/// code set by the scanner itself, never backend or classifier text.
 const PUBLIC_REASONS: &[&str] = &[
     "usage_limit_reached",
     crate::api_client::AUTH_MISSING,
     crate::api_client::AUTH_EXPIRED,
     crate::api_client::AUTH_REJECTED,
+    "api_timeout",
+    "api_unavailable",
+    "api_invalid_response",
+    "api_request_rejected",
+    "configuration_unavailable",
+    "local_scanner_error",
+    "scanner_crashed",
+    "scan_timeout",
+    "invalid_chunking",
+    "unsupported_content",
+    "unsupported_payload",
+    "incomplete_classification",
+    "invalid_classification",
+    "invalid_evidence_span",
 ];
 
 #[derive(Debug, Clone)]
@@ -453,7 +468,7 @@ impl Store {
             result["notice"] = json!(notice);
         }
         if let Some(reason) = outcome.as_ref().and_then(|o| o.reason.as_deref()) {
-            if status == "failed" && PUBLIC_REASONS.contains(&reason) {
+            if matches!(status, "failed" | "incomplete") && PUBLIC_REASONS.contains(&reason) {
                 result["reason"] = json!(reason);
             }
         }

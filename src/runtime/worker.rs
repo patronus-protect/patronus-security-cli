@@ -116,7 +116,7 @@ impl Worker {
                     .deadline_ms
                     .saturating_sub(chrono::Utc::now().timestamp_millis());
                 let outcome = if remaining <= 0 {
-                    ScanOutcome::failed("scan deadline exceeded")
+                    ScanOutcome::failed("scan_timeout")
                 } else {
                     // One owner consumes this gateway's events. RPC/status handling
                     // remains on the service thread while Ark analyzes a payload.
@@ -157,7 +157,7 @@ impl Worker {
                             Instant::now() + Duration::from_millis(remaining as u64),
                         )
                     }))
-                    .unwrap_or_else(|_| ScanOutcome::failed("local scanner failed"))
+                    .unwrap_or_else(|_| ScanOutcome::failed("scanner_crashed"))
                 };
                 if let Ok(mut store) = store.lock() {
                     match store.complete(&work.scan_id, &outcome) {

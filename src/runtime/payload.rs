@@ -152,7 +152,7 @@ impl PayloadScan<'_> {
                         self.notice = Some(ScanNotice::api_authentication(reason, "none"));
                         ScanError::Failed(reason)
                     } else {
-                        ScanError::Failed("scanner_error")
+                        ScanError::Failed(crate::inference::scan_failure_reason(&error))
                     }
                 })?;
             if outcome.notice.is_some() {
