@@ -164,8 +164,8 @@ def main() -> None:
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--tokens", type=int, default=4096)
     args = parser.parse_args()
-    if args.requests < 1 or args.concurrency < 1 or args.tokens < 1025:
-        parser.error("requests/concurrency must be positive and tokens must exceed 1024")
+    if args.requests < 1 or args.concurrency < 1 or args.tokens < 2049:
+        parser.error("requests/concurrency must be positive and tokens must exceed 2048")
     binary = args.binary.resolve(strict=True)
     modes = ("local", "hybrid") if args.mode == "compare" else (args.mode,)
     reports = [
