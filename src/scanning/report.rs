@@ -430,6 +430,18 @@ pub fn notice_text(notice: &ScanNotice) -> String {
     match (notice.code.as_str(), notice.fallback.as_str()) {
         ("api_usage_limit", "local") => format!("Patronus API usage limit reached; content was scanned locally instead.{retry}"),
         ("api_usage_limit", _) => format!("Patronus API usage limit reached and local scanning is unavailable; content was not scanned.{retry} Run `patronus-security-scanner auth login` or open https://control.patronus.studio/."),
+        (code, fallback) if code.starts_with("api_authentication_") => {
+            let cause = match code {
+                "api_authentication_expired" => "Your Patronus login has expired",
+                "api_authentication_missing" => "Patronus is not signed in to the API",
+                _ => "The Patronus API rejected the saved login",
+            };
+            if fallback == "local" {
+                format!("{cause}; content was scanned locally instead. Run `patronus-security-scanner auth login` to restore API scanning.")
+            } else {
+                format!("{cause} and local scanning is unavailable; content was not scanned. Run `patronus-security-scanner auth login`.")
+            }
+        }
         _ => format!("Patronus notice: {}.", notice.code),
     }
 }

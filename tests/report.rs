@@ -4,7 +4,7 @@ use patronus_security_scanner::chunk::ChunkRecord;
 use patronus_security_scanner::cli::FailOn;
 use patronus_security_scanner::discovery::FileRecord;
 use patronus_security_scanner::report::{
-    build_report, exit_code, markdown, terminal_summary, ReportBuilder, ScanStatus,
+    build_report, exit_code, markdown, notice_text, terminal_summary, ReportBuilder, ScanStatus,
 };
 use patronus_security_scanner::target::TargetKind;
 
@@ -117,6 +117,30 @@ fn local_fallback_after_api_usage_limit_is_reported_once_without_failing_the_sca
         assert!(text.contains("scanned locally"), "{text}");
         assert!(text.contains("600"), "{text}");
     }
+}
+
+#[test]
+fn authentication_notices_name_the_login_problem_and_the_fix() {
+    let expired = notice_text(&ScanNotice::api_authentication(
+        "authentication_expired",
+        "local",
+    ));
+    assert!(expired.contains("login has expired"), "{expired}");
+    assert!(expired.contains("scanned locally"), "{expired}");
+    assert!(expired.contains("auth login"), "{expired}");
+
+    let missing = notice_text(&ScanNotice::api_authentication(
+        "authentication_missing",
+        "none",
+    ));
+    assert!(missing.contains("not signed in"), "{missing}");
+    assert!(missing.contains("not scanned"), "{missing}");
+
+    let rejected = notice_text(&ScanNotice::api_authentication(
+        "authentication_rejected",
+        "none",
+    ));
+    assert!(rejected.contains("rejected the saved login"), "{rejected}");
 }
 
 fn sample_classification() -> FinalClassification {

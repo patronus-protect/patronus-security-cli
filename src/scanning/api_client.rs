@@ -15,6 +15,56 @@ use std::{
 pub fn error(message: &str) -> ScannerError {
     ScannerError::Ark(message.into())
 }
+
+/// Public failure codes for API authentication. They carry no backend text.
+pub const AUTH_MISSING: &str = "authentication_missing";
+pub const AUTH_EXPIRED: &str = "authentication_expired";
+pub const AUTH_REJECTED: &str = "authentication_rejected";
+
+/// The fixed public reason for an API authentication failure; `None` for any other error.
+pub fn authentication_reason(error: &ScannerError) -> Option<&'static str> {
+    let ScannerError::Api {
+        kind: ErrorKind::Authentication,
+        code,
+        ..
+    } = error
+    else {
+        return None;
+    };
+    Some(match code.as_deref() {
+        Some(AUTH_MISSING) => AUTH_MISSING,
+        Some(AUTH_EXPIRED) => AUTH_EXPIRED,
+        _ => AUTH_REJECTED,
+    })
+}
+
+fn authentication_error(code: &'static str, message: &str) -> ScannerError {
+    ScannerError::Api {
+        kind: ErrorKind::Authentication,
+        message: message.into(),
+        code: Some(code.into()),
+        retry_after: None,
+        details: None,
+    }
+}
+
+/// No usable credential exists locally: either never signed in or the saved login expired.
+fn missing_credential() -> ScannerError {
+    let expired = crate::config::user_root()
+        .and_then(|root| crate::auth::status(&root))
+        .is_ok_and(|status| status.state == "expired");
+    if expired {
+        authentication_error(
+            AUTH_EXPIRED,
+            "Patronus login expired. Run `patronus-security-scanner auth login`.",
+        )
+    } else {
+        authentication_error(
+            AUTH_MISSING,
+            "API authentication required. Run onboarding or `patronus-security-scanner auth login`.",
+        )
+    }
+}
 pub fn token(config: &Config) -> Result<String> {
     std::env::var(&config.provider.api_key_env)
         .ok()
@@ -36,9 +86,7 @@ pub fn submit(config: &Config, body: Value, allow_anonymous: bool) -> Result<Vec
         return submit_at(&config.provider.api_base_url, &token, body, timeout);
     }
     if !allow_anonymous {
-        return Err(error(
-            "API authentication required. Run onboarding or auth login.",
-        ));
+        return Err(missing_credential());
     }
     with_anonymous_client(config, |client| {
         client.scan_json(body).map(|response| response.jobs)
@@ -248,7 +296,11 @@ fn save_anonymous_identity(root: &Path, cookie: &str) -> Result<()> {
 
 fn map_error(source: patronus_api_client::Error) -> ScannerError {
     let message = match source.kind {
-        ErrorKind::Authentication => "API authentication required. Run onboarding or auth login.",
+        // The server refused a credential that looked valid locally (expired or revoked).
+        ErrorKind::Authentication => return authentication_error(
+            AUTH_REJECTED,
+            "The Patronus API rejected the saved login. Run `patronus-security-scanner auth login`.",
+        ),
         ErrorKind::Quota | ErrorKind::RateLimit => return ScannerError::Api {
             kind: source.kind,
             message: format!("API usage limit reached. Run `patronus-security-scanner auth login` or open https://control.patronus.studio/.{}",

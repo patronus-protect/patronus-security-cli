@@ -80,6 +80,15 @@ impl ScanNotice {
             retry_after,
         }
     }
+
+    /// `reason` is one of the fixed `authentication_*` failure codes.
+    pub fn api_authentication(reason: &str, fallback: &str) -> Self {
+        Self {
+            code: format!("api_{reason}"),
+            fallback: fallback.into(),
+            retry_after: None,
+        }
+    }
 }
 
 pub trait ContentAnalyzer {

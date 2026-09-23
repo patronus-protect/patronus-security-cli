@@ -26,7 +26,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 clap = { version = "4.5", features = ["derive"] }
 directories = "6.0"
 ignore = "0.4"
-patronus-ark = "=0.1.7"
+patronus-ark = "=0.1.8"
 patronus-api-client = { version = "0.1.1", path = "crates/patronus-api-client" }
 rand = "0.9"
 ring = "0.17"

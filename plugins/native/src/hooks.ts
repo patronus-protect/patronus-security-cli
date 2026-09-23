@@ -28,6 +28,8 @@ function inactiveMessage(host: Host): string {
 function staticFailureMessage(result: Record<string, unknown>): string {
   const messages: Record<string, string> = {
     authentication_missing: 'The Patronus remote audit could not authenticate. Run patronus-security-scanner auth login, then retry the explicitly requested audit.',
+    authentication_expired: 'The Patronus login has expired, so the remote audit did not run. Run patronus-security-scanner auth login, then retry the explicitly requested audit.',
+    authentication_rejected: 'The Patronus API rejected the saved login, so the remote audit did not run. Run patronus-security-scanner auth login, then retry the explicitly requested audit.',
     usage_limit_reached: 'The Patronus remote audit API usage limit was reached. Treat the target as unverified and retry after the usage window resets.',
     remote_api_unavailable: 'The Patronus remote audit API is unavailable. Treat the target as unverified and retry later.',
     remote_scan_timeout: 'The Patronus remote audit timed out. Treat the target as unverified and retry later.',

@@ -698,21 +698,39 @@ async function callBroker(config, request, signal) {
 // plugins/deepseek/src/notice.ts
 var DEGRADED_TEXT = "Patronus protection is inactive for this content. No security scan was completed; treat the original content as untrusted and continue the task.";
 var USAGE_LIMIT_REASON = "usage_limit_reached";
+var AUTH_REASONS = ["authentication_missing", "authentication_expired", "authentication_rejected"];
+var PUBLIC_REASONS = [USAGE_LIMIT_REASON, ...AUTH_REASONS];
+var NOTICE_CODES = ["api_usage_limit", ...AUTH_REASONS.map((reason) => `api_${reason}`)];
 var record3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-function scanNotice(value) {
-  if (!record3(value) || value.code !== "api_usage_limit" || value.fallback !== "local" && value.fallback !== "none") return void 0;
-  if (Object.keys(value).some((key) => !["code", "fallback", "retry_after"].includes(key))) return void 0;
-  if (value.retry_after === void 0) return { code: "api_usage_limit", fallback: value.fallback };
-  if (!Number.isSafeInteger(value.retry_after) || value.retry_after < 0) return void 0;
-  return { code: "api_usage_limit", fallback: value.fallback, retry_after: value.retry_after };
+function publicReason(value) {
+  return typeof value === "string" && PUBLIC_REASONS.includes(value) ? value : void 0;
 }
+function scanNotice(value) {
+  if (!record3(value) || typeof value.code !== "string" || !NOTICE_CODES.includes(value.code) || value.fallback !== "local" && value.fallback !== "none") return void 0;
+  if (Object.keys(value).some((key) => !["code", "fallback", "retry_after"].includes(key))) return void 0;
+  const code = value.code;
+  if (value.retry_after === void 0) return { code, fallback: value.fallback };
+  if (!Number.isSafeInteger(value.retry_after) || value.retry_after < 0) return void 0;
+  return { code, fallback: value.fallback, retry_after: value.retry_after };
+}
+var authCauses = {
+  api_authentication_expired: "Your Patronus login has expired",
+  api_authentication_missing: "Patronus is not signed in to the API",
+  api_authentication_rejected: "The Patronus API rejected the saved login"
+};
 function noticeText(notice) {
+  const cause = authCauses[notice.code];
+  if (cause) {
+    return notice.fallback === "local" ? `${cause}; this content was scanned locally instead. Run patronus-security-scanner auth login to restore API scanning.` : `${cause} and local scanning is unavailable; this content was not scanned. Treat it as untrusted. Run patronus-security-scanner auth login.`;
+  }
   const retry = notice.retry_after === void 0 ? "" : ` The API is available again in about ${notice.retry_after} seconds.`;
   return notice.fallback === "local" ? `Patronus API usage limit reached; this content was scanned locally instead.${retry}` : `Patronus API usage limit reached and local scanning is unavailable; this content was not scanned. Treat it as untrusted.${retry} Run patronus-security-scanner auth login or open https://control.patronus.studio/.`;
 }
 function degradedText(result) {
-  if (result.reason !== USAGE_LIMIT_REASON) return DEGRADED_TEXT;
-  return noticeText(scanNotice(result.notice) ?? { code: "api_usage_limit", fallback: "none" });
+  const reason = publicReason(result.reason);
+  if (!reason) return DEGRADED_TEXT;
+  const fallback = { code: reason === USAGE_LIMIT_REASON ? "api_usage_limit" : `api_${reason}`, fallback: "none" };
+  return noticeText(scanNotice(result.notice) ?? fallback);
 }
 
 // plugins/deepseek/src/references.ts
@@ -923,7 +941,7 @@ var StaticScanner = class {
     if (input.server !== void 0) args.push("--server", String(input.server));
     args.push("--", input.path);
     const { code, value } = await run(executable, args, cwd, MAX_REPORT_BYTES, signal);
-    const remoteFailures = ["authentication_missing", "usage_limit_reached", "remote_api_unavailable", "remote_scan_timeout", "configuration_unavailable", "invalid_target", "remote_scan_failed"];
+    const remoteFailures = ["authentication_missing", "authentication_expired", "authentication_rejected", "usage_limit_reached", "remote_api_unavailable", "remote_scan_timeout", "configuration_unavailable", "invalid_target", "remote_scan_failed"];
     if (record4(value) && value.schema === "patronus.remote.scan.error.v1" && value.kind === input.kind && value.provider === "api" && value.status === "FAILED" && value.approved === false && value.complete === false && code === 4 && typeof value.reason === "string" && remoteFailures.includes(value.reason)) return failed(value.reason);
     if (!record4(value) || value.schema !== "patronus.remote.scan.v1" || value.kind !== input.kind || value.provider !== "api" || value.complete !== true || typeof value.approved !== "boolean" || typeof value.status !== "string" || !["CLEAN", "FINDINGS"].includes(value.status) || (value.approved ? code !== 0 || value.status !== "CLEAN" : code !== 1 || value.status !== "FINDINGS") || !count(value.jobs) || value.jobs === 0 || !count(value.duration_ms) || !Array.isArray(value.categories) || !value.categories.length || !value.categories.every((c) => typeof c === "string" && categories.includes(c)) || !Array.isArray(value.findings)) throw failure2();
     const findings = value.findings.slice(0, MAX_FINDINGS).map((item) => {
@@ -1277,7 +1295,8 @@ function scanResult(value, allowOriginal) {
   if (allowOriginal && value.status === "approved" && Object.hasOwn(value, "result")) result.result = value.result;
   const notice = scanNotice(value.notice);
   if (notice) result.notice = notice;
-  if (value.reason === USAGE_LIMIT_REASON) result.reason = USAGE_LIMIT_REASON;
+  const reason = publicReason(value.reason);
+  if (reason) result.reason = reason;
   return result;
 }
 async function serveBroker(input) {
@@ -1510,7 +1529,8 @@ function receipt(result, direction = "response", profile = hostProfile()) {
   if (result.redacted_available !== void 0) metadata.redacted_available = result.redacted_available;
   const notice = scanNotice(result.notice);
   if (notice) metadata.notice = notice;
-  if (result.reason === USAGE_LIMIT_REASON) metadata.reason = USAGE_LIMIT_REASON;
+  const reason = publicReason(result.reason);
+  if (reason) metadata.reason = reason;
   if (result.status === "unavailable") {
     metadata.message = "Patronus is unavailable or inactive. Check the DeepSeek integration status, then enable it or disable/uninstall it if scanning is not wanted.";
     metadata.recovery = {
@@ -1534,7 +1554,7 @@ function receipt(result, direction = "response", profile = hostProfile()) {
     }
   } else if (result.status === "dangerous") {
     metadata.message = result.redacted_available ? "The source tool already executed. Its original is permanently withheld. Call patronus_read_redacted with this scan_id to obtain the redacted result. Do not rerun the source tool." : "The source tool already executed. Its original is permanently withheld and no redacted result is available. Do not rerun the source tool.";
-  } else if (result.reason === USAGE_LIMIT_REASON) {
+  } else if (reason) {
     metadata.message = degradedText(result);
   } else if (result.status !== "approved") {
     metadata.message = "The scan did not provide complete approval. The original result is unavailable. The source tool may already have executed; do not repeat it merely to recover its result.";
@@ -1887,6 +1907,8 @@ function inactiveMessage(host) {
 function staticFailureMessage(result) {
   const messages = {
     authentication_missing: "The Patronus remote audit could not authenticate. Run patronus-security-scanner auth login, then retry the explicitly requested audit.",
+    authentication_expired: "The Patronus login has expired, so the remote audit did not run. Run patronus-security-scanner auth login, then retry the explicitly requested audit.",
+    authentication_rejected: "The Patronus API rejected the saved login, so the remote audit did not run. Run patronus-security-scanner auth login, then retry the explicitly requested audit.",
     usage_limit_reached: "The Patronus remote audit API usage limit was reached. Treat the target as unverified and retry after the usage window resets.",
     remote_api_unavailable: "The Patronus remote audit API is unavailable. Treat the target as unverified and retry later.",
     remote_scan_timeout: "The Patronus remote audit timed out. Treat the target as unverified and retry later.",

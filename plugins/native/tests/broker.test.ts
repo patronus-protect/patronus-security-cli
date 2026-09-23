@@ -360,6 +360,19 @@ test('broker keeps only the fixed usage-limit failure reason', {timeout:30000}, 
   }
 })
 
+test('broker keeps the fixed authentication failure reason', {timeout:30000}, async()=>{
+  const expired=await stub({status:'failed',extra:{reason:'authentication_expired',notice:{code:'api_authentication_expired',fallback:'none'}}})
+  expired.config.responseWaitMs=1000
+  try {
+    const result=await hook(expired.config,{method:'response',tool:'read',callId:'expired',payload:'large text'})
+    assert.equal(result.status,'failed')
+    assert.equal(result.reason,'authentication_expired')
+    assert.deepEqual(result.notice,{code:'api_authentication_expired',fallback:'none'})
+  } finally {
+    await hook(expired.config,{method:'close'}); await rm(expired.root,{recursive:true,force:true})
+  }
+})
+
 test('static audit succeeds without starting a runtime worker', {timeout:30000}, async()=>{
   const {fakeCli}=await import('../../deepseek/tests/static-fixture.ts')
   const cli=await fakeCli()

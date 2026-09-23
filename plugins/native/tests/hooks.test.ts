@@ -398,6 +398,26 @@ test('an exhausted API usage limit without local fallback names its cause', asyn
   }
 })
 
+test('an expired login is named instead of reporting inactive protection', async () => {
+  for (const host of ['codex', 'claude'] as const) {
+    const fallback: any = await handleHook(host, 'PostToolUse', input('PostToolUse', { tool_response: 'LARGE-TEXT-731' }), {}, async () => ({
+      scan_id: 'scan-731', status: 'approved', notice: { code: 'api_authentication_expired', fallback: 'local' },
+    }))
+    assert.match(fallback.systemMessage, /login has expired/, `${host} tells the user`)
+    assert.match(fallback.systemMessage, /scanned locally/)
+    assert.doesNotMatch(JSON.stringify(fallback), /inactive/)
+    assert(!JSON.stringify(fallback).includes('LARGE-TEXT-731'))
+
+    const failed: any = await handleHook(host, 'PostToolUse', input('PostToolUse', { tool_response: 'LARGE-TEXT-731' }), {}, async () => ({
+      scan_id: 'scan-731', status: 'failed', reason: 'authentication_expired', notice: { code: 'api_authentication_expired', fallback: 'none' },
+    }))
+    assert.match(failed.systemMessage, /login has expired/)
+    assert.match(failed.systemMessage, /not scanned/)
+    assert.match(failed.systemMessage, /auth login/)
+    assert.doesNotMatch(JSON.stringify(failed), /protection is inactive/)
+  }
+})
+
 test('the MCP status tool returns the fallback notice with the approved result', async () => {
   const notice = { code: 'api_usage_limit', fallback: 'local' }
   const result = await claudeTool('patronus_check_result', { scan_id: 'scan-731' }, async () => ({ scan_id: 'scan-731', status: 'approved', result: 'DOC', notice }))

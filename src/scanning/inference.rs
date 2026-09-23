@@ -1,4 +1,5 @@
 use crate::{
+    api_client::authentication_reason,
     ark::{
         AnalysisOutcome, ArkAnalyzer, ChunkInput, ContentAnalyzer, Evidence, FinalClassification,
         ScanNotice,
@@ -176,7 +177,11 @@ impl ContentAnalyzer for Inference {
             return scan_route(true, input);
         }
         let fallback = input.clone();
-        with_usage_limit_fallback(|| scan_route(false, input), || scan_route(true, fallback))
+        with_api_fallback(
+            self.config.provider.mode,
+            || scan_route(false, input),
+            || scan_route(true, fallback),
+        )
     }
 }
 impl Inference {
@@ -252,13 +257,21 @@ impl Inference {
             self.local(input, false)
         } else {
             let fallback = input.clone();
-            with_usage_limit_fallback(|| self.cloud(input, false), || self.local(fallback, false))
+            with_api_fallback(
+                self.config.provider.mode,
+                || self.cloud(input, false),
+                || self.local(fallback, false),
+            )
         }
     }
     fn analyze_prompt(&self, input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
         if self.config.provider.mode == ProviderMode::Api {
             let fallback = input.clone();
-            with_usage_limit_fallback(|| self.cloud(input, true), || self.local(fallback, true))
+            with_api_fallback(
+                self.config.provider.mode,
+                || self.cloud(input, true),
+                || self.local(fallback, true),
+            )
         } else {
             self.local(input, true)
         }
@@ -278,10 +291,14 @@ pub fn usage_limit_retry_after(error: &ScannerError) -> Option<Option<u64>> {
     }
 }
 
-/// Runs the API scan and, only when its usage limit is exhausted, the local scan
-/// instead. If the local scan is unavailable too, the usage-limit error is kept so
-/// callers can report the actual cause.
-pub(crate) fn with_usage_limit_fallback(
+/// Runs the API scan and falls back to the local scan when the usage limit is
+/// exhausted or, in Hybrid mode, when API authentication is missing, expired or
+/// rejected. Hybrid already scans locally, so a lost login must not leave large
+/// results unscanned. API mode keeps authentication failures: the user chose the API.
+/// If the local scan is unavailable too, the API error is kept so callers can report
+/// the actual cause.
+pub(crate) fn with_api_fallback(
+    mode: ProviderMode,
     remote: impl FnOnce() -> Result<AnalysisOutcome>,
     local: impl FnOnce() -> Result<AnalysisOutcome>,
 ) -> Result<AnalysisOutcome> {
@@ -289,12 +306,18 @@ pub(crate) fn with_usage_limit_fallback(
         Ok(outcome) => return Ok(outcome),
         Err(error) => error,
     };
-    let Some(retry_after) = usage_limit_retry_after(&error) else {
+    let notice = if let Some(retry_after) = usage_limit_retry_after(&error) {
+        ScanNotice::api_usage_limit("local", retry_after)
+    } else if let Some(reason) =
+        authentication_reason(&error).filter(|_| mode == ProviderMode::Hybrid)
+    {
+        ScanNotice::api_authentication(reason, "local")
+    } else {
         return Err(error);
     };
     match local() {
         Ok(mut outcome) => {
-            outcome.notice = Some(ScanNotice::api_usage_limit("local", retry_after));
+            outcome.notice = Some(notice);
             Ok(outcome)
         }
         Err(_) => Err(error),
@@ -523,9 +546,20 @@ mod usage_limit_fallback_tests {
         })
     }
 
+    fn auth_error(code: Option<&str>) -> ScannerError {
+        ScannerError::Api {
+            kind: patronus_api_client::ErrorKind::Authentication,
+            message: "bounded".into(),
+            code: code.map(Into::into),
+            retry_after: None,
+            details: None,
+        }
+    }
+
     #[test]
     fn exhausted_api_quota_scans_locally_and_reports_why() {
-        let outcome = with_usage_limit_fallback(
+        let outcome = with_api_fallback(
+            ProviderMode::Api,
             || Err(api_error(patronus_api_client::ErrorKind::Quota)),
             scanned,
         )
@@ -538,7 +572,8 @@ mod usage_limit_fallback_tests {
 
     #[test]
     fn exhausted_rate_limit_also_scans_locally() {
-        let outcome = with_usage_limit_fallback(
+        let outcome = with_api_fallback(
+            ProviderMode::Hybrid,
             || Err(api_error(patronus_api_client::ErrorKind::RateLimit)),
             scanned,
         )
@@ -548,7 +583,8 @@ mod usage_limit_fallback_tests {
 
     #[test]
     fn unavailable_local_model_keeps_the_usage_limit_error() {
-        let error = with_usage_limit_fallback(
+        let error = with_api_fallback(
+            ProviderMode::Api,
             || Err(api_error(patronus_api_client::ErrorKind::Quota)),
             || Err(ScannerError::Ark("model missing".into())),
         )
@@ -559,7 +595,8 @@ mod usage_limit_fallback_tests {
     #[test]
     fn other_api_failures_never_fall_back() {
         let mut local_called = false;
-        let error = with_usage_limit_fallback(
+        let error = with_api_fallback(
+            ProviderMode::Hybrid,
             || Err(api_error(patronus_api_client::ErrorKind::Transport)),
             || {
                 local_called = true;
@@ -573,7 +610,54 @@ mod usage_limit_fallback_tests {
 
     #[test]
     fn successful_api_scans_carry_no_notice() {
-        let outcome = with_usage_limit_fallback(scanned, || panic!("local not needed")).unwrap();
+        let outcome =
+            with_api_fallback(ProviderMode::Api, scanned, || panic!("local not needed")).unwrap();
         assert_eq!(outcome.notice, None);
+    }
+
+    #[test]
+    fn hybrid_scans_locally_when_the_login_expired_and_names_the_cause() {
+        for (code, reason) in [
+            (Some("authentication_expired"), "authentication_expired"),
+            (Some("authentication_missing"), "authentication_missing"),
+            (Some("server_code"), "authentication_rejected"),
+            (None, "authentication_rejected"),
+        ] {
+            let outcome =
+                with_api_fallback(ProviderMode::Hybrid, || Err(auth_error(code)), scanned).unwrap();
+            assert_eq!(
+                outcome.notice,
+                Some(ScanNotice::api_authentication(reason, "local"))
+            );
+            assert_eq!(outcome.notice.unwrap().code, format!("api_{reason}"));
+        }
+    }
+
+    #[test]
+    fn api_mode_keeps_authentication_failures() {
+        let error = with_api_fallback(
+            ProviderMode::Api,
+            || Err(auth_error(Some("authentication_expired"))),
+            || panic!("API mode must not scan locally after an authentication failure"),
+        )
+        .unwrap_err();
+        assert_eq!(
+            authentication_reason(&error),
+            Some("authentication_expired")
+        );
+    }
+
+    #[test]
+    fn unavailable_local_model_keeps_the_authentication_error() {
+        let error = with_api_fallback(
+            ProviderMode::Hybrid,
+            || Err(auth_error(Some("authentication_expired"))),
+            || Err(ScannerError::Ark("model missing".into())),
+        )
+        .unwrap_err();
+        assert_eq!(
+            authentication_reason(&error),
+            Some("authentication_expired")
+        );
     }
 }

@@ -144,15 +144,17 @@ impl PayloadScan<'_> {
                     path: &field,
                     content: chunk_text,
                 })
-                .map_err(
-                    |error| match crate::inference::usage_limit_retry_after(&error) {
-                        Some(retry_after) => {
-                            self.notice = Some(ScanNotice::api_usage_limit("none", retry_after));
-                            ScanError::Failed("usage_limit_reached")
-                        }
-                        None => ScanError::Failed("scanner_error"),
-                    },
-                )?;
+                .map_err(|error| {
+                    if let Some(retry_after) = crate::inference::usage_limit_retry_after(&error) {
+                        self.notice = Some(ScanNotice::api_usage_limit("none", retry_after));
+                        ScanError::Failed("usage_limit_reached")
+                    } else if let Some(reason) = crate::api_client::authentication_reason(&error) {
+                        self.notice = Some(ScanNotice::api_authentication(reason, "none"));
+                        ScanError::Failed(reason)
+                    } else {
+                        ScanError::Failed("scanner_error")
+                    }
+                })?;
             if outcome.notice.is_some() {
                 self.notice = outcome.notice.clone();
             }

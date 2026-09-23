@@ -10,7 +10,12 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 /// Failure reasons that are safe to show to agents and users.
-const PUBLIC_REASONS: &[&str] = &["usage_limit_reached"];
+const PUBLIC_REASONS: &[&str] = &[
+    "usage_limit_reached",
+    crate::api_client::AUTH_MISSING,
+    crate::api_client::AUTH_EXPIRED,
+    crate::api_client::AUTH_REJECTED,
+];
 
 #[derive(Debug, Clone)]
 pub struct StoreLimits {

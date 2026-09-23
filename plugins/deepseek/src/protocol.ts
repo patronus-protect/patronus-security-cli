@@ -35,13 +35,13 @@ export interface ScanResult {
   coverage?: JsonValue
   redacted_available?: boolean
   result?: JsonValue
-  /** Fixed public explanation, e.g. a local fallback after the API usage limit. */
+  /** Fixed public explanation, e.g. a local fallback after the API usage limit or an expired login. */
   notice?: ScanNotice
-  /** Only fixed, public failure codes such as usage_limit_reached. */
+  /** Only fixed, public failure codes such as usage_limit_reached or authentication_expired. */
   reason?: string
 }
 export interface ScanNotice {
-  code: 'api_usage_limit'
+  code: 'api_usage_limit' | 'api_authentication_missing' | 'api_authentication_expired' | 'api_authentication_rejected'
   fallback: 'local' | 'none'
   retry_after?: number
 }

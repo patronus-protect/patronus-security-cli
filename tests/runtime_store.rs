@@ -754,3 +754,27 @@ fn usage_limit_failure_exposes_only_its_fixed_reason() {
     let hidden = store.check(&other, "session-a").unwrap();
     assert!(hidden.get("reason").is_none());
 }
+
+#[test]
+fn authentication_failures_expose_their_fixed_reason() {
+    let (_temp, mut store) = setup();
+    for reason in [
+        "authentication_missing",
+        "authentication_expired",
+        "authentication_rejected",
+    ] {
+        let id = store
+            .enqueue(job(json!(format!("output {reason}"))))
+            .unwrap();
+        let mut outcome = ScanOutcome::failed(reason);
+        outcome.notice = Some(ScanNotice::api_authentication(reason, "none"));
+        finish(&mut store, &id, &outcome);
+        let result = store.check(&id, "session-a").unwrap();
+        assert_eq!(result["status"], "failed");
+        assert_eq!(result["reason"], reason);
+        assert_eq!(
+            result["notice"],
+            json!({"code": format!("api_{reason}"), "fallback": "none"})
+        );
+    }
+}
