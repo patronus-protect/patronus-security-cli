@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.2 - 2026-09-23
+
 - Threat detection is now opt-in: onboarding no longer enables it at L2/L3 and keeps an explicit choice.
 - When the Patronus API usage or rate limit is exhausted, scan locally instead in hybrid and API mode, and tell users and agents why (Claude, Codex, DeepSeek, CLI reports). If local scanning is unavailable, report the usage limit instead of "protection is inactive".
 - In hybrid mode, an expired, missing or rejected Patronus login no longer leaves large results unscanned: they are scanned locally instead. Scans that cannot complete report the fixed reasons `authentication_expired`, `authentication_missing` or `authentication_rejected` with `patronus-security-scanner auth login` as the fix, instead of "protection is inactive" (Claude, Codex, DeepSeek, CLI reports, remote audits).

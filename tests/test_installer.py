@@ -27,7 +27,7 @@ class InstallerTest(unittest.TestCase):
             (root / 'install.py.sha256').write_text(hashlib.sha256(backend.read_bytes()).hexdigest())
             environment = {**os.environ, 'PATRONUS_INSTALLER_BASE_URL': root.as_uri(), 'MARKER': str(marker)}
             subprocess.run(['sh', str(INSTALL_SH), '--no-onboarding'], check=True, env=environment)
-            self.assertEqual(marker.read_text(), '--no-onboarding --version 0.1.1')
+            self.assertEqual(marker.read_text(), '--no-onboarding --version 0.1.2')
 
     def test_shell_entrypoint_rejects_an_invalid_release_version(self):
         environment = {**os.environ, 'PATRONUS_VERSION': '../unexpected'}
@@ -45,11 +45,11 @@ class InstallerTest(unittest.TestCase):
         with zipfile.ZipFile(content, 'w') as archive:
             archive.writestr(entry, b'new verified executable')
         payload = content.getvalue()
-        name = 'patronus-security-scanner-0.1.1-aarch64-apple-darwin.zip'
-        base = f'https://github.com/{installer.REPOSITORY}/releases/download/v0.1.1/'
-        release = {'tag_name': 'v0.1.1', 'assets': [{'name': f, 'browser_download_url': base + f} for f in [name, name + '.sha256']]}
+        name = 'patronus-security-scanner-0.1.2-aarch64-apple-darwin.zip'
+        base = f'https://github.com/{installer.REPOSITORY}/releases/download/v0.1.2/'
+        release = {'tag_name': 'v0.1.2', 'assets': [{'name': f, 'browser_download_url': base + f} for f in [name, name + '.sha256']]}
         def fetch(url, limit):
-            if url.endswith('/releases/tags/v0.1.1'): return json.dumps(release).encode()
+            if url.endswith('/releases/tags/v0.1.2'): return json.dumps(release).encode()
             if url.endswith('.sha256'): return (('0' * 64) if mismatch else hashlib.sha256(payload).hexdigest()).encode()
             return payload
         argv = ['install.py'] if onboarding else ['install.py', '--no-onboarding']
@@ -58,7 +58,7 @@ class InstallerTest(unittest.TestCase):
 
     def test_remote_install_rejects_mismatched_release_metadata(self):
         release = {'tag_name': 'v0.1.0', 'assets': []}
-        argv = ['install.py', '--version', '0.1.1', '--no-onboarding']
+        argv = ['install.py', '--version', '0.1.2', '--no-onboarding']
         with patch.object(installer.sys, 'argv', argv), patch.object(installer, 'fetch', return_value=json.dumps(release).encode()):
             with self.assertRaisesRegex(ValueError, 'Release version mismatch'):
                 installer.main()

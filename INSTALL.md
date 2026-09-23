@@ -20,7 +20,7 @@ The installer fetches only the artifact of its own release, verifies it against 
 To verify the installer itself before running it, pin a release and check its published checksum:
 
 ```sh
-version=v0.1.1
+version=v0.1.2
 base="https://github.com/patronus-protect/patronus-security-cli/releases/download/$version"
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' 0 HUP INT TERM
