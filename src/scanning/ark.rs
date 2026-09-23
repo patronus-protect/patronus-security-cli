@@ -80,6 +80,15 @@ impl ScanNotice {
             retry_after,
         }
     }
+
+    /// `reason` is one of the fixed `authentication_*` failure codes.
+    pub fn api_authentication(reason: &str, fallback: &str) -> Self {
+        Self {
+            code: format!("api_{reason}"),
+            fallback: fallback.into(),
+            retry_after: None,
+        }
+    }
 }
 
 pub trait ContentAnalyzer {
@@ -520,7 +529,7 @@ mod tests {
             "recommendation": {"accepted": false, "final_arbitration": "default", "operating_point": "best_f1", "acceptance_threshold": 0.99},
             "candidates": [],
             "terminality": {"completion": "complete", "degraded": false, "degradation_reason": null},
-            "provenance": {"ark_version": "0.1.7", "schema_version": "1", "model": "fixture"}
+            "provenance": {"ark_version": "0.1.8", "schema_version": "1", "model": "fixture"}
         })).unwrap();
         let result = patronus_ark::SecurityScanResult {
             category: "injection".into(),

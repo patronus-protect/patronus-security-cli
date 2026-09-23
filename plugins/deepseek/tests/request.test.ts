@@ -132,7 +132,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   const request = JSON.parse(line)
   if (request.method !== 'hello') return
   setTimeout(() => process.stdout.write(JSON.stringify({ id: request.id, result: {
-    protocol_version: 1, provider: 'local', scanner_version: 'fixture', ark_version: '0.1.7', ready: true,
+    protocol_version: 1, provider: 'local', scanner_version: 'fixture', ark_version: '0.1.8', ready: true,
     runtime: { response_wait_ms: 500, request_timeout_ms: 30000, scan_timeout_ms: 60000, max_payload_bytes: 10485760 }
   } }) + '\\n'), ${delayMs})
 })
@@ -147,7 +147,7 @@ describe('local model startup budget', () => {
     const long = new LocalClient({ executable: fixture.executable, stateDir: join(fixture.root, 'long'), startupTimeoutMs: 5_000 })
     try {
       await expect(short.hello()).rejects.toThrow('unavailable')
-      await expect(long.hello()).resolves.toMatchObject({ ready: true, ark_version: '0.1.7' })
+      await expect(long.hello()).resolves.toMatchObject({ ready: true, ark_version: '0.1.8' })
     } finally {
       await Promise.all([short.close(), long.close()])
       await rm(fixture.root, { recursive: true, force: true })

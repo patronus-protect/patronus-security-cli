@@ -1,4 +1,4 @@
-import { scanNotice, USAGE_LIMIT_REASON } from '../../deepseek/src/notice.ts'
+import { publicReason, scanNotice } from '../../deepseek/src/notice.ts'
 import { unavailableScanReference } from '../../deepseek/src/references.ts'
 import { execFile } from 'node:child_process'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
@@ -14,7 +14,7 @@ import { SessionState, type SessionRuntime } from '../../deepseek/src/sessions.t
 import { StaticScanner } from '../../deepseek/src/static.ts'
 import { waitForScan } from '../../deepseek/src/wait.ts'
 import { autoRedact } from '../../deepseek/src/auto-redaction.ts'
-import { brokerFailure, CALL_TIMEOUT, prepareBroker, privateDirectory, readFrame, readPrivate, record, unavailable, validRequest, writeFrame, type BrokerConfig, type BrokerRequest } from './broker.ts'
+import { brokerFailure, CALL_TIMEOUT, failureReason, prepareBroker, privateDirectory, readFrame, readPrivate, record, unavailable, validRequest, writeFrame, type BrokerConfig, type BrokerRequest } from './broker.ts'
 
 const IDLE_MS = 30 * 60_000 // Greater than the maximum five-minute runtime scan deadline.
 const run = promisify(execFile)
@@ -136,26 +136,26 @@ const count = (value: unknown): value is number => Number.isSafeInteger(value) &
 /** Keep protocol metadata; arbitrary backend fields and diagnostic strings never escape. */
 function scanResult(value: unknown, allowOriginal: boolean): JsonValue {
   if (!record(value) || typeof value.status !== 'string' || !['pending', 'approved', 'dangerous', 'failed', 'incomplete', 'cancelled', 'expired', 'unavailable'].includes(value.status) ||
-      typeof value.scan_id !== 'string' || !/^[a-f0-9]{32}$/.test(value.scan_id)) return unavailable()
+      typeof value.scan_id !== 'string' || !/^[a-f0-9]{32}$/.test(value.scan_id)) return unavailable('invalid_scanner_response')
   const result: Record<string, JsonValue> = { scan_id: value.scan_id, status: value.status }
   if (record(value.coverage)) {
     const coverage: Record<string, JsonValue> = {}
-    if (typeof value.coverage.complete !== 'boolean') return unavailable()
+    if (typeof value.coverage.complete !== 'boolean') return unavailable('invalid_scanner_response')
     coverage.complete = value.coverage.complete
     for (const key of ['fields_total', 'fields_scanned', 'bytes_total', 'bytes_scanned']) {
-      if (!count(value.coverage[key])) return unavailable()
+      if (!count(value.coverage[key])) return unavailable('invalid_scanner_response')
       coverage[key] = value.coverage[key]
     }
     result.coverage = coverage
   }
   if (value.status === 'approved' && (!record(value.coverage) || value.coverage.complete !== true ||
-      value.coverage.fields_total !== value.coverage.fields_scanned || value.coverage.bytes_total !== value.coverage.bytes_scanned)) return unavailable()
+      value.coverage.fields_total !== value.coverage.fields_scanned || value.coverage.bytes_total !== value.coverage.bytes_scanned)) return unavailable('invalid_scanner_response')
   if (Array.isArray(value.findings)) {
     const findings: JsonValue[] = []
     for (const item of value.findings.slice(0, 100)) {
-      if (!record(item) || typeof item.category !== 'string' || !['prompt_injection', 'injection', 'dlp', 'pii', 'threat'].includes(item.category)) return unavailable()
+      if (!record(item) || typeof item.category !== 'string' || !['prompt_injection', 'injection', 'dlp', 'pii', 'threat'].includes(item.category)) return unavailable('invalid_scanner_response')
       const finding: Record<string, JsonValue> = { category: item.category }
-      if (item.level !== undefined) { if (typeof item.level !== 'string' || !['l1', 'l2', 'l3'].includes(item.level)) return unavailable(); finding.level = item.level }
+      if (item.level !== undefined) { if (typeof item.level !== 'string' || !['l1', 'l2', 'l3'].includes(item.level)) return unavailable('invalid_scanner_response'); finding.level = item.level }
       if (typeof item.confidence === 'number' && Number.isFinite(item.confidence) && item.confidence >= 0 && item.confidence <= 1) finding.confidence = item.confidence
       for (const key of ['start_byte', 'end_byte', 'field_id']) if (count(item[key])) finding[key] = item[key]
       findings.push(finding)
@@ -168,7 +168,8 @@ function scanResult(value: unknown, allowOriginal: boolean): JsonValue {
   if (allowOriginal && value.status === 'approved' && Object.hasOwn(value, 'result')) result.result = value.result as JsonValue
   const notice = scanNotice(value.notice)
   if (notice) result.notice = notice as unknown as JsonValue
-  if (value.reason === USAGE_LIMIT_REASON) result.reason = USAGE_LIMIT_REASON
+  const reason = publicReason(value.reason)
+  if (reason) result.reason = reason
   return result
 }
 
@@ -195,7 +196,8 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
       await privateDirectory(join(directory, 'scanner'))
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir })
       const connected = await runtimeSessions.runtime(id, shutdown.signal)
-      if (connected.hello.ark_version !== '0.1.7' || connected.hello.provider !== frozen.provider) { await runtimeSessions.close(); throw brokerFailure() }
+      if (connected.hello.ark_version !== '0.1.8') { await runtimeSessions.close(); throw brokerFailure('runtime_version_mismatch') }
+      if (connected.hello.provider !== frozen.provider) { await runtimeSessions.close(); throw brokerFailure('runtime_start_failed') }
       return connected
     })()
     return runtime
@@ -218,8 +220,8 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
         message: 'Use a file_id returned by a static finding in this session.',
       }
     }
-    const { client, hello } = await boot()
-    if (signal.aborted) return unavailable()
+    const { client, hello } = await boot().catch(error => { throw brokerFailure(failureReason(error) ?? 'runtime_start_failed') })
+    if (signal.aborted) return unavailable('scan_timeout')
     const session = sessions.capability(id)
     if (request.method === 'check') {
       const value = await client.check({ session, scan_id: request.scanId }, signal)
@@ -232,7 +234,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
       return value.status === 'redacted' && value.result !== undefined ? { scan_id: request.scanId, status: 'redacted', result: value.result } : unavailableScanReference()
     }
     if (request.method !== 'request' && request.method !== 'response') throw brokerFailure()
-    if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable()
+    if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable('payload_too_large')
     const wait = request.method === 'request' ? config.requestTimeoutMs ?? hello.runtime.request_timeout_ms : config.responseWaitMs ?? hello.runtime.response_wait_ms
     const budget = request.method === 'request' ? AbortSignal.any([signal, AbortSignal.timeout(wait)]) : signal
     let job: { session: string; scan_id: string } | undefined
@@ -273,7 +275,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
           if (frame.digest !== digest && request.method !== 'close') throw brokerFailure()
           value = await dispatch(request, signal)
           if (request.method !== 'close') sessions.assertUsable(id)
-        } catch { value = request.method === 'close' ? { closed: false } : unavailable() }
+        } catch (error) { value = request.method === 'close' ? { closed: false } : unavailable(failureReason(error) ?? 'broker_unavailable') }
         if (!signal.aborted) writeFrame(socket, { version: 1, requestId: frame.requestId, value })
         socket.end()
         if (request.method === 'close') void stop()

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEGRADED_TEXT } from '../src/degraded.ts'
-import { degradedText, noticeText, scanNotice } from '../src/notice.ts'
+import { degradedText, noticeText, publicReason, scanNotice } from '../src/notice.ts'
 import { receipt } from '../src/receipts.ts'
 import type { ScanResult } from '../src/protocol.ts'
 
@@ -39,5 +39,55 @@ describe('Patronus API usage limit notices', () => {
     const failed = receipt({ scan_id, status: 'failed', reason: 'usage_limit_reached', notice: { code: 'api_usage_limit', fallback: 'none' } }) as Record<string, unknown>
     expect(failed.reason).toBe('usage_limit_reached')
     expect(failed.message).toMatch(/API usage limit reached/)
+  })
+})
+
+describe('Patronus API authentication notices', () => {
+  const reasons = ['authentication_missing', 'authentication_expired', 'authentication_rejected'] as const
+
+  it('accepts only the fixed authentication notice codes', () => {
+    for (const reason of reasons) {
+      expect(scanNotice({ code: `api_${reason}`, fallback: 'local' })).toEqual({ code: `api_${reason}`, fallback: 'local' })
+    }
+    expect(scanNotice({ code: 'api_authentication_other', fallback: 'local' })).toBeUndefined()
+    expect(publicReason('authentication_expired')).toBe('authentication_expired')
+    expect(publicReason('authentication_other')).toBeUndefined()
+  })
+
+  it('tells the user the login expired after a local fallback', () => {
+    const text = noticeText({ code: 'api_authentication_expired', fallback: 'local' })
+    expect(text).toMatch(/login has expired/)
+    expect(text).toMatch(/scanned locally/)
+    expect(text).toMatch(/auth login/)
+  })
+
+  it('names the login problem instead of claiming the integration is inactive', () => {
+    for (const reason of reasons) {
+      const failed: ScanResult = { scan_id, status: 'failed', reason }
+      expect(degradedText(failed)).toMatch(/not scanned/)
+      expect(degradedText(failed)).toMatch(/auth login/)
+      expect(degradedText(failed)).not.toMatch(/inactive/)
+    }
+    expect(degradedText({ scan_id, status: 'failed', reason: 'authentication_expired' })).toMatch(/login has expired/)
+  })
+
+  it('carries the authentication reason in receipts', () => {
+    const failed = receipt({ scan_id, status: 'failed', reason: 'authentication_expired', notice: { code: 'api_authentication_expired', fallback: 'none' } }) as Record<string, unknown>
+    expect(failed.reason).toBe('authentication_expired')
+    expect(failed.notice).toEqual({ code: 'api_authentication_expired', fallback: 'none' })
+    expect(failed.message).toMatch(/login has expired/)
+  })
+})
+
+describe('Patronus failure codes', () => {
+  it('names the cause and code instead of reporting inactive protection', () => {
+    for (const reason of ['scan_timeout', 'local_scanner_error', 'api_unavailable', 'runtime_start_failed', 'scanner_connection_lost']) {
+      const text = degradedText({ scan_id, status: 'failed', reason } as ScanResult)
+      expect(text).toContain(`(${reason})`)
+      expect(text).toMatch(/untrusted/)
+      expect(text).not.toMatch(/inactive/)
+      expect(publicReason(reason)).toBe(reason)
+    }
+    expect(degradedText({ scan_id, status: 'failed', reason: 'PRIVATE backend text' } as unknown as ScanResult)).toBe(DEGRADED_TEXT)
   })
 })

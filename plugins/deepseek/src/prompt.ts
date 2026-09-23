@@ -108,7 +108,7 @@ export function registerPromptGate(
       if (completed) throw error
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
-      return warn(await next())
+      return warn(await next(), degradedText({ reason: scanId ? 'scanner_connection_lost' : 'runtime_start_failed' }))
     }
   })
   ctx.on('llm/stream', async function* (options, next) {
@@ -185,7 +185,7 @@ export function registerPromptGate(
     } catch (error) {
       if (!completed) events.emit({ kind: 'scan_failed', direction: 'request', tool: 'user_prompt', session_id: session, ...(scanId ? { scan_id: scanId } : {}), status: 'failed', duration_ms: elapsed(started), payload_hash: payloadHash })
       if (completed) throw error
-      options.messages.push(degradedMessage())
+      options.messages.push(degradedMessage(degradedText({ reason: scanId ? 'scanner_connection_lost' : 'runtime_start_failed' })))
       yield* next()
     }
   })

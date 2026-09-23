@@ -54,7 +54,7 @@ default_artifacts = [
 max_bundle_bytes = 52428800
 
 [runtime]
-response_wait_ms = 500
+response_wait_ms = 1000
 request_timeout_ms = 30000
 scan_timeout_ms = 60000
 retention_seconds = 2592000

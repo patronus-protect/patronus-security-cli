@@ -44,7 +44,7 @@ fn local_service_uses_real_ark_and_never_exposes_dangerous_originals() {
     let runtime = Runtime::start(config(), &dir.path().join("state")).unwrap();
     let hello = call(&runtime, "hello", json!({}));
     assert_eq!(hello["result"]["provider"], "local");
-    assert_eq!(hello["result"]["runtime"]["response_wait_ms"], 500);
+    assert_eq!(hello["result"]["runtime"]["response_wait_ms"], 1000);
     let original = json!("The weather is sunny.");
     let submitted = call(
         &runtime,

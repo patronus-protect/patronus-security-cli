@@ -131,7 +131,7 @@ for (const options of [{ noise: true }, { error: true }, { provider: 'webmcp' },
     const { root, config, calls } = await stub(options)
     try {
       const result = await hook(config, { method: 'request', tool: 'user_prompt', callId: 'x', payload: '' })
-      assert.deepEqual(result, { scan_id: '', status: 'unavailable' })
+      assert.deepEqual(result, { scan_id: '', status: 'unavailable', reason: 'arkVersion' in options ? 'runtime_version_mismatch' : 'runtime_start_failed' })
       assert(!JSON.stringify(result).includes('CANARY'))
       if ('provider' in options || 'downloads' in options) assert.equal((await calls()).some(row => row.args[0] === 'serve'), false)
     } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }
@@ -357,6 +357,19 @@ test('broker keeps only the fixed usage-limit failure reason', {timeout:30000}, 
     assert(!JSON.stringify(hidden).includes('CANARY731'))
   } finally {
     for (const {config,root} of [limited,other]) { await hook(config,{method:'close'}); await rm(root,{recursive:true,force:true}) }
+  }
+})
+
+test('broker keeps the fixed authentication failure reason', {timeout:30000}, async()=>{
+  const expired=await stub({status:'failed',extra:{reason:'authentication_expired',notice:{code:'api_authentication_expired',fallback:'none'}}})
+  expired.config.responseWaitMs=1000
+  try {
+    const result=await hook(expired.config,{method:'response',tool:'read',callId:'expired',payload:'large text'})
+    assert.equal(result.status,'failed')
+    assert.equal(result.reason,'authentication_expired')
+    assert.deepEqual(result.notice,{code:'api_authentication_expired',fallback:'none'})
+  } finally {
+    await hook(expired.config,{method:'close'}); await rm(expired.root,{recursive:true,force:true})
   }
 })
 

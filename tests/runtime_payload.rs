@@ -761,6 +761,37 @@ fn usage_limit_without_fallback_fails_with_a_fixed_reason_and_retry_hint() {
 }
 
 #[test]
+fn authentication_failure_without_fallback_names_the_login_problem() {
+    for (code, reason) in [
+        ("authentication_expired", "authentication_expired"),
+        ("authentication_missing", "authentication_missing"),
+        ("UNAUTHORIZED", "authentication_rejected"),
+    ] {
+        let analyzer = Analyzer(|_input: ChunkInput<'_>| {
+            Err(ScannerError::Api {
+                kind: patronus_api_client::ErrorKind::Authentication,
+                message: "private diagnostic".into(),
+                code: Some(code.into()),
+                retry_after: None,
+                details: None,
+            })
+        });
+        let outcome = analyze_payload(
+            &analyzer,
+            &json!("large tool output"),
+            &chunking(),
+            Instant::now() + Duration::from_secs(5),
+        );
+        assert_eq!(outcome.status, JobStatus::Failed);
+        assert_eq!(outcome.reason.as_deref(), Some(reason));
+        assert_eq!(
+            outcome.notice,
+            Some(ScanNotice::api_authentication(reason, "none"))
+        );
+    }
+}
+
+#[test]
 fn local_fallback_notice_survives_payload_analysis() {
     let analyzer = Analyzer(|input: ChunkInput<'_>| {
         let mut outcome = classify(input, None);

@@ -79,7 +79,8 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
     } catch {
       gate.events.emit({ kind: 'scan_failed', direction: 'response', tool: exec.name, session_id: session || String(exec.agent?.id ?? ''), ...(job ? { scan_id: job.scan_id } : {}), status: 'failed', duration_ms: elapsed(started), payload_hash: payloadHash })
       if (job && client) void client.cancel(job).catch(() => {})
-      return finish(exec, result, warn(decision ?? { kind: 'accept' }))
+      // Name the failing stage: the runtime never started, or the scanner connection broke.
+      return finish(exec, result, warn(decision ?? { kind: 'accept' }, degradedText({ reason: client ? 'scanner_connection_lost' : 'runtime_start_failed' })))
     }
   })
   ctx.on('tools/result', (exec, result) => {

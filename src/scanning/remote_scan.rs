@@ -55,9 +55,12 @@ struct RemoteFailure<'a> {
 }
 
 fn failure_reason(error: &ScannerError) -> &'static str {
+    if let Some(reason) = crate::api_client::authentication_reason(error) {
+        return reason;
+    }
     if let ScannerError::Api { kind, .. } = error {
         return match kind {
-            patronus_api_client::ErrorKind::Authentication => "authentication_missing",
+            patronus_api_client::ErrorKind::Authentication => "authentication_rejected",
             patronus_api_client::ErrorKind::Quota | patronus_api_client::ErrorKind::RateLimit => {
                 "usage_limit_reached"
             }
@@ -68,10 +71,9 @@ fn failure_reason(error: &ScannerError) -> &'static str {
         };
     }
     let message = error.to_string().to_lowercase();
-    if message.contains("not signed in")
-        || message.contains("token expired")
-        || message.contains("authentication required")
-    {
+    if message.contains("token expired") {
+        "authentication_expired"
+    } else if message.contains("not signed in") || message.contains("authentication required") {
         "authentication_missing"
     } else if message.contains("usage limit") || message.contains("rate limit") {
         "usage_limit_reached"
@@ -303,9 +305,10 @@ fn api_error_fields(error: &ScannerError) -> ApiErrorFields<'_> {
     let quota = body.and_then(|value| value.get("quota"));
     let usage = body.and_then(|value| value.get("usage"));
     let next = match failure_reason(error) {
-        "usage_limit_reached" | "authentication_missing" => {
-            Some("patronus-security-scanner auth login")
-        }
+        "usage_limit_reached"
+        | "authentication_missing"
+        | "authentication_expired"
+        | "authentication_rejected" => Some("patronus-security-scanner auth login"),
         _ => None,
     };
     (code.as_deref(), *retry_after, quota, usage, next)
@@ -554,6 +557,18 @@ mod tests {
             failure_reason(&crate::api_client::error("not signed in; run auth login")),
             "authentication_missing"
         );
+        assert_eq!(
+            failure_reason(&crate::api_client::error("token expired; run auth login")),
+            "authentication_expired"
+        );
+        let rejected = ScannerError::Api {
+            kind: patronus_api_client::ErrorKind::Authentication,
+            message: "private diagnostic".into(),
+            code: Some("server_code".into()),
+            retry_after: None,
+            details: None,
+        };
+        assert_eq!(failure_reason(&rejected), "authentication_rejected");
         assert_eq!(
             failure_reason(&crate::api_client::error("API scan timeout")),
             "remote_scan_timeout"

@@ -16,7 +16,7 @@ if (process.argv[2] === 'config') {
 } else for await (const line of createInterface({ input: process.stdin })) {
   const { id, method, params = {} } = JSON.parse(line);
   if (method === 'hello') {
-    reply(id, { protocol_version: 1, provider: 'local', scanner_version: '0.1.0', ark_version: '0.1.7', ready: true,
+    reply(id, { protocol_version: 1, provider: 'local', scanner_version: '0.1.0', ark_version: '0.1.8', ready: true,
       runtime: { response_wait_ms: 5000, request_timeout_ms: 1000, scan_timeout_ms: 60000, max_payload_bytes: 10 * 1024 * 1024 } });
   } else if (method === 'submit') {
     const scan_id = randomBytes(16).toString('hex');

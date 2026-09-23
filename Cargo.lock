@@ -1491,9 +1491,9 @@ dependencies = [
 
 [[package]]
 name = "patronus-ark"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffbe40b87603decc43f08dbe54c6047e1d542b22912edbe82f3883011accd570"
+checksum = "4458f7b3bd82712b12ddc22fbf37e00367bf61e4e463ef75244e6bb10832a7c8"
 dependencies = [
  "aho-corasick",
  "blake3",

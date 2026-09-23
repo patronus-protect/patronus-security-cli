@@ -1,6 +1,6 @@
 # Third-party notices
 
-This distribution uses exactly `patronus-ark 0.1.7`. The corresponding crate
+This distribution uses exactly `patronus-ark 0.1.8`. The corresponding crate
 currently published through crates.io declares `GPL-3.0-only` in its package
 metadata and includes its own `LICENSE`, `LICENSE-COMMERCIAL.md`, and `NOTICE`
 files. Casdo Labs GmbH / Patronus owns ARK and has authorized its inclusion in

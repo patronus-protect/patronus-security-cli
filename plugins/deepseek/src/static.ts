@@ -173,7 +173,7 @@ export class StaticScanner {
     if(input.server !== undefined)args.push('--server',String(input.server))
     args.push('--',input.path)
     const {code,value} = await run(executable,args,cwd,MAX_REPORT_BYTES,signal)
-    const remoteFailures = ['authentication_missing','usage_limit_reached','remote_api_unavailable','remote_scan_timeout','configuration_unavailable','invalid_target','remote_scan_failed']
+    const remoteFailures = ['authentication_missing','authentication_expired','authentication_rejected','usage_limit_reached','remote_api_unavailable','remote_scan_timeout','configuration_unavailable','invalid_target','remote_scan_failed']
     if (record(value) && value.schema === 'patronus.remote.scan.error.v1' && value.kind === input.kind && value.provider === 'api' &&
         value.status === 'FAILED' && value.approved === false && value.complete === false && code === 4 &&
         typeof value.reason === 'string' && remoteFailures.includes(value.reason)) return failed(value.reason)

@@ -180,11 +180,30 @@ test('broker failures and malformed native inputs warn without blocking', async 
   const result: any = await handleHook('codex', 'PostToolUse', input('PostToolUse', { tool_response: 'SUPPORTED-TEXT-731' }), {}, async () => { throw new Error('PRIVATE-DIAGNOSTIC-731') })
   assert(!JSON.stringify(result).includes('PRIVATE-DIAGNOSTIC-731'))
   assert.equal(result.decision, undefined)
-  assert.match(result.systemMessage, /protection is inactive/)
+  assert.match(result.systemMessage, /\(hook_error\)/)
+  assert.match(result.systemMessage, /integration codex status --format json/)
+  assert.doesNotMatch(result.systemMessage, /protection is inactive/)
   for (const event of ['PreToolUse', 'PostToolUse']) {
     const malformed: any = await handleHook('codex', event, { hook_event_name: 'wrong', session_id: '../foreign' }, {}, async () => { throw Error('Must not call') })
     assert.equal(malformed.decision, undefined)
-    assert.match(malformed.systemMessage, /protection is inactive/)
+    assert.match(malformed.systemMessage, /\(hook_input_invalid\)/)
+  }
+})
+
+test('named failure codes replace inactive protection with their cause', async () => {
+  for (const [reason, cause, hint] of [
+    ['scan_timeout', /did not finish in time/, undefined],
+    ['api_unavailable', /Patronus API could not be reached/, undefined],
+    ['broker_unavailable', /broker could not be started/, /integration claude status --format json/],
+    ['runtime_version_mismatch', /does not match this plugin version/, /integration claude update/],
+  ] as const) {
+    const result: any = await handleHook('claude', 'PostToolUse', input('PostToolUse', { tool_response: 'TEXT-731' }), {}, async () => ({
+      scan_id: reason.startsWith('scan') || reason.startsWith('api') ? 'scan-731' : '', status: reason.startsWith('scan') || reason.startsWith('api') ? 'failed' : 'unavailable', reason,
+    }))
+    assert.match(result.systemMessage, cause, reason)
+    assert.match(result.systemMessage, new RegExp(`\\(${reason}\\)`), reason)
+    if (hint) assert.match(result.systemMessage, hint, reason)
+    assert.doesNotMatch(result.systemMessage, /protection is inactive/, reason)
   }
 })
 
@@ -395,6 +414,26 @@ test('an exhausted API usage limit without local fallback names its cause', asyn
     assert.match(visible, /not scanned/)
     assert.doesNotMatch(visible, /protection is inactive/)
     assert.match(result.systemMessage, /API usage limit reached/)
+  }
+})
+
+test('an expired login is named instead of reporting inactive protection', async () => {
+  for (const host of ['codex', 'claude'] as const) {
+    const fallback: any = await handleHook(host, 'PostToolUse', input('PostToolUse', { tool_response: 'LARGE-TEXT-731' }), {}, async () => ({
+      scan_id: 'scan-731', status: 'approved', notice: { code: 'api_authentication_expired', fallback: 'local' },
+    }))
+    assert.match(fallback.systemMessage, /login has expired/, `${host} tells the user`)
+    assert.match(fallback.systemMessage, /scanned locally/)
+    assert.doesNotMatch(JSON.stringify(fallback), /inactive/)
+    assert(!JSON.stringify(fallback).includes('LARGE-TEXT-731'))
+
+    const failed: any = await handleHook(host, 'PostToolUse', input('PostToolUse', { tool_response: 'LARGE-TEXT-731' }), {}, async () => ({
+      scan_id: 'scan-731', status: 'failed', reason: 'authentication_expired', notice: { code: 'api_authentication_expired', fallback: 'none' },
+    }))
+    assert.match(failed.systemMessage, /login has expired/)
+    assert.match(failed.systemMessage, /not scanned/)
+    assert.match(failed.systemMessage, /auth login/)
+    assert.doesNotMatch(JSON.stringify(failed), /protection is inactive/)
   }
 })
 

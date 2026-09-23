@@ -32,9 +32,12 @@ export type BrokerRequest =
 export const MAX_PAYLOAD = 10 * 1024 * 1024
 export const MAX_FRAME = 16 * 1024 * 1024
 export const CALL_TIMEOUT = 320_000
-export const unavailable = (): JsonValue => ({ scan_id: '', status: 'unavailable' })
+/** An unavailable scan, optionally with the fixed code that names why. */
+export const unavailable = (reason?: string): JsonValue => ({ scan_id: '', status: 'unavailable', ...(reason ? { reason } : {}) })
 export const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
-export const brokerFailure = () => new Error('Patronus native broker unavailable.')
+export const brokerFailure = (reason?: string) => Object.assign(new Error('Patronus native broker unavailable.'), reason ? { reason } : {})
+/** The fixed failure code attached to an error by brokerFailure, if any. */
+export const failureReason = (error: unknown): string | undefined => record(error) && typeof error.reason === 'string' ? error.reason : undefined
 const text = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max && !value.includes('\0')
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 
@@ -219,7 +222,7 @@ async function connectPrivate(path: string, signal: AbortSignal): Promise<Socket
 
 /** A single private RPC per ephemeral hook. Payloads/capabilities never enter argv. */
 export async function callBroker(config: BrokerConfig, request: BrokerRequest, signal?: AbortSignal): Promise<JsonValue> {
-  const failure = (): JsonValue => request?.method === 'close' ? { closed: false } : unavailable()
+  const failure = (): JsonValue => request?.method === 'close' ? { closed: false } : unavailable('broker_unavailable')
   let socket: Socket | undefined
   const deadline = AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(CALL_TIMEOUT)])
   try {
