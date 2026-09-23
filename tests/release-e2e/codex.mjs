@@ -17,7 +17,7 @@ export async function codexFlow(flow) {
     assert(!visible.includes(email), 'Original PII reached the model')
     assert(!visible.includes(injection), 'Original injection reached the model')
     if (degradedOutage) {
-      assert(visible.includes('No security scan was completed'), 'Inactive Patronus warning did not reach the model')
+      assert(/treat the original content as untrusted/i.test(visible), 'Degraded Patronus warning did not reach the model')
       if (!submitted) {
         submitted = true
         tools.push('degraded-source')

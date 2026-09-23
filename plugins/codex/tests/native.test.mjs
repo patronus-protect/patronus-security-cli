@@ -144,7 +144,7 @@ test('installed bundle: unavailable scanner warns and continues without diagnost
   const diagnostic = '/private/tmp/ABSENTSCANNERPRIVATE731'
   const fixture = await nativeFixture((body, index) => {
     assert(!JSON.stringify(body).includes(diagnostic))
-    assert(JSON.stringify(body).includes('No security scan was completed'))
+    assert(/treat the original content as untrusted/i.test(JSON.stringify(body)))
     if (index === 1) return [call('exec_command', { cmd: command })]
     assert.equal(index, 2)
     assert(JSON.stringify(body).includes(source), 'Original unscanned tool result was not available')
@@ -197,7 +197,7 @@ test('installed bundle: unavailable private broker warns and keeps the task usab
   const source = 'BROKER_DEGRADED_RESULT_731'
   const fixture = await nativeFixture((body, index) => {
     const visible = JSON.stringify(body)
-    assert(visible.includes('No security scan was completed'))
+    assert(/treat the original content as untrusted/i.test(visible))
     if (index === 1) return [call('exec_command', { cmd: command })]
     assert.equal(index, 2)
     assert(visible.includes(source))
