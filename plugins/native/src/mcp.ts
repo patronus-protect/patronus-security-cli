@@ -1,6 +1,7 @@
 import type { callBroker } from './broker.ts'
 import { runOwnOperation, type OwnOperationOutcome } from './hooks.ts'
 import type { Host, JsonValue } from './types.ts'
+import { homeHtml, homeTool, homeUri } from './ui.ts'
 
 const tools = [
   { name: 'patronus_check_result', description: 'Patronus session status tool. Check a pending receipt using its scan_id; this never reruns the source tool. If still pending, call this tool again directly rather than using Bash, Monitor, or another tool to wait. Approved responses include the verified original; completed PII/DLP-only responses automatically include a redacted result. Continue with status=redacted text. Pending and dangerous responses never include an original.', inputSchema: { type: 'object', properties: { scan_id: { type: 'string' } }, required: ['scan_id'], additionalProperties: false } },
@@ -31,11 +32,22 @@ export async function handleMcp(value: unknown, session?: McpSession): Promise<o
   const id = typeof request.id === 'number' && Number.isSafeInteger(request.id) || typeof request.id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(request.id) ? request.id : null
   const result = (data: object) => ({ jsonrpc: '2.0', id, result: data })
   if (request.jsonrpc !== '2.0' || id === null) return { jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid request.' } }
-  if (request.method === 'initialize') return result({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'patronus-native', version: '0.1.2' } })
+  if (request.method === 'initialize') return result({ protocolVersion: '2025-06-18', capabilities: { tools: {}, ...(!session ? { resources: {} } : {}) }, serverInfo: { name: 'patronus-native', version: '0.1.2' } })
   if (request.method === 'ping') return result({})
-  if (request.method === 'tools/list') return result({ tools })
+  if (request.method === 'tools/list') return result({ tools: session ? tools : [...tools, homeTool] })
+  if (!session && request.method === 'resources/list') return result({ resources: [{ uri: homeUri, name: 'Patronus Security', mimeType: 'text/html;profile=mcp-app' }] })
+  if (!session && request.method === 'resources/read') {
+    const params = request.params as Record<string, unknown> | undefined
+    if (params?.uri !== homeUri) return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Unknown UI resource.' } }
+    return result({ contents: [{ uri: homeUri, mimeType: 'text/html;profile=mcp-app', text: homeHtml, _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] } } } }] })
+  }
   if (request.method === 'tools/call') {
     const params = request.params && typeof request.params === 'object' && !Array.isArray(request.params) ? request.params as Record<string, unknown> : {}
+    if (!session && params.name === homeTool.name) {
+      const args = params.arguments ?? {}
+      if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).length) return { jsonrpc: '2.0', id, error: { code: -32602, message: 'This view takes no arguments.' } }
+      return result({ content: [{ type: 'text', text: 'Patronus Security home: setup, dashboard and explicit scan starters. Protection status has not been checked. Runtime protection requires the CLI and trusted hooks in a supported local chat.' }] })
+    }
     const operation = typeof params.name === 'string' ? operations.get(params.name) : undefined
     if (session && operation) {
       let outcome: OwnOperationOutcome

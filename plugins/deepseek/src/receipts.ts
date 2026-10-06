@@ -9,8 +9,9 @@ function hostProfile(): string {
   return candidate && /^[A-Za-z0-9_.-]{1,64}$/.test(candidate) ? candidate : 'headless'
 }
 
-export function receipt(result: ScanResult, direction: 'request' | 'response' = 'response', profile = hostProfile()): JsonValue {
+export function receipt(result: ScanResult, direction: 'request' | 'response' = 'response', profile = hostProfile(), hostContext?: JsonValue): JsonValue {
   const metadata: Record<string, JsonValue> = { scan_id: result.scan_id, status: result.status }
+  if (hostContext !== undefined) metadata.host_context = hostContext
   if (result.cached !== undefined) metadata.cached = result.cached
   if (result.findings !== undefined) metadata.findings = result.findings
   if (result.coverage !== undefined) metadata.coverage = result.coverage

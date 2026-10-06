@@ -131,6 +131,13 @@ jobs:
       - run: cargo build --locked
       - run: node plugins/native/scripts/typecheck.mjs
       - run: node plugins/native/scripts/test.mjs
+      - run: node plugins/codex-api/build-home.mjs
+      - run: npm ci --ignore-scripts
+        working-directory: plugins/codex-api/tests
+      - run: npx playwright install --with-deps chromium
+        working-directory: plugins/codex-api/tests
+      - run: npm test
+        working-directory: plugins/codex-api/tests
       - run: node plugins/deepseek/scripts/test.mjs
       - run: node plugins/deepseek/scripts/test.mjs --local
       - run: cp THIRD_PARTY_NOTICES.md plugins/deepseek/THIRD_PARTY_NOTICES.md

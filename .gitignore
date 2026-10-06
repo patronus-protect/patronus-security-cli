@@ -44,3 +44,13 @@ __pycache__/
 /plugins/codex/submission/
 *.log
 node_modules/
+
+# Private deployment, submission and review evidence; retain locally.
+/RUNTIME_HOST_COVERAGE.md
+/plugins/codex-api/VERIFICATION.md
+/plugins/codex-api/registered-connection.md
+/plugins/codex-api/review-cases.md
+/plugins/codex-api/tests/WEB-REVIEW.md
+/plugins/codex-api/server/
+# Incomplete local integration containing generated artifacts only.
+/plugins/n8n/

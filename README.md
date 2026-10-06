@@ -150,6 +150,10 @@ Saved settings, reports and credentials are preserved. Use `patronus-security-sc
 
 ## What Patronus covers
 
+The [runtime text contract](docs/runtime-text-contract.md) defines the text each integration must scan and the host verification required to establish delivery and withholding. Installation status alone is not a live end-to-end check.
+
+To check a live Codex or Claude session, ask the agent to run `patronus-security-scanner probe` through its normal shell tool. The command prints only a fixed harmless marker. After a complete scan, the result hook returns `status=probe_scanned`, the scan verdict, coverage and host context in place of the raw tool output. Seeing the raw marker means the result was not withheld. This checks that shell-result path in the current session; it does not certify every host tool or future session. Runtime receipts include the observed host, hook event and text surface when the hook supplies them. `delivery=hook_requested_unverified` means the hook requested replacement; only a host-level test or observed model request can prove delivery.
+
 Patronus checks supported text for prompt injection, sensitive data and configured Ark classifications. Plugin protection covers user-prompt text, tool-result text and MCP text blocks. It does not scan tool requests, paths, metadata or media bytes.
 
 MCP appears in three distinct places: the Patronus tools expose explicit scans, pending-result checks and redacted reads; runtime integrations protect text returned by foreign MCP servers; and an explicit audit of a public MCP server is a remote scan. Public URLs use the rate-limited anonymous API when no account credential is available. MCP-server audits remain authenticated. File, directory and repository scans extract UTF-8/UTF-16 text plus text from PDF and DOCX files on-device. In hybrid mode, every chunk from a file above 2048 tokens is analyzed through the API. Add `--anonymous-api` only when you explicitly want to upload one complete TXT, Markdown, HTML, PDF, or DOCX document.

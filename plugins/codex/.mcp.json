@@ -1,5 +1,8 @@
 {
   "mcpServers": {
+    "patronus-api": {
+      "url": "https://control.patronus.studio/api/mcp"
+    },
     "patronus": {
       "command": "node",
       "args": ["scripts/patronus.mjs", "mcp"],
