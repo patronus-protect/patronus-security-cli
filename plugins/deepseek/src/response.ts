@@ -74,7 +74,11 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
       if (['failed', 'incomplete', 'cancelled', 'expired', 'unavailable'].includes(scanned.status)) {
         return finish(exec, result, warn(decision, degradedText(scanned)))
       }
-      const metadata = receipt(scanned) as Record<string, JsonValue>
+      const metadata = receipt(scanned, 'response', undefined, {
+        host: 'deepseek', event: 'tools/post-execute',
+        surface: exec.name.startsWith('mcp__') ? 'mcp_result' : 'tool_result',
+        delivery: 'hook_requested_unverified',
+      }) as Record<string, JsonValue>
       return finish(exec, result, blocked(metadata))
     } catch {
       gate.events.emit({ kind: 'scan_failed', direction: 'response', tool: exec.name, session_id: session || String(exec.agent?.id ?? ''), ...(job ? { scan_id: job.scan_id } : {}), status: 'failed', duration_ms: elapsed(started), payload_hash: payloadHash })

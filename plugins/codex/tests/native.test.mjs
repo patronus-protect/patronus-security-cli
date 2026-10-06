@@ -7,6 +7,25 @@ import { nativeFixture, lastReceipt, readCounter, patronusCall, namespaceCall, c
 
 const pause = () => new Promise(resolve => setTimeout(resolve, 200))
 
+test('installed bundle: runtime probe scans and withholds its raw result', { timeout: 120_000 }, async () => {
+  let command
+  const fixture = await nativeFixture((body, index) => {
+    if (index === 1) return [call('exec_command', { cmd: command })]
+    assert.equal(index, 2)
+    const outputs = (body.input ?? []).filter(item => ['function_call_output', 'custom_tool_call_output'].includes(item.type))
+    assert(!JSON.stringify(outputs).includes('PATRONUS_RUNTIME_PROBE_V1: ordinary tool-result text'))
+    const result = lastReceipt(body)
+    assert.equal(result.status, 'probe_scanned')
+    assert.equal(result.coverage?.complete, true)
+    assert.equal(result.host_context?.host, 'codex')
+    return [done()]
+  })
+  try {
+    command = `${quote(process.execPath)} ${quote(join(fixture.destination, 'scripts/patronus.mjs'))} probe`
+    await fixture.exec()
+  } finally { await fixture.close() }
+})
+
 test('installed bundle: pending response retrieves approved original once', { timeout: 120_000 }, async () => {
   const marker = 'NATIVEAPPROVED731'
   let command, counter, pendingId

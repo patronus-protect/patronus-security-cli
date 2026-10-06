@@ -20,14 +20,15 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Patronus Security",
-    "shortDescription": "Runtime protection and explicit security scans",
-    "longDescription": "Protect user input, tool results and MCP results with Patronus Runtime Protection powered by Patronus Ark. Run explicit scans, configure detection levels or pause individual chats.",
+    "shortDescription": "Runtime protection and scans",
+    "longDescription": "For supported local Codex chats, Patronus checks user-prompt text and tool/MCP-result text before model delivery using the separately installed Patronus Security CLI and reviewed, trusted hooks. Run explicitly requested security scans, configure detection levels in the local dashboard, or pause individual chats. Media bytes and tool arguments are outside the scan boundary. If scanning is unavailable, tools continue and content is marked unverified. Cloud-orchestrated Work does not support these plugin hooks. This runtime package is distributed through local/repo marketplaces; public submission currently excludes lifecycle hooks.",
     "developerName": "Patronus",
     "category": "Developer Tools",
     "capabilities": [
       "Read"
     ],
     "websiteURL": "https://github.com/patronus-protect/patronus-security-cli",
+    "supportURL": "https://github.com/patronus-protect/patronus-security-cli/issues",
     "privacyPolicyURL": "https://github.com/patronus-protect/patronus-security-cli/blob/main/docs/privacy.md",
     "defaultPrompt": [
       "Scan this repository with Patronus Security.",

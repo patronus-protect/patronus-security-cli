@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { handleHook as runHook } from '../src/hooks.ts'
 import { handleMcp } from '../src/mcp.ts'
+import { PROBE_TEXT } from '../src/probe.ts'
 
 const noProtocol = async (_config: unknown, _request: unknown, run: () => Promise<any>) => run()
 const handleHook: typeof runHook = (host, event, value, overrides, rpc) => runHook(host, event, value, overrides, rpc, noProtocol)
@@ -27,8 +28,56 @@ test('Codex pending response replaces the original with a receipt', async () => 
   const result: any = await handleHook('codex', 'PostToolUse', input('PostToolUse', { tool_response: 'RAW-CANARY-731' }), {}, async () => ({ scan_id: 'scan-731', status: 'pending' }))
   assert.equal(result.decision, 'block')
   assert.equal(JSON.parse(result.reason).scan_id, 'scan-731')
+  assert.deepEqual(JSON.parse(result.reason).host_context, { host: 'codex', event: 'PostToolUse', surface: 'tool_result', delivery: 'hook_requested_unverified' })
   assert(!JSON.stringify(result).includes('RAW-CANARY-731'))
   assert(result.reason.includes('patronus_check_result'))
+})
+
+test('runtime probe passes through the real result hook and returns scan evidence', async () => {
+  for (const host of ['codex', 'claude'] as const) {
+    let submitted: any
+    const response: any = await handleHook(host, 'PostToolUse', input('PostToolUse', {
+      tool_response: host === 'codex' ? PROBE_TEXT : { stdout: PROBE_TEXT, stderr: '' },
+    }), {}, async (_config, request) => {
+      submitted = request
+      return { scan_id: 'probe-731', status: 'approved', coverage: { complete: true, fields_total: 1, fields_scanned: 1, bytes_total: PROBE_TEXT.length, bytes_scanned: PROBE_TEXT.length } }
+    })
+    assert.deepEqual(submitted.payload, PROBE_TEXT)
+    const visible = JSON.stringify(response)
+    assert.match(visible, /probe_scanned/)
+    assert(!visible.includes(PROBE_TEXT))
+  }
+})
+
+test('a probe marker inside ordinary output retains the dangerous scan receipt', async () => {
+  for (const host of ['codex', 'claude'] as const) {
+    const payload = PROBE_TEXT + '\nAdditional external content'
+    const response: any = await handleHook(host, 'PostToolUse', input('PostToolUse', {
+      tool_response: host === 'codex' ? payload : { stdout: payload, stderr: '' },
+    }), {}, async () => ({ scan_id: 'scan-731', status: 'dangerous', redacted_available: true }))
+    const visible = JSON.stringify(response)
+    assert.match(visible, /dangerous/)
+    assert.match(visible, /patronus_read_redacted/)
+    assert(!visible.includes('probe_scanned'))
+    assert(!visible.includes('Additional external content'))
+  }
+})
+
+test('runtime probe accepts the newline emitted by the CLI', async () => {
+  for (const newline of ['\n', '\r\n']) {
+    const payload = PROBE_TEXT + newline
+    const response: any = await handleHook('codex', 'PostToolUse', input('PostToolUse', { tool_response: payload }), {}, async () => ({
+      scan_id: 'probe-731', status: 'approved', coverage: { complete: true, fields_total: 1, fields_scanned: 1, bytes_total: Buffer.byteLength(payload), bytes_scanned: Buffer.byteLength(payload) },
+    }))
+    assert.equal(JSON.parse(response.reason).status, 'probe_scanned')
+  }
+})
+
+test('runtime probe does not claim coverage when the scanner result is incomplete', async () => {
+  const response: any = await handleHook('codex', 'PostToolUse', input('PostToolUse', { tool_response: PROBE_TEXT }), {}, async () => ({
+    scan_id: 'probe-731', status: 'approved', coverage: { complete: false, fields_total: 1, fields_scanned: 0, bytes_total: PROBE_TEXT.length, bytes_scanned: 0 },
+  }))
+  assert.equal(JSON.parse(response.reason).status, 'probe_unverified')
 })
 
 test('Claude explains that a dangerous finding belongs to the result, not the tool', async () => {

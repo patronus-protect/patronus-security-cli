@@ -1,9 +1,10 @@
 {
+  "description": "Patronus checks user-prompt and tool/MCP-result text before model delivery. PreToolUse attributes Patronus operations to this chat; SessionStart validates lifecycle input and reads settings; Stop releases the turn's private runtime state. Ordinary tool arguments and media bytes are never scanned.",
   "hooks": {
-    "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex PreToolUse", "timeout": 330}]}],
-    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex PostToolUse", "timeout": 80}]}],
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex UserPromptSubmit", "timeout": 80}]}],
-    "SessionStart": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex SessionStart", "timeout": 80}]}],
-    "Stop": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex Stop", "timeout": 80}]}]
+    "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex PreToolUse", "statusMessage": "Patronus: route scan and receipt operations to this chat", "timeout": 330}]}],
+    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex PostToolUse", "statusMessage": "Patronus: check tool and MCP result text before model delivery", "timeout": 80}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex UserPromptSubmit", "statusMessage": "Patronus: check prompt text and apply this chat's protection controls", "timeout": 80}]}],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex SessionStart", "statusMessage": "Patronus: validate lifecycle input and read protection settings", "timeout": 80}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "node \"${PLUGIN_ROOT}/scripts/patronus.mjs\" hook codex Stop", "statusMessage": "Patronus: release private runtime state at turn end", "timeout": 80}]}]
   }
 }

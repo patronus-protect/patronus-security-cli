@@ -12,7 +12,7 @@ catch {
   esbuild = createRequire(host.resolve('tsx/package.json'))('esbuild')
 }
 export async function bundle(entry, outfile) {
-  const result = await esbuild.build({ entryPoints: [entry], outfile, bundle: true, platform: 'node', target: 'node22', format: 'esm', packages: 'external', metafile: true, write: false })
+  const result = await esbuild.build({ entryPoints: [entry], outfile, bundle: true, platform: 'node', target: 'node22', format: 'esm', packages: 'external', loader: { '.css': 'text', '.txt': 'text', '.woff2': 'binary', '.png': 'binary' }, metafile: true, write: false })
   for (const output of Object.values(result.metafile.outputs)) for (const dependency of output.imports) {
     if (dependency.external && !isBuiltin(dependency.path)) throw Error('Unexpected runtime dependency: ' + dependency.path)
   }

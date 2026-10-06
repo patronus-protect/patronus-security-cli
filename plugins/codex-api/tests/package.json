@@ -1,0 +1,11 @@
+{
+  "name": "patronus-plugin-review-tests",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node --test --test-timeout=60000 review-browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2"
+  }
+}

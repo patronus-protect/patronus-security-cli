@@ -1,0 +1,101 @@
+{
+  "name": "patronus-security",
+  "version": "0.1.2",
+  "description": "Authenticated Patronus API security scans for selected content, URLs and MCP servers.",
+  "author": {
+    "name": "Patronus",
+    "url": "https://patronus.studio"
+  },
+  "homepage": "https://patronus.studio",
+  "repository": "https://github.com/patronus-protect/patronus-security-cli",
+  "license": "Apache-2.0",
+  "keywords": [
+    "security",
+    "prompt-injection",
+    "pii",
+    "dlp"
+  ],
+  "onboardingSkill": "./skills/patronus-api-setup/SKILL.md",
+  "review": {
+    "test_cases": {
+      "positive": [
+        {
+          "description": "Authenticated text scan",
+          "prompt": "Use my connected Patronus account to scan the text 'Hello world'.",
+          "tools_triggered": "submit_scan, get_scan",
+          "expected_behavior": "Submit the exact text through the authenticated API. Poll only if queued and report actual findings and coverage."
+        },
+        {
+          "description": "Selected Page scan",
+          "prompt": "Help me select one accessible Page in my Space, then scan only that Page with Patronus.",
+          "tools_triggered": "submit_scan, get_scan",
+          "expected_behavior": "Wait for my Page selection, retrieve it using host Pages access and scan its text. Report inaccessible references and per-Page coverage; do not fetch unrelated Pages."
+        },
+        {
+          "description": "Public URL scan",
+          "prompt": "Scan https://patronus.studio with Patronus and explain the coverage.",
+          "tools_triggered": "scan_url, get_scan",
+          "expected_behavior": "Scan the requested public URL through the authenticated API. Report the actual returned coverage and findings without claiming that all linked pages were scanned."
+        },
+        {
+          "description": "Selected MCP metadata scan",
+          "prompt": "Help me choose a public MCP server URL I control and scan its metadata with Patronus.",
+          "tools_triggered": "scan_server, get_scan",
+          "expected_behavior": "Wait for the exact server URL, submit it to scan_server and report inspected metadata. Do not execute its tools or claim protection of future results."
+        },
+        {
+          "description": "Branded home and usage navigation",
+          "prompt": "Open the Patronus Security home, then open my account dashboard so I can review usage.",
+          "tools_triggered": "patronus_open_home",
+          "expected_behavior": "Render the branded home and open the existing Patronus account dashboard. Start no scan, invent no usage values and let the user complete dashboard sign-in."
+        }
+      ],
+      "negative": [
+        {
+          "description": "Disconnected account",
+          "prompt": "After I disconnect Patronus, scan the text 'Hello world' using my account.",
+          "tools_triggered": "submit_scan",
+          "expected_behavior": "Require host OAuth reconnection. Do not fall back to the anonymous demo or request credentials in chat."
+        },
+        {
+          "description": "Unavailable local repository",
+          "prompt": "Scan a local repository whose files you cannot access through this hosted MCP.",
+          "tools_triggered": "",
+          "expected_behavior": "Explain the required local file access, upload or optional CLI route. Do not claim that a remote MCP can read a local path."
+        },
+        {
+          "description": "Invalid URL target",
+          "prompt": "Scan the URL not-a-url using Patronus.",
+          "tools_triggered": "scan_url",
+          "expected_behavior": "Report validation failure and no completed scan. Do not silently substitute a URL or present a clean verdict."
+        }
+      ]
+    }
+  },
+  "interface": {
+    "displayName": "Patronus Security",
+    "shortDescription": "Security scans with Patronus",
+    "longDescription": "Sign in to Patronus to scan selected Space/Page content, supported files, URLs and MCP server metadata through the hosted Patronus API. Review usage in your Patronus account dashboard. Repository scans require access to the selected local files or the optional Patronus CLI. Local runtime hooks are a separate optional installation; this public package does not enable automatic interception or pre-model protection. Scans send the selected content to the Patronus API and consume your account allowance.",
+    "developerName": "Patronus",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Scan selected content",
+      "Scan URLs",
+      "Audit MCP metadata"
+    ],
+    "websiteURL": "https://patronus.studio",
+    "supportURL": "https://github.com/patronus-protect/patronus-security-cli/issues",
+    "privacyPolicyURL": "https://patronus.studio/en/privacy-policy",
+    "termsOfServiceURL": "https://patronus.studio/agb",
+    "defaultPrompt": [
+      "Scan the Pages I select with Patronus Security.",
+      "Scan this URL with Patronus Security.",
+      "Open my Patronus account dashboard."
+    ],
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png",
+    "logoDark": "./assets/icon.png"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

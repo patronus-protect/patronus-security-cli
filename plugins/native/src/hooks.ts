@@ -12,6 +12,7 @@ import { codexExternalTextPayload, mapCodex } from './hosts/codex.ts'
 import { claudeExternalTextPayload, mapClaude } from './hosts/claude.ts'
 import { recordProtocolScan, type ProtocolRecorder } from './protocol.ts'
 import type { HookDecision, HookInput, Host, JsonValue } from './types.ts'
+import { PROBE_TEXT } from './probe.ts'
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,256}$/.test(value)
@@ -71,10 +72,18 @@ function scanNote(result: ScanResult, host: Host): string | undefined {
   return notice ? noticeText(notice) : undefined
 }
 
-function visibleResult(result: ScanResult, host: Host, direction: 'request' | 'response' = 'response'): JsonValue {
+function visibleResult(result: ScanResult, host: Host, direction: 'request' | 'response' = 'response', event?: string, surface?: string): JsonValue {
   const value = receipt(result, direction)
+  if (event && record(value)) value.host_context = { host, event, surface: surface ?? direction, delivery: 'hook_requested_unverified' }
   if (result.status === 'unavailable' && record(value)) value.message = failureMessage(host, result)
   return value
+}
+
+function probeCovered(result: ScanResult, payload: string): boolean {
+  const coverage = result.coverage
+  return (result.status === 'approved' || result.status === 'dangerous') && record(coverage) && coverage.complete === true &&
+    coverage.fields_total === 1 && coverage.fields_scanned === 1 &&
+    coverage.bytes_total === Buffer.byteLength(payload) && coverage.bytes_scanned === coverage.bytes_total
 }
 
 function ownOperation(host: Host, name: string): string | undefined {
@@ -151,7 +160,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       if (payload === undefined) return {}
       const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
       if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
-      return map({ kind: 'stop', text: JSON.stringify(visibleResult(result, host)) })
+      return map({ kind: 'stop', text: JSON.stringify(visibleResult(result, host, 'response', event, input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')) })
     }
     if (event === 'UserPromptSubmit') {
       if (!enabled('user_input')) return {}
@@ -162,7 +171,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       const result = await scan({ method: 'request', tool: 'UserPromptSubmit', callId, payload }) as unknown as ScanResult
       if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
       if (promptDecision(result) === 'warn') return map({ kind: 'warn', text: PROMPT_WARNING_USER, context: PROMPT_WARNING_MODEL })
-      const visible = visibleResult(result, host, 'request')
+      const visible = visibleResult(result, host, 'request', event, 'user_input')
       if (sensitiveFinding(result) && record(visible)) {
         const command = issueIgnoreOnce(host, input.session_id, payload)
         if (command) {
@@ -190,9 +199,26 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     if (!responseEnabled()) return {}
     const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
     if (payload === undefined) return {}
-    const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
+    const probe = payload === PROBE_TEXT || payload === PROBE_TEXT + '\n' || payload === PROBE_TEXT + '\r\n'
+    let result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
+    if (probe) {
+      const deadline = Date.now() + 15_000
+      while (result.status === 'pending' && Date.now() < deadline) {
+        await new Promise(done => setTimeout(done, 250))
+        result = await scan({ method: 'check', scanId: result.scan_id }) as unknown as ScanResult
+      }
+    }
+    if (probe && (result.status === 'approved' || result.status === 'dangerous')) {
+      const covered = probeCovered(result, payload as string)
+      const diagnostic = { scan_id: result.scan_id, status: covered ? 'probe_scanned' : 'probe_unverified', scan_status: result.status, coverage: result.coverage ?? null,
+        host_context: { host, event, surface: input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result', delivery: 'hook_requested_unverified' },
+        message: covered
+          ? 'The live result hook scanned the fixed probe output and requested host replacement. If the raw PATRONUS_RUNTIME_PROBE_V1 text is also visible, host withholding failed.'
+          : 'The live result hook ran, but complete scanning of the fixed probe output was not verified.' }
+      return map({ kind: 'replace', text: JSON.stringify(diagnostic) })
+    }
     if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
-    return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host)) })
+    return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host, 'response', event, input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')) })
   } catch {
     return fail('hook_error')
   }

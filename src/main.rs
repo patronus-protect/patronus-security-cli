@@ -130,6 +130,10 @@ fn execute(cli: Cli) -> Result<i32> {
             patronus_security_scanner::integrations::execute(args)?;
             Ok(0)
         }
+        Command::Probe => {
+            println!("PATRONUS_RUNTIME_PROBE_V1: ordinary tool-result text");
+            Ok(0)
+        }
         Command::SupportUs(args) => patronus_security_scanner::support::execute(args).map(|()| 0),
         Command::Version => {
             println!(

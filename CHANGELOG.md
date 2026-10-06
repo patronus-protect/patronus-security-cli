@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a hosted API plugin with account OAuth guidance and explicit scans for selected text, documents, URLs and MCP metadata. Its package contains no local runtime hooks or scanner binaries.
+- Add a shared interactive Patronus home for native and hosted MCP connections, with scan results, bounded polling, account navigation and optional local setup guidance.
+- Add `patronus-security-scanner probe` and in-session runtime checks that distinguish hook scan coverage from host delivery and withholding.
+- Include host event and surface context in runtime receipts, and preserve the scanner's coverage and fail-open behavior across Codex, Claude and DeepSeek.
+- Keep internal deployment and review evidence, generated server files and incomplete integration artifacts out of the public repository.
+
 ## 0.1.2 - 2026-09-23
 
 - Fix native Claude/Codex hooks silently doing nothing when the host starts the plugin through a symlinked path (for example macOS `/var` or `/tmp`, or a linked home or plugin directory).

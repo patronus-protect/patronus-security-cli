@@ -37,8 +37,8 @@ function warn(decision: PreStepDecision, text?: string): PreStepDecision {
 }
 
 /** A blocked prompt's receipt; only sensitive data may be released once by the user. */
-function blockedPrompt(result: ScanResult, session: string, payload: TextPayload): Error {
-  const visible = receipt(result, 'request')
+function blockedPrompt(result: ScanResult, session: string, payload: TextPayload, event: 'agent/pre-step' | 'llm/stream'): Error {
+  const visible = receipt(result, 'request', undefined, { host: 'deepseek', event, surface: 'user_input', delivery: 'hook_requested_unverified' })
   if (sensitiveFinding(result) && typeof visible === 'object' && visible !== null && !Array.isArray(visible)) {
     const command = issueIgnoreOnce('deepseek', session, payload)
     if (command) {
@@ -103,7 +103,7 @@ export function registerPromptGate(
       events.emit({ kind: 'scan_completed', direction: 'request', tool: 'user_prompt', session_id: session, scan_id: scanId, status: result.status, duration_ms: elapsed(started), payload_hash: payloadHash })
       completed = true
       const warned = result.status === 'dangerous' && promptDecision(result) === 'warn'
-      if (result.status !== 'approved' && !degraded.has(result.status) && !warned) throw blockedPrompt(result, session, payload)
+      if (result.status !== 'approved' && !degraded.has(result.status) && !warned) throw blockedPrompt(result, session, payload, 'agent/pre-step')
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
       if (warned) return warn(await next(), PROMPT_WARNING_MODEL)
@@ -175,7 +175,7 @@ export function registerPromptGate(
       const notice = result.status === 'approved' ? scanNotice(result.notice) : undefined
       if (notice) options.messages.push(degradedMessage(noticeText(notice)))
       if (result.status === 'dangerous' && promptDecision(result) === 'warn') options.messages.push(degradedMessage(PROMPT_WARNING_MODEL))
-      else if (result.status !== 'approved') throw blockedPrompt(result, session, payload)
+      else if (result.status !== 'approved') throw blockedPrompt(result, session, payload, 'llm/stream')
       for (const message of pending) sessionApproved.add(message.identity)
       approved.set(session, sessionApproved)
       yield* next()

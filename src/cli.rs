@@ -85,6 +85,8 @@ pub enum Command {
     },
     /// Manage the Patronus integration for an agent host.
     Integration(IntegrationArgs),
+    /// Emit harmless text for an in-session runtime hook check.
+    Probe,
     /// Prepare a redacted support bundle; uploading requires explicit flags.
     SupportUs(SupportArgs),
     /// Print scanner and Ark versions.
