@@ -31,8 +31,8 @@ dependencies.
 
 1. Create an API key in the [Patronus Control Plane](https://control.patronus.studio)
    with `scan:write` and `scan:read`.
-2. In n8n, create a **Patronus API** credential and paste the key. The node's
-   **Test Connection** operation checks read access without a billable scan.
+2. In n8n, create a **Patronus API** credential and paste the key. n8n tests the key
+   with a minimal scan when you save the credential.
 
 ## Use Guard Input
 
@@ -53,10 +53,16 @@ sends the original input to the LLM.
 Ready-to-import chatbot and RAG workflows: [`examples/n8n`](../examples/n8n/README.md).
 
 **Submit Scan** and **Get Scan Result** remain available as diagnostic operations; they
-return raw scan data and are not gates.
+return raw scan data and are not gates. The node is also usable as a tool by n8n's AI
+Agent, but a guard only protects the text you map into it.
 
 ## For maintainers
 
-Build the package from [the parent directory](../PUBLISHING.md); `npm pack` in this
-directory produces the tarball that the examples install. The node calls the API through
-n8n's `httpRequestWithAuthentication`, so the key stays in n8n's credential store.
+This package is a standard [`@n8n/node-cli`](https://docs.n8n.io/connect/create-nodes/build-your-node/using-the-n8n-node-tool)
+project (`npm run build`, `npm run lint`, `npm run dev`) with no runtime dependencies,
+as n8n's verification requires. The Patronus SDK and Guard logic are embedded in
+`nodes/Patronus/lib/`, generated from `sdk/typescript` and `shared/` by
+`plugins/automations/scripts/sync-n8n-lib.mjs`; edit the canonical sources and rerun
+the script (the test suite fails when the copy is stale). The node calls the API
+through n8n's `httpRequestWithAuthentication`, so the key stays in n8n's credential
+store. Release steps: [PUBLISHING.md](../PUBLISHING.md).

@@ -201,3 +201,13 @@ test('Zapier package root exposes the app for the Zapier runtime', () => {
   assert.ok(pkg.files.includes('index.js'));
   assert.strictEqual(require('../zapier/index.js'), require('../zapier/dist/index.js'));
 });
+
+test('n8n package embeds an up-to-date copy of the Guard release policy', () => {
+  // n8n verification requires a self-contained package built with @n8n/node-cli.
+  const { execFileSync } = require('node:child_process');
+  execFileSync(process.execPath, [path.join(__dirname, '../scripts/sync-n8n-lib.mjs'), '--check'], { stdio: 'pipe' });
+  const pkg = require('../n8n/package.json');
+  assert.equal(pkg.scripts.build, 'n8n-node build');
+  assert.equal(pkg.n8n.strict, true);
+  assert.deepEqual(Object.keys(pkg.dependencies ?? {}), []);
+});

@@ -42,7 +42,7 @@ Developer portal → **Sharing** → copy the invite link and add it to the READ
 | Who owns the API? | Patronus; the submitter is a Patronus employee. |
 | Is the API publicly documented? | Yes: https://docs.patronus.studio/api-reference |
 | How do users get credentials? | Self-service API keys at https://control.patronus.studio |
-| Test account | Reviewer account and key entered in the private test-credentials field. |
+| Test account | Patronus account for `integration-testing@zapier.com` with its own API key, entered in the private test-credentials field. |
 | Example Zap for review | Catch Raw Hook → Code (parse) → Patronus Guard Input → any action using **Protected Text**; see `examples/zapier/README.md`. |
 | Help / support | team@patronus.studio, https://docs.patronus.studio/integrations/overview |
 | Privacy policy / terms | https://patronus.studio/en/privacy-policy, https://patronus.studio/en/agb |
@@ -53,5 +53,7 @@ Developer portal → **Sharing** → copy the invite link and add it to the READ
 - [ ] Version `1.0.0` pushed from CI or from a clean copy of `zapier/`
 - [ ] Logo, description, homepage and category match this file
 - [ ] Reviewer account created; key entered only in Zapier's private field
-- [ ] Open question: whether the publishing requirements ask for at least one trigger
-      (the integration currently has actions only)
+- [ ] Every action tested in a Zap that is turned on and has at least one successful run
+- [ ] Reviewer test account registered with `integration-testing@zapier.com`, as the
+      publishing requirements ask (no minimum number of triggers is required; Patronus
+      ships actions only)

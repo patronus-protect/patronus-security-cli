@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const bundle = (entry, outfile, external = []) => build({
@@ -11,11 +12,10 @@ const bundle = (entry, outfile, external = []) => build({
 });
 await bundle('shared/client.ts', 'dist/client.cjs');
 await bundle('shared/guard.ts', 'dist/guard.cjs');
-await bundle('n8n/credentials/PatronusApi.credentials.ts', 'n8n/dist/credentials/PatronusApi.credentials.js', ['n8n-workflow']);
-await bundle('n8n/nodes/Patronus/Patronus.node.ts', 'n8n/dist/nodes/Patronus/Patronus.node.js', ['n8n-workflow']);
-// Brand mark from the Patronus desktop app (shared/assets/patronus-logo.png, 512x512, transparent).
-await cp(`${root}shared/assets/patronus-logo.png`, `${root}n8n/dist/nodes/Patronus/patronus.png`);
-await cp(`${root}shared/assets/patronus-logo.png`, `${root}n8n/dist/credentials/patronus.png`);
+// n8n verifies only nodes built with @n8n/node-cli: refresh the embedded SDK/Guard copy,
+// then build with the official CLI (requires `npm ci` in n8n/).
+execFileSync(process.execPath, [`${root}scripts/sync-n8n-lib.mjs`], { stdio: 'inherit' });
+execFileSync('npm', ['run', 'build'], { cwd: `${root}n8n`, stdio: 'inherit' });
 // Bundle the patched SDK tree: npm ignores a nested package's overrides at installation.
 const piece = await bundle('activepieces/src/index.ts', 'activepieces/dist/index.js');
 const packages = new Map();

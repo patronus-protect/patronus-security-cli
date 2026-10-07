@@ -22,6 +22,8 @@ From the repository root (Node.js 24+ for development, Python 3.12+):
 
 ```sh
 npm ci --prefix plugins/automations --ignore-scripts
+npm ci --prefix plugins/automations/n8n --ignore-scripts
+npm ci --prefix plugins/automations/zapier --ignore-scripts
 npm test --prefix plugins/automations
 npm run audit --prefix plugins/automations
 python3 -m venv .venv  # only if the project has no venv yet
@@ -31,9 +33,10 @@ python3 -m venv .venv  # only if the project has no venv yet
 .venv/bin/python plugins/automations/verify_packages.py
 ```
 
-The build bundles the repository's TypeScript API client into n8n, Zapier and
-Activepieces and copies the Python client into Dify's generated
-`patronus_api_client/` directory. Make uses native HTTP/IML definitions. Edit the SDK
+The build bundles the repository's TypeScript API client into Zapier and Activepieces,
+builds n8n with the official `@n8n/node-cli` from an embedded copy of the client
+(`scripts/sync-n8n-lib.mjs`; install `n8n/` with `npm ci` first) and copies the Python
+client into Dify's generated `patronus_api_client/` directory. Make uses native HTTP/IML definitions. Edit the SDK
 source, not generated copies. Packages, an unsigned `.difypkg`, the Make app-definition
 ZIP and `SHA256SUMS` are written to `dist/`; CI repeats these checks.
 

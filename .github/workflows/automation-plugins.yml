@@ -41,6 +41,9 @@ jobs:
           python-version: '3.12'
       - run: npm ci --ignore-scripts
         working-directory: plugins/automations
+      # The n8n node is built with the official @n8n/node-cli from its own lockfile.
+      - run: npm ci --ignore-scripts
+        working-directory: plugins/automations/n8n
       # Zapier ships its runtime tree via bundleDependencies; install it before packaging.
       - run: npm ci --ignore-scripts
         working-directory: plugins/automations/zapier

@@ -41,7 +41,8 @@ install_node_package() {
   mkdir -p "$nodes"
   local tarball
   tarball="$(cd "$automations/n8n" && npm pack --silent --pack-destination "$nodes")"
-  (cd "$nodes" && { [[ -f package.json ]] || npm init -y >/dev/null; } && npm install --no-audit --no-fund "./$tarball" >/dev/null)
+  # n8n provides n8n-workflow itself, so the package's peer dependency is not installed.
+  (cd "$nodes" && { [[ -f package.json ]] || npm init -y >/dev/null; } && npm install --no-audit --no-fund --omit=peer --ignore-scripts "./$tarball" >/dev/null)
   echo "installed $tarball into $nodes"
 }
 

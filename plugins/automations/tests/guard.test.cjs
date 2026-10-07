@@ -51,6 +51,7 @@ function context(result, continueOnFail = false) {
     getInputData: () => [{ json: { text, unscanned: 'must not pass through' }, binary: {} }],
     getCredentials: async () => ({ apiKey: 'test-key' }),
     getNodeParameter: name => ({ operation: 'guard', content: text })[name],
+    getNode: () => ({ name: 'Patronus', type: 'patronus', typeVersion: 1, position: [0, 0], parameters: {} }),
     continueOnFail: () => continueOnFail,
     helpers: { httpRequestWithAuthentication: async () => ({ body: result, statusCode: 200, headers: {} }) },
   };
@@ -65,7 +66,7 @@ test('n8n Guard Input defaults to guarding, emits no unscanned fields and stops 
   await assert.rejects(async () => {
     await Patronus.prototype.execute.call(context(vectors.find(v => v.name === 'block verdict').result));
     downstreamCalled = true;
-  });
+  }, error => error.name === 'NodeOperationError' && /blocked this input/.test(error.message));
   assert.equal(downstreamCalled, false);
   const [[blocked]] = await Patronus.prototype.execute.call(context(vectors.find(v => v.name === 'block verdict').result, true));
   assert.equal(blocked.json.status, 'blocked');

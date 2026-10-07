@@ -1,24 +1,48 @@
 {
   "name": "n8n-nodes-patronus",
   "version": "0.1.1",
-  "description": "Patronus API scans for n8n",
+  "description": "Patronus Guard Input for n8n: block prompt injection and data leaks before text reaches your LLM",
   "license": "Apache-2.0",
+  "author": {
+    "name": "Patronus",
+    "email": "team@patronus.studio",
+    "url": "https://patronus.studio"
+  },
+  "homepage": "https://github.com/patronus-protect/patronus-security-cli/tree/main/plugins/automations/n8n",
+  "keywords": [
+    "n8n-community-node-package",
+    "patronus",
+    "security"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/patronus-protect/patronus-security-cli.git",
+    "directory": "plugins/automations/n8n"
+  },
+  "bugs": {
+    "url": "https://github.com/patronus-protect/patronus-security-cli/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "main": "dist/nodes/Patronus/Patronus.node.js",
   "files": [
     "dist",
     "README.md",
     "LICENSE"
   ],
-  "keywords": [
-    "n8n-community-node-package",
-    "patronus",
-    "security"
-  ],
-  "engines": {
-    "node": ">=22"
+  "scripts": {
+    "build": "n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "release": "n8n-node release",
+    "prepublishOnly": "n8n-node prerelease"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
+    "strict": true,
     "credentials": [
       "dist/credentials/PatronusApi.credentials.js"
     ],
@@ -26,14 +50,15 @@
       "dist/nodes/Patronus/Patronus.node.js"
     ]
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/patronus-protect/patronus-security-cli.git",
-    "directory": "plugins/automations/n8n"
+  "devDependencies": {
+    "@n8n/node-cli": "0.51.3",
+    "eslint": "9.32.0",
+    "prettier": "3.6.2",
+    "release-it": "^21.1.0",
+    "typescript": "5.9.2"
   },
-  "homepage": "https://github.com/patronus-protect/patronus-security-cli/tree/main/plugins/automations/n8n",
-  "bugs": {
-    "url": "https://github.com/patronus-protect/patronus-security-cli/issues"
+  "peerDependencies": {
+    "n8n-workflow": "*"
   },
   "publishConfig": {
     "access": "public",
