@@ -72,6 +72,12 @@ includes registry installation, a quick start and error behavior. Each client
 directory also contains a dedicated `INSTALL.md` that a coding agent can follow
 without receiving your API key.
 
+Native [automation plugins for n8n, Make, Dify, Zapier and Activepieces](plugins/automations/README.md)
+use the account API directly with platform-managed API-key credentials. They
+provide a Guard Input step for RAG/LLM flows, plus scan submission and result
+actions, without a Patronus CLI or local scanner installation. Build, private installation and workflow enforcement
+instructions are included for each platform.
+
 ## Onboarding
 
 Onboarding guides you through a short setup:

@@ -1,0 +1,44 @@
+{
+  "identity": {
+    "author": "patronus-protect",
+    "name": "guard_input",
+    "label": {
+      "en_US": "Guard Input"
+    }
+  },
+  "description": {
+    "human": {
+      "en_US": "Connect RAG or prompt text before an LLM. Only fully verified allowed text is released."
+    },
+    "llm": "Deterministic security gate for exact RAG or LLM input. Do not bypass it by using the source content directly."
+  },
+  "parameters": [
+    {
+      "name": "content",
+      "type": "string",
+      "required": true,
+      "form": "llm",
+      "label": {
+        "en_US": "RAG / LLM Input"
+      },
+      "human_description": {
+        "en_US": "Map the exact text the downstream LLM will receive."
+      },
+      "llm_description": "Exact text to guard; JSON-looking text stays raw text."
+    }
+  ],
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "protected_text": {
+        "type": "string",
+        "description": "Original text released only after full approval."
+      }
+    }
+  },
+  "extra": {
+    "python": {
+      "source": "tools/guard_input.py"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "name": "content",
+    "label": "Text",
+    "type": "text",
+    "required": true
+  }
+]

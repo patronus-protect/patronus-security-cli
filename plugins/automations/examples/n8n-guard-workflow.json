@@ -1,0 +1,106 @@
+{
+  "name": "Patronus RAG / LLM Input Guard - smoke test",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Run Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "source",
+      "name": "RAG / Prompt Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "text",
+              "name": "text",
+              "value": "Das Meeting beginnt morgen um 10 Uhr.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "guard",
+      "name": "Patronus Guard",
+      "type": "n8n-nodes-patronus.patronus",
+      "typeVersion": 1,
+      "position": [
+        460,
+        0
+      ],
+      "parameters": {
+        "operation": "guard",
+        "content": "={{ $json.text }}"
+      },
+      "onError": "stopWorkflow"
+    },
+    {
+      "id": "consumer",
+      "name": "LLM Input Preview",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { llm_input: item.json.text, patronus: item.json.patronus } }));"
+      }
+    }
+  ],
+  "connections": {
+    "Run Test": {
+      "main": [
+        [
+          {
+            "node": "RAG / Prompt Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG / Prompt Text": {
+      "main": [
+        [
+          {
+            "node": "Patronus Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patronus Guard": {
+      "main": [
+        [
+          {
+            "node": "LLM Input Preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

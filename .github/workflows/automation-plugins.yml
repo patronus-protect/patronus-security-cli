@@ -1,0 +1,66 @@
+name: Automation plugins
+
+on:
+  workflow_call:
+    inputs:
+      release_version:
+        type: string
+        required: false
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'plugins/automations/**'
+      - 'sdk/typescript/**'
+      - 'sdk/python/**'
+      - 'contract/**'
+      - '.github/workflows/automation-plugins.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/automations/**'
+      - 'sdk/typescript/**'
+      - 'sdk/python/**'
+      - 'contract/**'
+      - '.github/workflows/automation-plugins.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native-plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: plugins/automations/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --ignore-scripts
+        working-directory: plugins/automations
+      - name: Check release versions
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node plugins/automations/check-release.mjs "$RELEASE_VERSION"
+      - run: npm test
+        working-directory: plugins/automations
+      - run: npm run audit
+        working-directory: plugins/automations
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -r plugins/automations/dify/requirements.txt
+      - run: .venv/bin/python -m pip install pip-audit==2.10.1
+      - run: .venv/bin/python -m pip_audit -r plugins/automations/dify/requirements.txt --progress-spinner off
+      - run: .venv/bin/python -m unittest discover -s plugins/automations/tests -p 'test_*.py' -v
+      - run: .venv/bin/python plugins/automations/package.py
+      - run: .venv/bin/python plugins/automations/verify_packages.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patronus-automation-plugins
+          path: |
+            plugins/automations/dist/*.tgz
+            plugins/automations/dist/*.zip
+            plugins/automations/dist/*.difypkg
+            plugins/automations/dist/SHA256SUMS

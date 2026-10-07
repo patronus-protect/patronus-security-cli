@@ -1,0 +1,11 @@
+[
+  {
+    "name": "jobId",
+    "label": "Job ID",
+    "type": "text",
+    "required": true,
+    "validate": {
+      "pattern": "^job_[0-9a-fA-F]{32}$"
+    }
+  }
+]

@@ -1,0 +1,39 @@
+{
+  "identity": {
+    "author": "patronus-protect",
+    "name": "patronus",
+    "label": {
+      "en_US": "Patronus"
+    },
+    "description": {
+      "en_US": "Submit and read security scans through the Patronus API."
+    },
+    "icon": "icon.svg",
+    "tags": [
+      "utilities"
+    ]
+  },
+  "credentials_for_provider": {
+    "api_key": {
+      "type": "secret-input",
+      "required": true,
+      "label": {
+        "en_US": "API Key"
+      },
+      "help": {
+        "en_US": "Account API key with scan:write and scan:read scopes. Validation checks scan:read without submitting content."
+      },
+      "url": "https://control.patronus.studio"
+    }
+  },
+  "tools": [
+    "tools/guard_input.yaml",
+    "tools/submit_scan.yaml",
+    "tools/get_scan.yaml"
+  ],
+  "extra": {
+    "python": {
+      "source": "provider/patronus.py"
+    }
+  }
+}
