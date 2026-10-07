@@ -1,0 +1,241 @@
+[
+  {
+    "name": "job_id",
+    "label": "Job Id",
+    "type": "text"
+  },
+  {
+    "name": "status",
+    "label": "Status",
+    "type": "text"
+  },
+  {
+    "name": "decision",
+    "label": "Decision",
+    "type": "text"
+  },
+  {
+    "name": "safety_status",
+    "label": "Safety Status",
+    "type": "text"
+  },
+  {
+    "name": "categories",
+    "label": "Categories",
+    "type": "collection",
+    "spec": [
+      {
+        "name": "injection",
+        "label": "Injection",
+        "type": "collection",
+        "spec": [
+          {
+            "name": "class_name",
+            "label": "Class Name",
+            "type": "text"
+          },
+          {
+            "name": "level",
+            "label": "Level",
+            "type": "text"
+          },
+          {
+            "name": "confidence",
+            "label": "Confidence",
+            "type": "number"
+          },
+          {
+            "name": "final_result",
+            "label": "Final Result",
+            "type": "collection",
+            "spec": [
+              {
+                "name": "class_name",
+                "label": "Class Name",
+                "type": "text"
+              },
+              {
+                "name": "confidence",
+                "label": "Confidence",
+                "type": "number"
+              },
+              {
+                "name": "source",
+                "label": "Source",
+                "type": "text"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "dlp",
+        "label": "Dlp",
+        "type": "collection",
+        "spec": [
+          {
+            "name": "class_name",
+            "label": "Class Name",
+            "type": "text"
+          },
+          {
+            "name": "level",
+            "label": "Level",
+            "type": "text"
+          },
+          {
+            "name": "confidence",
+            "label": "Confidence",
+            "type": "number"
+          },
+          {
+            "name": "final_result",
+            "label": "Final Result",
+            "type": "collection",
+            "spec": [
+              {
+                "name": "class_name",
+                "label": "Class Name",
+                "type": "text"
+              },
+              {
+                "name": "confidence",
+                "label": "Confidence",
+                "type": "number"
+              },
+              {
+                "name": "source",
+                "label": "Source",
+                "type": "text"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "pii",
+        "label": "Pii",
+        "type": "collection",
+        "spec": [
+          {
+            "name": "class_name",
+            "label": "Class Name",
+            "type": "text"
+          },
+          {
+            "name": "level",
+            "label": "Level",
+            "type": "text"
+          },
+          {
+            "name": "confidence",
+            "label": "Confidence",
+            "type": "number"
+          },
+          {
+            "name": "final_result",
+            "label": "Final Result",
+            "type": "collection",
+            "spec": [
+              {
+                "name": "class_name",
+                "label": "Class Name",
+                "type": "text"
+              },
+              {
+                "name": "confidence",
+                "label": "Confidence",
+                "type": "number"
+              },
+              {
+                "name": "source",
+                "label": "Source",
+                "type": "text"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "threat",
+        "label": "Threat",
+        "type": "collection",
+        "spec": [
+          {
+            "name": "class_name",
+            "label": "Class Name",
+            "type": "text"
+          },
+          {
+            "name": "level",
+            "label": "Level",
+            "type": "text"
+          },
+          {
+            "name": "confidence",
+            "label": "Confidence",
+            "type": "number"
+          },
+          {
+            "name": "final_result",
+            "label": "Final Result",
+            "type": "collection",
+            "spec": [
+              {
+                "name": "class_name",
+                "label": "Class Name",
+                "type": "text"
+              },
+              {
+                "name": "confidence",
+                "label": "Confidence",
+                "type": "number"
+              },
+              {
+                "name": "source",
+                "label": "Source",
+                "type": "text"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "coverage",
+    "label": "Coverage",
+    "type": "collection",
+    "spec": [
+      {
+        "name": "state",
+        "label": "State",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "completion",
+    "label": "Completion",
+    "type": "collection",
+    "spec": [
+      {
+        "name": "state",
+        "label": "State",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "name": "extraction",
+    "label": "Extraction",
+    "type": "collection",
+    "spec": [
+      {
+        "name": "state",
+        "label": "State",
+        "type": "text"
+      }
+    ]
+  }
+]

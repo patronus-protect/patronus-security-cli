@@ -1,0 +1,68 @@
+{
+  "identity": {
+    "author": "patronus-protect",
+    "name": "submit_scan",
+    "label": {
+      "en_US": "Submit Scan"
+    }
+  },
+  "description": {
+    "human": {
+      "en_US": "Submit selected text, a public HTTPS page or public MCP server metadata for injection and DLP scanning. Returns job IDs; wait for completion before using findings."
+    },
+    "llm": "Submit selected text, a public HTTPS page or public MCP server metadata for injection and DLP scanning. Returns job IDs; wait for completion before using findings."
+  },
+  "parameters": [
+    {
+      "name": "kind",
+      "type": "select",
+      "required": true,
+      "default": "text",
+      "label": {
+        "en_US": "Scan Type"
+      },
+      "human_description": {
+        "en_US": "Choose the input to scan."
+      },
+      "form": "form",
+      "options": [
+        {
+          "value": "text",
+          "label": {
+            "en_US": "Text"
+          }
+        },
+        {
+          "value": "url",
+          "label": {
+            "en_US": "Public HTTPS URL"
+          }
+        },
+        {
+          "value": "mcp",
+          "label": {
+            "en_US": "Public MCP Server"
+          }
+        }
+      ]
+    },
+    {
+      "name": "content",
+      "type": "string",
+      "required": true,
+      "label": {
+        "en_US": "Content"
+      },
+      "human_description": {
+        "en_US": "Exact text to scan, or the public HTTPS URL for the chosen scan type."
+      },
+      "llm_description": "Exact text to scan, or the public HTTPS URL for the chosen scan type.",
+      "form": "llm"
+    }
+  ],
+  "extra": {
+    "python": {
+      "source": "tools/submit_scan.py"
+    }
+  }
+}

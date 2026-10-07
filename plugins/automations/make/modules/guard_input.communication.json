@@ -1,0 +1,78 @@
+[
+  {
+    "url": "/scan",
+    "method": "POST",
+    "type": "json",
+    "headers": {
+      "Prefer": "wait=1"
+    },
+    "body": {
+      "text": "{{parameters.content}}",
+      "config": {
+        "categories": [
+          "injection",
+          "dlp"
+        ],
+        "max_level": "L3"
+      }
+    },
+    "response": {
+      "valid": "{{(statusCode === 200 || statusCode === 202) && (body.status === 'completed' || body.status === 'accepted') && ((body.job_id && !body.jobs) || (!body.job_id && length(body.jobs) === 1))}}",
+      "temp": {
+        "submission": "{{body}}",
+        "job": "{{if(body.job_id, body, first(body.jobs))}}"
+      },
+      "error": {
+        "message": "Patronus could not verify this input. No text was released."
+      }
+    },
+    "temp": {
+      "deadline": "{{addSeconds(now, 10)}}"
+    },
+    "timeout": 10000
+  },
+  {
+    "response": {
+      "valid": "{{length(temp.job.job_id) === 36 && replace(temp.job.job_id, '/^job_[0-9a-f]{32}$/i', '') === ''}}",
+      "error": {
+        "message": "Patronus returned an invalid job identifier. No text was released."
+      },
+      "temp": {
+        "expected_job_id": "{{temp.job.job_id}}"
+      }
+    }
+  },
+  {
+    "condition": "{{temp.submission.status === 'accepted'}}",
+    "url": "/scan/{{temp.job.job_id}}",
+    "method": "GET",
+    "repeat": {
+      "condition": "{{(body.status === 'queued' || body.status === 'running') && now < temp.deadline}}",
+      "delay": 500,
+      "limit": 20
+    },
+    "response": {
+      "valid": "{{body.job_id === temp.expected_job_id}}",
+      "temp": {
+        "job": "{{body}}"
+      }
+    },
+    "timeout": 10000
+  },
+  {
+    "response": {
+      "valid": "{{now <= temp.deadline && (length(temp.job.job_id) === 36 && replace(temp.job.job_id, '/^job_[0-9a-f]{32}$/i', '') === '') && (temp.submission.status === 'completed' || temp.submission.status === 'accepted') && (temp.job.status === 'completed') && (temp.job.decision === 'allow') && (if(contains(keys(temp.job), 'safety_status'), temp.job.safety_status, 'benign') === 'benign') && (if(contains(keys(temp.submission), 'decision'), temp.submission.decision, 'allow') === 'allow') && (if(contains(keys(temp.submission), 'safety_status'), temp.submission.safety_status, 'benign') === 'benign') && (temp.job.completion.state === 'complete') && ((!contains(keys(temp.job.completion), 'failures') || createJSON(temp.job.completion.failures) === '[]')) && (length(keys(temp.job.categories)) === 2) && (get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'state') === 'complete') && (get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'documents_total') >= 1) && (floor(get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'documents_total')) === get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'documents_total')) && (get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'documents_total') === get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'documents_scanned')) && (((!contains(keys(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage)), 'pages_total') && !contains(keys(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage)), 'pages_scanned')) || (get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'pages_total') >= 1 && floor(get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'pages_total')) === get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'pages_total') && get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'pages_total') === get(if(contains(keys(temp.job), 'coverage'), temp.job.coverage, temp.submission.coverage), 'pages_scanned')))) && (get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'state') === 'complete') && (get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'documents_total') >= 1) && (floor(get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'documents_total')) === get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'documents_total')) && (get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'documents_total') === get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'documents_scanned')) && (((!contains(keys(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction)), 'pages_total') && !contains(keys(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction)), 'pages_scanned')) || (get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'pages_total') >= 1 && floor(get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'pages_total')) === get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'pages_total') && get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'pages_total') === get(if(contains(keys(temp.job), 'extraction'), temp.job.extraction, temp.submission.extraction), 'pages_scanned')))) && ((get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'class_name') === 'benign' || get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'class_name') === 'safe')) && (get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'confidence') >= 0 && get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'confidence') !== null && toString(get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'confidence')) !== 'true' && toString(get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'confidence')) !== 'false' && toString(get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'confidence') + 0) === toString(get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'confidence') * 1)) && (get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'confidence') <= 1) && (if(contains(keys(temp.job.categories.injection), 'final_result'), length(trim(get(if(contains(keys(temp.job.categories.injection), 'final_result'), temp.job.categories.injection.final_result, temp.job.categories.injection), 'source'))) > 0, length(trim(temp.job.categories.injection.model)) > 0 && contains(add(emptyarray, 'L1', 'L2', 'L3'), temp.job.categories.injection.level))) && ((get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'class_name') === 'benign' || get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'class_name') === 'safe')) && (get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'confidence') >= 0 && get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'confidence') !== null && toString(get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'confidence')) !== 'true' && toString(get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'confidence')) !== 'false' && toString(get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'confidence') + 0) === toString(get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'confidence') * 1)) && (get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'confidence') <= 1) && (if(contains(keys(temp.job.categories.dlp), 'final_result'), length(trim(get(if(contains(keys(temp.job.categories.dlp), 'final_result'), temp.job.categories.dlp.final_result, temp.job.categories.dlp), 'source'))) > 0, length(trim(temp.job.categories.dlp.model)) > 0 && contains(add(emptyarray, 'L1', 'L2', 'L3'), temp.job.categories.dlp.level)))}}",
+      "error": {
+        "type": "DataError",
+        "message": "Patronus blocked or could not verify this input. No text was released."
+      },
+      "output": {
+        "text": "{{parameters.content}}",
+        "patronus": {
+          "status": "allowed",
+          "job_ids": "{{add(emptyarray, temp.job.job_id)}}"
+        }
+      }
+    }
+  }
+]

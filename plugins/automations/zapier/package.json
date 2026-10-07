@@ -1,0 +1,37 @@
+{
+  "name": "patronus-zapier",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Patronus API scans for Zapier",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "dist",
+    "README.md",
+    "LICENSE",
+    ".zapierapprc",
+    "npm-shrinkwrap.json"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "zapier-platform-core": "19.1.0"
+  },
+  "overrides": {
+    "form-data": "4.0.6"
+  },
+  "bundledDependencies": [
+    "zapier-platform-core"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/patronus-protect/patronus-security-cli.git",
+    "directory": "plugins/automations/zapier"
+  },
+  "homepage": "https://github.com/patronus-protect/patronus-security-cli/tree/main/plugins/automations/zapier",
+  "bugs": {
+    "url": "https://github.com/patronus-protect/patronus-security-cli/issues"
+  }
+}

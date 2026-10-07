@@ -1,0 +1,1749 @@
+[
+  {
+    "name": "complete benign text",
+    "allowed": true,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "block verdict",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "block",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "review verdict",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "review",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "contradictory category attack",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "attack",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing dlp category",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing final classification",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": []
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "invalid final confidence",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": "0.99",
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing source",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": ""
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "partial coverage",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "partial",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "partial extraction",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "partial",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "coverage count mismatch",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 2,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "noninteger count",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1.5,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing coverage",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "null coverage",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": null,
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "degraded completion",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "degraded",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "completion failure",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": [
+              {
+                "message": "incomplete"
+              }
+            ]
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "malformed completion failures",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": ""
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing completion",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "failed job",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "failed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "running job",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "running",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing job identifier",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "foreign job path",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "../other",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "missing jobs",
+    "allowed": false,
+    "result": {
+      "status": "completed"
+    }
+  },
+  {
+    "name": "empty jobs",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": []
+    }
+  },
+  {
+    "name": "duplicate jobs",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        },
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "extra category",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "threat": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "unknown submission status",
+    "allowed": false,
+    "result": {
+      "status": "unknown",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "envelope block",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ],
+      "decision": "block"
+    }
+  },
+  {
+    "name": "envelope review",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ],
+      "safety_status": "review"
+    }
+  },
+  {
+    "name": "authoritative default benign without rethresholding",
+    "allowed": true,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0,
+                "source": "default"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0,
+                "source": "default"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "null page coverage is not complete",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10,
+            "pages_total": null,
+            "pages_scanned": null
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "current API category format without final_result",
+    "allowed": true,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "class_name": "benign",
+              "confidence": 0.99,
+              "level": "L2",
+              "model": "test-model",
+              "accepted": false
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "class_name": "safe",
+              "confidence": 0.99,
+              "level": "L1",
+              "model": "native:secret_transfer",
+              "accepted": false
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "actual API allow verdict with degraded worker must not pass",
+    "allowed": false,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "degraded",
+            "failures": [
+              {
+                "kind": "WorkerUnavailable",
+                "level": "L3"
+              }
+            ]
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "class_name": "benign",
+              "confidence": 0.99,
+              "level": "L2",
+              "model": "test-model",
+              "accepted": false
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "class_name": "safe",
+              "confidence": 0.99,
+              "level": "L1",
+              "model": "native:secret_transfer",
+              "accepted": false
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "authoritative safe final classification",
+    "allowed": true,
+    "result": {
+      "status": "completed",
+      "jobs": [
+        {
+          "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "text",
+          "status": "completed",
+          "decision": "allow",
+          "safety_status": "benign",
+          "completion": {
+            "state": "complete",
+            "failures": []
+          },
+          "coverage": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "input_tokens": 10
+          },
+          "extraction": {
+            "state": "complete",
+            "documents_total": 1,
+            "documents_scanned": 1,
+            "version": "document-v1",
+            "warnings": []
+          },
+          "categories": {
+            "injection": {
+              "category": "injection",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "benign",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            },
+            "dlp": {
+              "category": "dlp",
+              "evidence_spans": [],
+              "final_result": {
+                "class_name": "safe",
+                "confidence": 0.99,
+                "source": "l3"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
