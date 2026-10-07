@@ -4,3 +4,4 @@ node_modules/
 *.difypkg
 /dify/patronus_api_client/
 /*/LICENSE
+!/n8n/LICENSE

@@ -11,7 +11,7 @@ and [verification guidelines](https://docs.n8n.io/connect/create-nodes/build-you
 | Package | `n8n-nodes-patronus` |
 | Keywords | `n8n-community-node-package`, `patronus`, `security` |
 | Repository | `patronus-protect/patronus-security-cli`, directory `plugins/automations/n8n` |
-| License | MIT required for verification (decision pending; the repository is Apache-2.0) |
+| License | MIT (n8n verification requirement; the rest of the repository is Apache-2.0) |
 | Runtime dependencies | none |
 
 Publishing: since 1 May 2026 n8n verifies only packages published from GitHub Actions
@@ -32,7 +32,7 @@ trusted publishing (see [PUBLISHING.md](../PUBLISHING.md)); do not publish from 
 ## Owner approval checklist
 
 - [ ] npm package created under the official Patronus npm account; trusted publisher configured
-- [ ] License of `n8n-nodes-patronus` set to MIT (verification requirement)
+- [x] License of `n8n-nodes-patronus` set to MIT (verification requirement)
 - [ ] Package built and linted with `@n8n/node-cli` and passes `npx @n8n/scan-community-package`
 - [ ] First version published from CI with provenance
 - [ ] Submission entered in the Creator Portal with the reviewer account

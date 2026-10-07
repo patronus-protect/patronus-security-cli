@@ -50,7 +50,8 @@ await rm(`${root}dify/patronus_api_client`, { recursive: true, force: true });
 await cp(new URL('../../sdk/python/src/patronus_api_client/', import.meta.url), `${root}dify/patronus_api_client`, {
   recursive: true, filter: source => !source.includes('__pycache__') && !source.endsWith('.pyc'),
 });
-for (const platform of ['n8n', 'activepieces', 'zapier', 'dify', 'make']) {
+// n8n-nodes-patronus is MIT (n8n verification requirement) and ships its own n8n/LICENSE.
+for (const platform of ['activepieces', 'zapier', 'dify', 'make']) {
   await cp(new URL('../../LICENSE', import.meta.url), `${root}${platform}/LICENSE`);
 }
 // The generated copy is always sourced from the contract-tested Python SDK.

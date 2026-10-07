@@ -2,7 +2,7 @@
   "name": "n8n-nodes-patronus",
   "version": "0.1.1",
   "description": "Patronus Guard Input for n8n: block prompt injection and data leaks before text reaches your LLM",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "author": {
     "name": "Patronus",
     "email": "team@patronus.studio",

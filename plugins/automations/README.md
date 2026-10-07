@@ -9,7 +9,8 @@ when Patronus has fully checked it and found it clean.
 User message / retrieved documents → prompt → Patronus Guard Input → LLM
 ```
 
-Open Source under Apache-2.0. No Patronus CLI, local model or extra service on your
+Open Source under Apache-2.0; the n8n node is MIT-licensed, as n8n requires for verified
+nodes. No Patronus CLI, local model or extra service on your
 automation host: the step calls the Patronus API with your API key.
 
 ## Get Patronus for your platform

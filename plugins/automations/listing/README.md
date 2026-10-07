@@ -23,7 +23,7 @@ approve before submission.
 | Terms | https://patronus.studio/en/agb |
 | Support contact | team@patronus.studio |
 | Source code | https://github.com/patronus-protect/patronus-security-cli/tree/main/plugins/automations |
-| License | Apache-2.0 |
+| License | Apache-2.0 (n8n node: MIT) |
 | Logo | [`shared/assets/patronus-logo.png`](../shared/assets/patronus-logo.png) (512×512), [`patronus-logo-256.png`](../shared/assets/patronus-logo-256.png) (256×256), transparent |
 | Brand color | `#32b9fa` |
 | Authentication | API key (`scan:write`, `scan:read`) from https://control.patronus.studio |
