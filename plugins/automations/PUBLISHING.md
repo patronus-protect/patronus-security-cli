@@ -1,74 +1,92 @@
-# Public Open Source distribution
+# Build, release and publication
 
-Source license: Apache-2.0. Each integration has source code, reproducible package
-builds, dependency locks, tests, private-install instructions and public package
-metadata. This is not evidence of marketplace publication.
+Maintainer guide for the Patronus automation integrations. End users install a
+published package or listing; see the [README](README.md).
 
-## End-user installation targets
+## Publication status
 
-| Platform | Intended ready-to-use installation | Current missing publication step |
+| Platform | Distribution | Status |
 | --- | --- | --- |
-| n8n self-hosted | Install `n8n-nodes-patronus` in Community Nodes, select API key, connect Guard Input | Publish package on npm |
-| n8n Cloud | Select an approved community node in the node picker | n8n verification and applicable review requirements |
-| Activepieces | Install release `.tgz`, or select the published piece in the catalogue | Public release asset; catalogue review is separate |
-| Dify | Install `.difypkg` from the GitHub release or approved marketplace listing | Public release asset and applicable signature/review policy |
-| Make | Open the Patronus app installation/invite link, then create a Patronus API connection | Publisher must provision/register the app and share its real link |
-| Zapier | Open the Patronus integration invite/listing, connect API key, choose Guard Input | Publisher must register/deploy the integration and share its real link |
+| n8n self-hosted | npm package `n8n-nodes-patronus` | Package verified on n8n 2.42.4; npm publication pending (official npm account) |
+| n8n Cloud | n8n-verified community node | Requires npm publication with provenance, then n8n verification |
+| Make | Patronus custom app, invite link, then Make app review | Verified in a test organization; official app, invite link and review pending |
+| Zapier | Private integration invite link, then public listing | Verified as private integration 1.0.0 in a test account; official integration and review pending |
+| Dify | `.difypkg` release asset, later marketplace | Release asset prepared; not tested on a Dify host |
+| Activepieces | `.tgz` release asset, later community catalogue | Release asset prepared; not tested on an Activepieces host |
 
-End users should not build the repository or assemble Make JSON components. The
-Make installer is publisher/fork-maintainer tooling, not the intended end-user
-onboarding screen. Do not invent installation links or claim that an unpublished
-integration is already in a catalogue.
+Submission texts, review answers and test instructions are in [`listing/`](listing/README.md).
 
-## Build and release
+## Build, test and package
 
-The `Automation integration release` workflow runs the complete local-test,
-dependency-audit and offline-package verification workflow, checks all automation
-versions, uploads packages and checksums, then creates a **draft GitHub release**.
-It does not publish Make or Zapier automatically. Optional npm publication covers
-n8n and Activepieces and uses npm trusted publishing/OIDC with provenance.
+From the repository root (Node.js 24+ for development, Python 3.12+):
 
-One-time owner setup:
-
-1. Create the `automation-releases` GitHub environment and configure its required
-   reviewers.
-2. Establish ownership of `n8n-nodes-patronus` and
-   `@patronus-protect/piece-patronus` on npm. Initial package creation and trusted
-   publisher configuration require the package owner's account.
-3. Configure npm trusted publishing for repository
-   `patronus-protect/patronus-security-cli`, workflow `automation-release.yml` and
-   environment `automation-releases`. npm >=11.5.1 is required.
-4. Provision the Make app with the included installer, test it in the owner
-   account, and obtain its native install/invite link. Deploy the Zapier app using
-   its owner account and obtain its native integration invite/listing link.
-5. Add the verified install links to the public documentation. Resolve the
-   observed API-worker incident and confirm healthy scans before promoting the
-   draft as production-ready. Installed-host checks remain necessary for that
-   claim; the current validation is local package/SDK validation.
-
-Run the release workflow with the exact source version. npm publication is off
-by default. Review the draft and its assets before making it public. These
-workflows have not been triggered by the local implementation work.
-
-## API incident, separate from dependency advisories
-
-An earlier synthetic scan on 2026-10-07 returned:
-
-```json
-{
-  "request_id": "cfcbdc1d-895a-4627-9fcd-bcf353b9e43c",
-  "decision": "allow",
-  "completion": {
-    "state": "degraded",
-    "failures": [{ "kind": "WorkerUnavailable", "level": "L3" }]
-  }
-}
+```sh
+npm ci --prefix plugins/automations --ignore-scripts
+npm test --prefix plugins/automations
+npm run audit --prefix plugins/automations
+python3 -m venv .venv  # only if the project has no venv yet
+.venv/bin/python -m pip install -r plugins/automations/dify/requirements.txt
+.venv/bin/python -m unittest discover -s plugins/automations/tests -p 'test_*.py' -v
+.venv/bin/python plugins/automations/package.py
+.venv/bin/python plugins/automations/verify_packages.py
 ```
 
-The failure message reported HTTP 500 from the backend inference endpoint
-`/v2/models/.../infer`. The new automation nodes were not executing in that test;
-the call used the existing authenticated API connector. The outer call returned
-a scan result rather than an HTTP-500 transport error. This establishes a failed
-L3 inference attempt, not its root cause or its current health. Server/inference
-logs correlated with the request ID are needed for diagnosis. No further live
-checks were run after the user requested local package/SDK tests only.
+The build bundles the repository's TypeScript API client into n8n, Zapier and
+Activepieces and copies the Python client into Dify's generated
+`patronus_api_client/` directory. Make uses native HTTP/IML definitions. Edit the SDK
+source, not generated copies. Packages, an unsigned `.difypkg`, the Make app-definition
+ZIP and `SHA256SUMS` are written to `dist/`; CI repeats these checks.
+
+Local tests use the real platform SDKs and shared API response fixtures. Make's IML is
+checked by an emulator in `tests/guard.test.cjs` that follows Make's observed runtime
+semantics (loose `===`/`!==`, `createJSON()` returns no value for numbers). End-to-end
+runs on the real platforms are scripted in [`examples/`](examples/README.md).
+
+## Dependencies
+
+The development tree and shipped packages report zero npm advisories and the Dify
+snapshot zero known Python vulnerabilities (checked 2026-10-07); CI fails on new
+findings. n8n has no runtime npm dependency; Activepieces and Zapier bundle their
+patched runtime trees (Zapier ships its shrinkwrap). Overrides pin axios 1.20.0,
+form-data 4.0.6, lodash 4.18.1, nanoid 3.3.18, deepmerge-ts 8.0.2 and ai 6.0.301, and
+replace expr-eval with expr-eval-fork 3.0.3. Dify pins its runtime packages in
+`requirements.txt`; its direct input is `requirements.in`.
+
+## Release workflow
+
+`Automation integration release` (`.github/workflows/automation-release.yml`) runs the
+tests, dependency audits and offline package verification, checks all versions,
+uploads packages and checksums and creates a **draft GitHub release**. npm publication
+of n8n and Activepieces is optional and uses npm trusted publishing (OIDC) with
+provenance; it is off by default. Make and Zapier are never published by CI.
+
+## One-time owner setup (official accounts)
+
+1. **GitHub:** create the `automation-releases` environment with required reviewers.
+2. **npm:** create `n8n-nodes-patronus` and `@patronus-protect/piece-patronus` with the
+   official npm account and configure trusted publishing for repository
+   `patronus-protect/patronus-security-cli`, workflow `automation-release.yml` and
+   environment `automation-releases` (npm ≥ 11.5.1). n8n accepts verified nodes only
+   when they are published from GitHub Actions with provenance.
+3. **Make:** with the official Make organization, run
+   `node make/install.mjs --zone <zone> --apply` (needs `MAKE_API_TOKEN` with
+   `sdk-apps:write`). It creates the app, connection, five modules and the app icon and
+   prints the app name Make assigned. Test it with the Make example, then **Publish** the
+   app to obtain its invite link and request the app review.
+4. **Zapier:** with the official Zapier account and a deploy key, register and push the
+   integration from a copy of `zapier/`. A new integration must start at version
+   `1.0.0`. Upload `shared/assets/patronus-logo-256.png` as the logo in the developer
+   portal, share the invite link and submit the integration for publishing.
+5. Add the published invite links and listings to the README table.
+
+## Platform notes found during verification
+
+- **Zapier** loads `index.js` from the package root and ignores `package.json` `main`;
+  `zapier/index.js` re-exports `dist/index.js`. Catch Hook expands JSON-looking string
+  values, so the examples use Catch Raw Hook.
+- **Make** private apps get a suffixed name and are addressed as `app#<name>`; module
+  names must be alphanumeric; mappable inputs belong in `expect`; connection checks must
+  answer 2xx; `POST /scenarios/{id}/run` returns no scenario outputs.
+- **n8n 2.x** needs Node.js 24+; on Node.js 25 `isolated-vm` does not compile, so the
+  local example installs n8n without native builds and uses the `legacy` expression
+  engine.

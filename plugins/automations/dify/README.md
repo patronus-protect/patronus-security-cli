@@ -26,7 +26,7 @@ Place Submit Scan after the input/source node. Select the scan type and map the
 exact text or public HTTPS URL into Content. The tool emits a JSON submission
 with public job IDs. For accepted jobs, call Get Scan Result in a bounded delayed
 loop, then use an IF/ELSE node to enforce
-[the completed-result policy](../README.md#workflow-behavior) before the LLM node.
+[the completed-result policy](../README.md#what-guard-input-guarantees) before the LLM node.
 Pin this sequence in the workflow rather than relying on an agent to choose
 whether to run the tool. API evidence is untrusted input.
 
@@ -43,4 +43,4 @@ Blocked, review, incomplete, quota and timeout results stop the step without
 returning the original input. Keep stop-on-error and do not use a source fallback.
 
 The older Submit/Get actions are diagnostic operations. For the directly
-connected protection path use Guard Input. See [the shared flow and test guide](../README.md#connect-rag--llm-input).
+connected protection path use Guard Input. See [the shared flow and test guide](../README.md#quick-start).

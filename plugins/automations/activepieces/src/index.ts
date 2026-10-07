@@ -50,6 +50,6 @@ const guard = createAction({
 export const patronus = createPiece({
   displayName: 'Patronus', description: 'Patronus API security scans for automation flows',
   auth: patronusAuth, minimumSupportedRelease: '0.95.1',
-  logoUrl: 'https://raw.githubusercontent.com/patronus-protect/patronus-security-cli/main/plugins/codex/assets/icon.png',
+  logoUrl: 'https://raw.githubusercontent.com/patronus-protect/patronus-security-cli/main/plugins/automations/shared/assets/patronus-logo-256.png',
   authors: ['patronus-protect'], actions: [submitScan, getScan, guard], triggers: [],
 });

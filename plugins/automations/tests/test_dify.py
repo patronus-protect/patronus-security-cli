@@ -88,7 +88,7 @@ class DifyTests(unittest.TestCase):
             registration = PluginRegistration(DifyPluginEnv())
         self.assertEqual(list(registration.tools_mapping), ['patronus'])
         self.assertEqual(len(registration.files), 1)
-        self.assertEqual(registration.files[0].filename, 'icon.svg')
+        self.assertEqual(registration.files[0].filename, 'icon.png')
 
     def test_submission_is_real_http_with_auth_and_preserves_raw_text(self):
         self.server.replies = [(202, ACCEPTED)]

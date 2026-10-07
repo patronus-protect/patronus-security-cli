@@ -9,7 +9,7 @@
   "description": {
     "en_US": "Patronus API injection and DLP scans for automation workflows."
   },
-  "icon": "icon.svg",
+  "icon": "icon.png",
   "created_at": "2026-10-06T00:00:00Z",
   "resource": {
     "memory": 268435456,

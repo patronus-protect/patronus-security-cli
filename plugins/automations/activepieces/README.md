@@ -17,7 +17,7 @@ Create a Patronus connection with an account API key carrying `scan:write` and
 Add Submit Scan, select Text / Public HTTPS URL / Public MCP Server, and map
 Content. Map each returned public job ID into Get Scan Result; delay/repeat with
 a bounded loop for accepted/running jobs. Use a flow branch to enforce
-[the completed-result policy](../README.md#workflow-behavior) before any LLM step.
+[the completed-result policy](../README.md#what-guard-input-guarantees) before any LLM step.
 
 The patched framework and its runtime dependencies are bundled, so a fresh installation cannot pull expr-eval 2.0.2 back in. Errors fail the action with a sanitized message. This piece sends selected
 content to Patronus and is not an automatic interception hook. The patched framework is bundled into the piece; see the parent README for the dependency audit.
@@ -31,4 +31,4 @@ Blocked, review, incomplete, quota and timeout results stop the step without
 returning the original input. Keep stop-on-error and do not use a source fallback.
 
 The older Submit/Get actions are diagnostic operations. For the directly
-connected protection path use Guard Input. See [the shared flow and test guide](../README.md#connect-rag--llm-input).
+connected protection path use Guard Input. See [the shared flow and test guide](../README.md#quick-start).

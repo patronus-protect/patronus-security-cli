@@ -1,50 +1,62 @@
 # Patronus for n8n
 
-Native community node with a Patronus API credential. Requires Node.js 22+; the development SDK type-check runs on Node.js 24+;
-tested against `n8n-workflow` 2.43.0. The package has no runtime npm dependencies. Scans call the account API through n8n's
-`httpRequestWithAuthentication` helper. The key stays in n8n's credential store.
+Community node that adds **Patronus → Guard Input** to n8n: put it right before your
+LLM node and it releases the exact text only after Patronus has checked it for prompt
+injection and data leaks.
 
 ## Install
 
-Build/package from [the parent directory](../README.md). In a self-hosted n8n
-installation that permits community nodes, install the generated tarball in the
-n8n user's nodes directory, then restart n8n:
+**Self-hosted n8n** (community nodes enabled):
+
+1. Open **Settings → Community Nodes → Install**.
+2. Enter `n8n-nodes-patronus`, confirm the risk notice and install.
+
+Without the UI (for example in Docker images), install the package into the n8n user
+folder and restart n8n:
 
 ```sh
 cd ~/.n8n/nodes
-npm install /absolute/path/to/n8n-nodes-patronus-0.1.1.tgz
+npm install n8n-nodes-patronus
 ```
 
-Use the platform's [manual installation instructions](https://docs.n8n.io/integrations/community-nodes/installation-and-management/manual-installation.md)
-for container paths and persistent volumes. This unpublished package is not
-available as a verified n8n Cloud community node.
+See n8n's [community node installation guide](https://docs.n8n.io/integrations/community-nodes/installation/)
+for queue mode and persistent volumes.
 
-## Configure and use
+**n8n Cloud:** the node becomes available in the node panel once n8n has verified it.
 
-1. Create a **Patronus API** credential; enter an account API key with `scan:write`
-   and `scan:read` scopes in the masked API Key field.
-2. Add Patronus and select **Test Connection**. It checks read access without a
-   billable scan. Write access is checked when submitting.
-3. Choose **Submit Scan**, a scan type, and Content. For text, map the exact source
-   string. The node processes each input item and preserves item linkage.
-4. For accepted jobs, use Wait, then **Get Scan Result** with the returned public
-   job ID. Repeat with a bounded loop until terminal status.
-5. Use an IF/Switch step to enforce your result policy before the LLM step. See
-   [workflow behavior](../README.md#workflow-behavior).
+Requirements: Node.js 22+; verified with n8n 2.42.4. The package has no runtime npm
+dependencies.
 
-By default an API error fails the node. n8n's Continue on Fail emits
-`{"status":"unverified","error":"..."}`; that branch must not be treated as clean
-input. These actions do not install automatic runtime hooks.
+## Set up
 
-## Guard Input: connect directly before the LLM
+1. Create an API key in the [Patronus Control Plane](https://control.patronus.studio)
+   with `scan:write` and `scan:read`.
+2. In n8n, create a **Patronus API** credential and paste the key. The node's
+   **Test Connection** operation checks read access without a billable scan.
 
-Choose **Guard Input** and map the exact assembled RAG/prompt text into Content.
-The step submits and polls internally, then releases only fully approved text.
-Map the output `text` into the downstream LLM; in Dify use `protected_text`.
-Blocked, review, incomplete, quota and timeout results stop the step without
-returning the original input. Keep stop-on-error and do not use a source fallback.
+## Use Guard Input
 
-The older Submit/Get actions are diagnostic operations. For the directly
-connected protection path use Guard Input. See [the shared flow and test guide](../README.md#connect-rag--llm-input).
+Add **Patronus → Guard Input** directly before the LLM and map into **Content** the
+exact text the LLM will receive. Then map the Guard's **`text`** output into the LLM.
 
-Import [the smoke-test workflow](../examples/n8n-guard-workflow.json) after installation and select the credential in Patronus Guard.
+```text
+Chat Trigger → Patronus Guard Input → LLM
+Question → retrieve documents → compose prompt → Patronus Guard Input → LLM
+```
+
+When the input is blocked or cannot be verified, the step fails and the LLM does not
+run. To route rejections instead, enable **On Error → Continue** and branch on
+`{{ $json.patronus?.status === 'allowed' }}`: the error item carries
+`status: blocked | unverified` and never the original text. Do not add a fallback that
+sends the original input to the LLM.
+
+Ready-to-import chatbot and RAG workflows: [`examples/n8n`](../examples/n8n/README.md).
+
+**Submit Scan** and **Get Scan Result** remain available as diagnostic operations; they
+return raw scan data and are not gates.
+
+## For maintainers
+
+Build the package from [the parent directory](../PUBLISHING.md); `npm pack` in this
+directory produces the tarball that the examples install. The node calls the API through
+n8n's `httpRequestWithAuthentication`, so the key stays in n8n's credential store.

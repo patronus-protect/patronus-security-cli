@@ -33,7 +33,7 @@ def main():
         print(json.loads(result.stdout)[0]['filename'])
     version = json.loads((ROOT / 'package.json').read_text())['version']
     archive('make', f'patronus-make-{version}.zip', {'.json', '.md', '.mjs'})
-    archive('dify', f'patronus-dify-{version}.difypkg', {'.py', '.yaml', '.svg', '.txt', '.md', '.typed'})
+    archive('dify', f'patronus-dify-{version}.difypkg', {'.py', '.yaml', '.svg', '.png', '.txt', '.md', '.typed'})
     packages = sorted(file for file in DESTINATION.iterdir() if file.suffix in {'.tgz', '.zip', '.difypkg'} and f'-{version}.' in file.name)
     checksums = '\n'.join(f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}' for file in packages) + '\n'
     (DESTINATION / 'SHA256SUMS').write_text(checksums)

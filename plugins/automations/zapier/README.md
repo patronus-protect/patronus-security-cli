@@ -1,42 +1,47 @@
 # Patronus for Zapier
 
-Native Zapier integration with custom API-key authentication and a Guard Input action plus diagnostic actions.
-Uses `zapier-platform-core` 19.1.0 on Node.js 22. The bundled entry point is
-`dist/index.js`; `.zapierapprc` explicitly includes `dist` in deployment builds.
+Zapier integration that adds the **Patronus → Guard Input** action: put it right before
+your LLM step and it releases the exact text only after Patronus has checked it for
+prompt injection and data leaks.
 
-Build/package from [the parent directory](../README.md). In this directory,
-install the declared Zapier dependency and use your existing Zapier development
-account and the [Zapier platform tooling](https://github.com/zapier/zapier-platform)
-to register a private integration, validate it and push the build. The generated
-`patronus-zapier-0.1.1.tgz` can also be extracted as a standalone app source tree.
-Registration/deployment is not performed by the local build. No Patronus CLI is
-used by the deployed actions.
+## Install
 
-Create a connection using a Patronus account API key with `scan:write` and
-`scan:read`. The masked credential field is separate from action input. Connection
-validation is a read-only missing-job probe and checks `scan:read`.
+Open the **Patronus integration invite link** and accept it with your Zapier account.
+After Zapier has published the integration, search for **Patronus** in the Zap editor.
+The link is published in the [README](../README.md#get-patronus-for-your-platform).
 
-**Submit Scan** sends Text / Public HTTPS URL / Public MCP Server content and
-returns an `id` (the first public job ID), submission status and all `jobs`.
-**Get Scan Result** accepts a public job ID and returns its current state and
-findings. Actions use `z.request`; the submit action does not poll within Zapier's
-execution window. Use Delay and a bounded continuation/sub-Zap for running jobs,
-and evaluate each returned job. A Filter/Paths step must enforce
-[the completed-result policy](../README.md#workflow-behavior) before downstream
-processing. If a job remains running, defer processing; a successful HTTP request
-alone is not a clean scan.
+## Set up
 
-The platform stores the API key. Actions suppress server-provided error messages
-and expose only error kind, HTTP status, sanitized correlation/code fields and
-retry timing. The patched core dependency tree is bundled and shrinkwrapped; see the parent README for the dependency audit.
+1. Create an API key in the [Patronus Control Plane](https://control.patronus.studio)
+   with `scan:write` and `scan:read`.
+2. Add **Patronus → Guard Input** to a Zap and choose **Sign in**. Paste the key.
 
-## Guard Input: connect directly before the LLM
+## Use Guard Input
 
-Choose **Guard Input** and map the exact assembled RAG/prompt text into Content.
-The step submits and polls internally, then releases only fully approved text.
-Map the output `text` into the downstream LLM; in Dify use `protected_text`.
-Blocked, review, incomplete, quota and timeout results stop the step without
-returning the original input. Keep stop-on-error and do not use a source fallback.
+Map the exact prompt text into **RAG / LLM Input** and map the Guard's
+**Protected Text** into your LLM step.
 
-The older Submit/Get actions are diagnostic operations. For the directly
-connected protection path use Guard Input. See [the shared flow and test guide](../README.md#connect-rag--llm-input).
+```text
+Trigger → Patronus Guard Input → LLM action
+Trigger → Code (retrieve + compose prompt) → Patronus Guard Input → LLM action
+```
+
+A blocked or unverified input stops the Zap at Guard Input; later steps are skipped and
+the run shows as errored in Zap History. Do not add a path that sends the original text
+to the LLM.
+
+If your Zap starts with **Webhooks by Zapier**, use **Catch Raw Hook** and parse the
+body in a Code step: the plain Catch Hook splits JSON-looking text (for example a chat
+message containing `{"order": …}`) into sub-fields and leaves the original text empty.
+
+Ready-made chatbot and RAG Zaps with step-by-step setup: [`examples/zapier`](../examples/zapier/README.md).
+
+**Submit Scan** and **Get Scan Result** are diagnostic actions; they return raw scan
+data and are not gates.
+
+## For maintainers
+
+The integration uses `zapier-platform-core` 19.1.0 on Node.js 22; the bundled entry is
+`dist/index.js`, re-exported by `index.js` because Zapier's runtime loads the package
+root. Register and push from a copy of this directory with a deploy key; a new
+integration must start at version `1.0.0`. See [PUBLISHING.md](../PUBLISHING.md).
