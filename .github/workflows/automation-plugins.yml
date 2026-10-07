@@ -41,6 +41,9 @@ jobs:
           python-version: '3.12'
       - run: npm ci --ignore-scripts
         working-directory: plugins/automations
+      # Zapier ships its runtime tree via bundleDependencies; install it before packaging.
+      - run: npm ci --ignore-scripts
+        working-directory: plugins/automations/zapier
       - name: Check release versions
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
