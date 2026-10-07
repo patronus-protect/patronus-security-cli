@@ -11,7 +11,7 @@ Shared texts: [README.md](README.md). Requirements:
 | Label | Patronus |
 | Description | Guard RAG and LLM input through the Patronus API |
 | Theme color | `#32b9fa` |
-| Icon | `shared/assets/patronus-logo.png` (uploaded by the installer) |
+| Icon | `make/assets/icon.png` (uploaded by the installer) |
 | Language | English |
 
 Run with the official Make organization:

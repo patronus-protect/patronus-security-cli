@@ -37,8 +37,8 @@ export async function installMake({ appName = 'patronus', zone = 'eu1.make.com',
   const prefix = `/sdk/apps/${appName}/${app.version}`;
   const section = async (path, file) => request('PUT', path, await read(file), 'application/jsonc');
   await section(`${prefix}/base`, 'base.json');
-  // Patronus wolf/shield mark (512x512 PNG) shared by all automation integrations.
-  await request('PUT', `${prefix}/icon`, await readFile(new URL('../shared/assets/patronus-logo.png', root)), 'image/png');
+  // Patronus wolf/shield mark (512x512 PNG), shipped inside the Make archive.
+  await request('PUT', `${prefix}/icon`, await readFile(new URL('assets/icon.png', root)), 'image/png');
   const connection = await request('POST', `/sdk/apps/${appName}/connections`, { type: 'basic', label: 'Patronus API' });
   const name = connection.appConnection?.name;
   if (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(name)) throw new Error('Make did not return a valid connection name.');
