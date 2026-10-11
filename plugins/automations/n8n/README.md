@@ -60,9 +60,10 @@ Agent, but a guard only protects the text you map into it.
 
 This package is a standard [`@n8n/node-cli`](https://docs.n8n.io/connect/create-nodes/build-your-node/using-the-n8n-node-tool)
 project (`npm run build`, `npm run lint`, `npm run dev`) with no runtime dependencies,
-as n8n's verification requires. The Patronus SDK and Guard logic are embedded in
-`nodes/Patronus/lib/`, generated from `sdk/typescript` and `shared/` by
-`plugins/automations/scripts/sync-n8n-lib.mjs`; edit the canonical sources and rerun
-the script (the test suite fails when the copy is stale). The node calls the API
+as n8n's verification requires. The Guard release policy is embedded in
+`nodes/Patronus/lib/policy.ts`, generated from `shared/guard-policy.ts` by
+`plugins/automations/scripts/sync-n8n-lib.mjs`; edit the canonical source and rerun
+the script (the test suite fails when the copy is stale). Polling uses n8n's `sleep`
+and failures are raised as `NodeApiError`/`NodeOperationError`. The node calls the API
 through n8n's `httpRequestWithAuthentication`, so the key stays in n8n's credential
 store. Release steps: [PUBLISHING.md](../PUBLISHING.md).

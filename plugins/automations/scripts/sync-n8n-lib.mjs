@@ -12,11 +12,8 @@ const sources = {
   'policy.ts': new URL('shared/guard-policy.ts', root),
 };
 
-function rewrite(text) {
-  return text
-    .replaceAll("'../../../sdk/typescript/src/index.js'", "'./sdk'")
-    .replaceAll("'./guard.js'", "'./guard'");
-}
+// The policy has no imports today; keep relative imports resolvable if that changes.
+const rewrite = text => text.replaceAll(/from '\.\/([\w-]+)\.js'/g, "from './$1'");
 
 const check = process.argv.includes('--check');
 let stale = [];
