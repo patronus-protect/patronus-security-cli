@@ -1,0 +1,11 @@
+[
+  {
+    "name": "content",
+    "label": "RAG / LLM Input",
+    "type": "text",
+    "required": true,
+    "validate": {
+      "min": 1
+    }
+  }
+]

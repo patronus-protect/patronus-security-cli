@@ -1,0 +1,33 @@
+{
+  "name": "patronus",
+  "label": "Patronus",
+  "version": 1,
+  "connection": "patronus",
+  "modules": [
+    {
+      "name": "guard_input",
+      "label": "Guard Input",
+      "type": "action"
+    },
+    {
+      "name": "scan_text",
+      "label": "Submit Text Scan",
+      "type": "action"
+    },
+    {
+      "name": "scan_url",
+      "label": "Submit URL Scan",
+      "type": "action"
+    },
+    {
+      "name": "scan_mcp",
+      "label": "Submit MCP Scan",
+      "type": "action"
+    },
+    {
+      "name": "get_scan",
+      "label": "Get Scan Result",
+      "type": "action"
+    }
+  ]
+}

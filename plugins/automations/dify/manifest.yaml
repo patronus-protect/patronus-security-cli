@@ -1,0 +1,42 @@
+{
+  "version": "0.1.1",
+  "type": "plugin",
+  "author": "patronus-protect",
+  "name": "patronus",
+  "label": {
+    "en_US": "Patronus"
+  },
+  "description": {
+    "en_US": "Patronus API injection and DLP scans for automation workflows."
+  },
+  "icon": "icon.png",
+  "created_at": "2026-10-06T00:00:00Z",
+  "resource": {
+    "memory": 268435456,
+    "permission": {
+      "tool": {
+        "enabled": true
+      }
+    }
+  },
+  "plugins": {
+    "tools": [
+      "provider/patronus.yaml"
+    ]
+  },
+  "meta": {
+    "version": "0.0.1",
+    "arch": [
+      "amd64",
+      "arm64"
+    ],
+    "runner": {
+      "language": "python",
+      "version": "3.12",
+      "entrypoint": "main"
+    }
+  },
+  "tags": [
+    "utilities"
+  ]
+}

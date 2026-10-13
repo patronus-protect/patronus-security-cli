@@ -1,0 +1,28 @@
+{
+  "url": "https://control.patronus.studio/api/v1/scan",
+  "method": "POST",
+  "type": "json",
+  "headers": {
+    "authorization": "Bearer {{parameters.apiKey}}",
+    "Accept": "application/json"
+  },
+  "body": {
+    "text": "Patronus Make connection check",
+    "config": {
+      "categories": ["injection"],
+      "max_level": "L1"
+    }
+  },
+  "response": {
+    "valid": "{{statusCode === 200 || statusCode === 202}}",
+    "error": {
+      "message": "Patronus connection check failed (HTTP {{statusCode}})."
+    }
+  },
+  "log": {
+    "sanitize": [
+      "request.headers.authorization",
+      "response.body"
+    ]
+  }
+}

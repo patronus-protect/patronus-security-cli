@@ -1,0 +1,29 @@
+{
+  "name": "@patronus-protect/piece-patronus",
+  "version": "0.1.1",
+  "description": "Patronus API scans for Activepieces",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/patronus-protect/patronus-security-cli.git",
+    "directory": "plugins/automations/activepieces"
+  },
+  "homepage": "https://github.com/patronus-protect/patronus-security-cli/tree/main/plugins/automations/activepieces",
+  "bugs": {
+    "url": "https://github.com/patronus-protect/patronus-security-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
+}

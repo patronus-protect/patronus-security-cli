@@ -1,0 +1,8 @@
+[
+  {
+    "name": "content",
+    "label": "Public HTTPS URL",
+    "type": "text",
+    "required": true
+  }
+]

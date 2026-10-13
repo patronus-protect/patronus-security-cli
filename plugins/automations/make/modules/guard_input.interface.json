@@ -1,0 +1,27 @@
+[
+  {
+    "name": "text",
+    "label": "Protected Text",
+    "type": "text"
+  },
+  {
+    "name": "patronus",
+    "label": "Patronus",
+    "type": "collection",
+    "spec": [
+      {
+        "name": "status",
+        "label": "Guard Status",
+        "type": "text"
+      },
+      {
+        "name": "job_ids",
+        "label": "Job IDs",
+        "type": "array",
+        "spec": {
+          "type": "text"
+        }
+      }
+    ]
+  }
+]

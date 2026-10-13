@@ -1,0 +1,71 @@
+name: Automation integration release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Automation package version, matching source manifests
+        type: string
+        required: true
+      publish_npm:
+        description: Publish n8n and Activepieces after publisher/environment setup
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/automation-plugins.yml
+    with:
+      release_version: ${{ inputs.version }}
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: automation-releases
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: patronus-automation-plugins
+          path: release-assets
+      - name: Create reviewable draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          gh release create "automation-v$RELEASE_VERSION" release-assets/* \
+            --target "$RELEASE_COMMIT" --draft \
+            --title "Patronus automation integrations $RELEASE_VERSION" \
+            --notes-file plugins/automations/RELEASE_NOTES.md
+
+  npm:
+    if: inputs.publish_npm
+    needs: build
+    runs-on: ubuntu-latest
+    environment: automation-releases
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: patronus-automation-plugins
+          path: release-assets
+      - name: Require npm trusted-publishing support
+        run: node -e 'const v=require("child_process").execSync("npm --version").toString().trim().split(".").map(Number); if(v[0]<11||(v[0]===11&&v[1]<5))throw Error("npm >=11.5.1 is required")'
+      - name: Publish built and verified public packages
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          npm publish "release-assets/n8n-nodes-patronus-$RELEASE_VERSION.tgz" --access public --provenance
+          npm publish "release-assets/patronus-protect-piece-patronus-$RELEASE_VERSION.tgz" --access public --provenance

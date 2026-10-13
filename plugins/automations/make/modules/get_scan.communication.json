@@ -1,0 +1,7 @@
+{
+  "url": "/scan/{{parameters.jobId}}",
+  "method": "GET",
+  "response": {
+    "output": "{{body}}"
+  }
+}

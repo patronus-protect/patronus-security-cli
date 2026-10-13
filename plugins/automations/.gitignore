@@ -1,0 +1,7 @@
+node_modules/
+**/dist/
+*.tgz
+*.difypkg
+/dify/patronus_api_client/
+/*/LICENSE
+!/n8n/LICENSE

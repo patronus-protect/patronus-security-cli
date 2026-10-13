@@ -1,0 +1,335 @@
+{
+  "id": "patronusChatbot1",
+  "active": false,
+  "name": "Patronus example – Chatbot (message → Guard → LLM)",
+  "nodes": [
+    {
+      "id": "patronus-chat",
+      "name": "Chat",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "public": true,
+        "mode": "hostedChat",
+        "options": {
+          "responseMode": "lastNode",
+          "title": "Patronus Guard Chatbot",
+          "inputPlaceholder": "Type a message…"
+        }
+      },
+      "webhookId": "patronus-chatbot-chat"
+    },
+    {
+      "id": "patronus-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "patronus-chatbot",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "patronus-chatbot-webhook"
+    },
+    {
+      "id": "patronus-input",
+      "name": "Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        100
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "case_id",
+              "name": "case_id",
+              "value": "={{ $json.body?.case_id ?? $json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "value": "={{ $json.body?.message ?? $json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "llm_url",
+              "name": "llm_url",
+              "value": "http://127.0.0.1:4100/v1/chat/completions",
+              "type": "string"
+            },
+            {
+              "id": "llm_model",
+              "name": "llm_model",
+              "value": "llm-stub",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "patronus-patronus-guard",
+      "name": "Patronus Guard",
+      "type": "n8n-nodes-patronus.patronus",
+      "typeVersion": 1,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "operation": "guard",
+        "content": "={{ $json.message }}"
+      },
+      "credentials": {
+        "patronusApi": {
+          "id": "patronusLocalApi",
+          "name": "Patronus API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "patronus-released-",
+      "name": "Released?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "released",
+              "leftValue": "={{ $json.patronus?.status }}",
+              "rightValue": "allowed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "patronus-llm",
+      "name": "LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Input').first().json.llm_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-case-id",
+              "value": "={{ $('Input').first().json.case_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $('Input').first().json.llm_model, user: $('Input').first().json.case_id, messages: [{ role: 'user', content: $('Patronus Guard').first().json.text }] }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "patronus-reply",
+      "name": "Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "output",
+              "name": "output",
+              "value": "={{ $json.choices[0].message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "allowed",
+              "type": "string"
+            },
+            {
+              "id": "case_id",
+              "name": "case_id",
+              "value": "={{ $('Input').first().json.case_id }}",
+              "type": "string"
+            },
+            {
+              "id": "llm_input",
+              "name": "llm_input",
+              "value": "={{ $('Patronus Guard').first().json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "patronus_job_ids",
+              "name": "patronus_job_ids",
+              "value": "={{ $('Patronus Guard').first().json.patronus.job_ids }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "patronus-rejected",
+      "name": "Rejected",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "output",
+              "name": "output",
+              "value": "=Patronus did not release this input ({{ $('Patronus Guard').first().json.status }}). The LLM was not called.",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "={{ $('Patronus Guard').first().json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "error",
+              "name": "error",
+              "value": "={{ $('Patronus Guard').first().json.error }}",
+              "type": "string"
+            },
+            {
+              "id": "case_id",
+              "name": "case_id",
+              "value": "={{ $('Input').first().json.case_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Chat": {
+      "main": [
+        [
+          {
+            "node": "Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input": {
+      "main": [
+        [
+          {
+            "node": "Patronus Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patronus Guard": {
+      "main": [
+        [
+          {
+            "node": "Released?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Released?": {
+      "main": [
+        [
+          {
+            "node": "LLM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

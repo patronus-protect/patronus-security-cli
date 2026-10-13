@@ -1,0 +1,179 @@
+{
+  "blueprint": {
+    "name": "Patronus example – Chatbot (message → Guard → LLM)",
+    "flow": [
+      {
+        "id": 1,
+        "module": "app#patronus-6yqdb3:guardInput",
+        "version": 1,
+        "parameters": {
+          "__IMTCONN__": "{{CONNECTION_ID}}"
+        },
+        "mapper": {
+          "content": "{{var.input.message}}"
+        },
+        "metadata": {
+          "designer": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "onerror": [
+          {
+            "id": 4,
+            "module": "datastore:AddRecord",
+            "version": 1,
+            "parameters": {
+              "datastore": "{{DATASTORE_ID}}"
+            },
+            "mapper": {
+              "key": "{{var.input.case_id}}",
+              "overwrite": true,
+              "data": {
+                "case_id": "{{var.input.case_id}}",
+                "status": "rejected",
+                "llm_input": "",
+                "retrieved": ""
+              }
+            },
+            "metadata": {
+              "designer": {
+                "x": 0,
+                "y": 250
+              }
+            }
+          },
+          {
+            "id": 5,
+            "module": "scenario-service:ReturnData",
+            "version": 2,
+            "parameters": {},
+            "mapper": {
+              "status": "rejected",
+              "output": "Patronus did not release this input. The LLM was not called.",
+              "error": "{{1.error.message}}",
+              "case_id": "{{var.input.case_id}}",
+              "llm_input": ""
+            },
+            "metadata": {
+              "designer": {
+                "x": 300,
+                "y": 250
+              }
+            }
+          },
+          {
+            "id": 6,
+            "module": "builtin:Ignore",
+            "version": 1,
+            "parameters": {},
+            "mapper": {},
+            "metadata": {
+              "designer": {
+                "x": 600,
+                "y": 250
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "module": "datastore:AddRecord",
+        "version": 1,
+        "parameters": {
+          "datastore": "{{DATASTORE_ID}}"
+        },
+        "mapper": {
+          "key": "{{var.input.case_id}}",
+          "overwrite": true,
+          "data": {
+            "case_id": "{{var.input.case_id}}",
+            "status": "llm_called",
+            "llm_input": "{{1.text}}",
+            "retrieved": ""
+          }
+        },
+        "metadata": {
+          "designer": {
+            "x": 300,
+            "y": 0
+          }
+        }
+      },
+      {
+        "id": 3,
+        "module": "scenario-service:ReturnData",
+        "version": 2,
+        "parameters": {},
+        "mapper": {
+          "status": "allowed",
+          "output": "[llm-stub] received the guarded text",
+          "error": "",
+          "case_id": "{{var.input.case_id}}",
+          "llm_input": "{{1.text}}"
+        },
+        "metadata": {
+          "designer": {
+            "x": 600,
+            "y": 0
+          }
+        }
+      }
+    ],
+    "metadata": {
+      "instant": false,
+      "version": 1,
+      "scenario": {
+        "roundtrips": 1,
+        "maxErrors": 3,
+        "autoCommit": true,
+        "autoCommitTriggerLast": true,
+        "sequential": false,
+        "confidential": false,
+        "dataloss": false,
+        "dlq": false,
+        "freshVariables": false
+      },
+      "designer": {
+        "orphans": []
+      }
+    }
+  },
+  "interface": {
+    "input": [
+      {
+        "name": "case_id",
+        "type": "text",
+        "required": false
+      },
+      {
+        "name": "message",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "output": [
+      {
+        "name": "status",
+        "type": "text"
+      },
+      {
+        "name": "output",
+        "type": "text"
+      },
+      {
+        "name": "error",
+        "type": "text"
+      },
+      {
+        "name": "case_id",
+        "type": "text"
+      },
+      {
+        "name": "llm_input",
+        "type": "text"
+      }
+    ]
+  }
+}

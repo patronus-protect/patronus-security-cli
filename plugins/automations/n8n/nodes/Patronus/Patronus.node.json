@@ -1,0 +1,21 @@
+{
+	"node": "n8n-nodes-patronus.patronus",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": [
+		"Development",
+		"Utility"
+	],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://github.com/patronus-protect/patronus-security-cli/tree/main/plugins/automations/n8n#set-up"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/patronus-protect/patronus-security-cli/tree/main/plugins/automations/n8n"
+			}
+		]
+	}
+}

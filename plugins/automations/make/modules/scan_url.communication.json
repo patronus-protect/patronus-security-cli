@@ -1,0 +1,14 @@
+{
+  "url": "/scan",
+  "method": "POST",
+  "type": "json",
+  "headers": {
+    "Prefer": "wait=1"
+  },
+  "body": {
+    "url": "{{parameters.content}}"
+  },
+  "response": {
+    "output": "{{body}}"
+  }
+}

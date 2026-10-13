@@ -1,0 +1,31 @@
+{
+  "baseUrl": "https://control.patronus.studio/api/v1",
+  "headers": {
+    "authorization": "Bearer {{connection.apiKey}}",
+    "Accept": "application/json"
+  },
+  "response": {
+    "error": {
+      "401": {
+        "type": "InvalidAccessTokenError",
+        "message": "Patronus API key is invalid or expired."
+      },
+      "403": {
+        "type": "InvalidAccessTokenError",
+        "message": "Patronus API key is missing the required scan scope."
+      },
+      "429": {
+        "type": "RateLimitError",
+        "message": "Patronus quota or rate limit reached. Honor the Retry-After header before retrying."
+      },
+      "message": "Patronus API request failed (HTTP {{statusCode}})."
+    }
+  },
+  "log": {
+    "sanitize": [
+      "request.headers.authorization",
+      "request.body",
+      "response.body"
+    ]
+  }
+}

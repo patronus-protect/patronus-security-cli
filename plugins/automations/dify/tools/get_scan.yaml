@@ -1,0 +1,35 @@
+{
+  "identity": {
+    "author": "patronus-protect",
+    "name": "get_scan",
+    "label": {
+      "en_US": "Get Scan Result"
+    }
+  },
+  "description": {
+    "human": {
+      "en_US": "Read a public Patronus job identifier. HTTP success can still mean running or failed. Inspect every requested category before continuing."
+    },
+    "llm": "Read a public Patronus job identifier. HTTP success can still mean running or failed. Inspect every requested category before continuing."
+  },
+  "parameters": [
+    {
+      "name": "job_id",
+      "type": "string",
+      "required": true,
+      "label": {
+        "en_US": "Job ID"
+      },
+      "human_description": {
+        "en_US": "Public job_ identifier returned by Submit Scan."
+      },
+      "llm_description": "Public job_ identifier returned by Submit Scan.",
+      "form": "llm"
+    }
+  ],
+  "extra": {
+    "python": {
+      "source": "tools/get_scan.py"
+    }
+  }
+}
