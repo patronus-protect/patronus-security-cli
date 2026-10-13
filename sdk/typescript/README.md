@@ -80,6 +80,22 @@ try {
 }
 ```
 
+A `quota` error also carries `limitKind` (for example `monthly_scan_units`), so
+you can tell a monthly limit from a short-term one.
+
+### Retrying safely
+
+Pass an `idempotencyKey` (1–128 visible ASCII characters) to any submitting
+method. A retry with the same key returns the original scan instead of creating
+and charging a new one:
+
+```js
+const key = crypto.randomUUID();
+const result = await patronus.scanText("Some text", undefined, { idempotencyKey: key });
+```
+
+`scanFile` and `scanFiles` take it in their options: `{ idempotencyKey: key }`.
+
 ### Polling yourself
 
 `submit` returns `accepted` jobs for longer work (short texts often complete
@@ -104,5 +120,5 @@ terminal results. Findings are returned as data; only transport, authentication,
 quota, validation, timeout, and protocol failures throw `PatronusError`.
 
 Use `submit` and `getJob` when your application manages polling itself. The
-constructor also accepts `baseUrl`, `timeoutMs`, `pollIntervalMs` and a custom
-`fetch` implementation. Non-local custom endpoints must use HTTPS.
+constructor also accepts `baseUrl`, `timeoutMs`, `pollIntervalMs` (default
+1000) and a custom `fetch` implementation. Non-local custom endpoints must use HTTPS.

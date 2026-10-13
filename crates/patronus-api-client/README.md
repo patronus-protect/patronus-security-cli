@@ -79,7 +79,23 @@ if let Err(error) = client.scan_mcp_server("https://mcp.example.com/mcp") {
             eprintln!("Retry in {seconds} s");
         }
     }
+    if let Some(limit) = error.limit_kind() {
+        eprintln!("Limit: {limit}"); // e.g. monthly_scan_units
+    }
 }
+```
+
+### Retrying safely
+
+Every submitting method has a `*_with_options` variant. An idempotency key
+(1–128 visible ASCII characters) makes a retry return the original scan instead
+of creating and charging a new one:
+
+```rust
+use patronus_api_client::RequestOptions;
+
+let options = RequestOptions::new().idempotency_key("order-4711-scan");
+let result = client.scan_text_with_options("Some text", &options)?;
 ```
 
 ### Polling yourself
@@ -109,7 +125,8 @@ for accepted in &submission.jobs {
   submit work and poll accepted jobs to a terminal result.
 - `submit_json` and `get_job` expose the lower-level asynchronous API.
 - `with_timeout` changes the overall request and polling deadline; the default
-  is 60 seconds.
+  is 60 seconds. `with_poll_interval` changes how often accepted jobs are
+  polled; the default is one second.
 - Findings are returned in `ScanResponse`. Authentication, quota, rate-limit,
   validation, timeout, transport and protocol failures return `Error`, whose
   `kind`, HTTP status, API code and request ID can be inspected.

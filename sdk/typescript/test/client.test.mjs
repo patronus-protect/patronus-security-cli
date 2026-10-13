@@ -6,6 +6,12 @@ import { Patronus, PatronusError } from "../dist/index.js";
 const fixture = JSON.parse(await readFile(new URL("../../../contract/fixtures/completed.json", import.meta.url)));
 const flatFixture = JSON.parse(await readFile(new URL("../../../contract/fixtures/completed-flat.json", import.meta.url)));
 const injectionFixture = JSON.parse(await readFile(new URL("../../../contract/fixtures/completed-injection.json", import.meta.url)));
+const quotaFixture = JSON.parse(await readFile(new URL("../../../contract/fixtures/quota-monthly-limit.json", import.meta.url)));
+const { validateFixtures } = await import(new URL("../../../contract/validate.mjs", import.meta.url));
+
+test("shared fixtures conform to the pinned OpenAPI contract", async () => {
+  for (const [file, errors] of Object.entries(await validateFixtures())) assert.deepEqual(errors, [], file);
+});
 
 test("rejects non-HTTP loopback origins", () => {
   assert.throws(() => new Patronus({ apiKey: "test", baseUrl: "ftp://localhost/api" }), error => error instanceof PatronusError && error.kind === "validation");
@@ -37,6 +43,10 @@ test("normalizes a flat completed job from the Control Plane", async () => {
   assert.equal(submitted.status, "completed");
   assert.equal(submitted.jobs[0].decision, "allow");
   assert.equal(submitted.usage.scan_units, 1);
+  assert.equal(submitted.ark_version, "1");
+  assert.equal(submitted.coverage.input_tokens, 8);
+  assert.equal(submitted.jobs[0].ark_version, undefined);
+  assert.equal(submitted.jobs[0].source, "text");
 
   const scanned = await client.scanText("hello");
   assert.equal(scanned.jobs[0].job_id, "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -99,4 +109,71 @@ test("preserves typed quota errors", async () => {
     && error.kind === "quota"
     && error.retryAfter === 17
     && error.requestId === "req_test");
+});
+
+test("classifies a monthly limit body as quota and reads retry_after and limit_kind from it", async () => {
+  const client = new Patronus({ apiKey: "secret", fetch: async () => Response.json(quotaFixture, { status: 429 }) });
+  await assert.rejects(() => client.scanText("hello"), error =>
+    error instanceof PatronusError
+    && error.kind === "quota"
+    && error.code === "MONTHLY_LIMIT_REACHED"
+    && error.limitKind === "monthly_scan_units"
+    && error.retryAfter === 3600
+    && error.requestId === "req_quota_monthly");
+});
+
+test("a Retry-After header takes precedence over quota.retry_after", async () => {
+  const client = new Patronus({ apiKey: "secret", fetch: async () => Response.json(quotaFixture, { status: 429, headers: { "retry-after": "5" } }) });
+  await assert.rejects(() => client.submit({ text: "hello" }), error => error instanceof PatronusError && error.kind === "quota" && error.retryAfter === 5);
+});
+
+test("plain 429 without a quota body stays a rate limit", async () => {
+  const client = new Patronus({ apiKey: "secret", fetch: async () => Response.json({ error: { code: "RATE_LIMITED", message: "Slow down", request_id: "req_rate" } }, { status: 429 }) });
+  await assert.rejects(() => client.scanText("hello"), error => error instanceof PatronusError && error.kind === "rate_limit" && error.limitKind === undefined);
+});
+
+test("sends an Idempotency-Key on every POST method when requested", async () => {
+  const keys = [];
+  const client = new Patronus({ apiKey: "secret", fetch: async (url, init) => {
+    keys.push([init.method ?? "GET", new Headers(init.headers).get("idempotency-key")]);
+    return Response.json(String(url).includes("/scan/job_") ? fixture.jobs[0] : fixture);
+  } });
+  const options = { idempotencyKey: "retry-0001" };
+  await client.submit({ text: "hello" }, options);
+  await client.scanJson({ text: "hello" }, options);
+  await client.scanText("hello", undefined, options);
+  await client.scanUrl("https://example.com", { categories: ["injection"] }, options);
+  await client.scanMcpServer("https://example.com/mcp", undefined, options);
+  await client.scanFiles([{ name: "a.txt", data: new Blob(["a"]) }], options);
+  await client.scanFile({ name: "b.txt", data: new Blob(["b"]) }, { text: "hi", ...options });
+  assert.deepEqual(keys, Array(7).fill(["POST", "retry-0001"]));
+
+  keys.length = 0;
+  await client.scanText("hello");
+  assert.deepEqual(keys, [["POST", null]]);
+});
+
+test("rejects invalid idempotency keys before sending", async () => {
+  let calls = 0;
+  const client = new Patronus({ apiKey: "secret", fetch: async () => { calls++; return Response.json(fixture); } });
+  for (const idempotencyKey of ["", "has space", "line\nbreak", "x".repeat(129), "ümlaut"]) {
+    await assert.rejects(() => client.scanText("hello", undefined, { idempotencyKey }), error => error instanceof PatronusError && error.kind === "validation");
+    await assert.rejects(() => client.scanFiles([{ name: "a.txt", data: new Blob(["a"]) }], { idempotencyKey }), error => error instanceof PatronusError && error.kind === "validation");
+  }
+  assert.equal(calls, 0);
+  await client.submit({ text: "hello" }, { idempotencyKey: "x".repeat(128) });
+  assert.equal(calls, 1);
+});
+
+test("polls once per second by default", async () => {
+  const started = Date.now();
+  let calls = 0;
+  const client = new Patronus({ apiKey: "secret", fetch: async () => {
+    calls++;
+    if (calls === 1) return Response.json({ status: "accepted", jobs: [{ job_id: "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }] }, { status: 202 });
+    return Response.json(calls === 2 ? { ...fixture.jobs[0], status: "running" } : fixture.jobs[0]);
+  } });
+  assert.equal((await client.scanUrl("https://example.com")).status, "completed");
+  assert.equal(calls, 3);
+  assert.ok(Date.now() - started >= 950, `polled after ${Date.now() - started} ms`);
 });

@@ -10,6 +10,16 @@ use std::{
 
 const DEFAULT_BASE_URL: &str = "https://control.patronus.studio/api/v1";
 const MAX_RESPONSE_BYTES: u64 = 1_048_576;
+const MAX_IDEMPOTENCY_KEY_LENGTH: usize = 128;
+const DEFAULT_POLL_INTERVAL: Duration = Duration::from_millis(1000);
+const ENVELOPE_FIELDS: [&str; 6] = [
+    "ark_version",
+    "input",
+    "extraction",
+    "coverage",
+    "usage",
+    "request_id",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
@@ -45,6 +55,51 @@ impl Error {
             retry_after: None,
             details: None,
         }
+    }
+
+    /// `quota.limit_kind` from a quota error body, e.g. `"monthly_scan_units"`.
+    pub fn limit_kind(&self) -> Option<&str> {
+        self.details
+            .as_deref()?
+            .get("quota")?
+            .get("limit_kind")?
+            .as_str()
+    }
+}
+
+/// Per-request options for `POST /scan`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RequestOptions {
+    idempotency_key: Option<String>,
+}
+
+impl RequestOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sends `Idempotency-Key`: 1-128 visible ASCII characters, validated when the request is made.
+    /// Reuse the same key when retrying the same request.
+    pub fn idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(key.into());
+        self
+    }
+
+    fn apply(&self, request: ureq::Request) -> Result<ureq::Request> {
+        let request = request.set("Prefer", "wait=1");
+        let Some(key) = &self.idempotency_key else {
+            return Ok(request);
+        };
+        if key.is_empty()
+            || key.len() > MAX_IDEMPOTENCY_KEY_LENGTH
+            || !key.bytes().all(|byte| byte.is_ascii_graphic())
+        {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                "Idempotency key must be 1-128 visible ASCII characters",
+            ));
+        }
+        Ok(request.set("Idempotency-Key", key))
     }
 }
 
@@ -159,7 +214,7 @@ impl Client {
             api_key,
             anonymous_cookie: Mutex::new(cookie),
             timeout,
-            poll_interval: Duration::from_millis(200),
+            poll_interval: DEFAULT_POLL_INTERVAL,
             agent: ureq::AgentBuilder::new()
                 .redirects(0)
                 .timeout(timeout)
@@ -183,13 +238,26 @@ impl Client {
         self
     }
 
+    /// Interval between status polls of accepted jobs (default: one second).
+    pub fn with_poll_interval(mut self, interval: Duration) -> Self {
+        self.poll_interval = interval;
+        self
+    }
+
     pub fn submit_json(&self, body: Value) -> Result<ScanResponse> {
-        self.decode(
+        self.submit_json_with_options(body, &RequestOptions::default())
+    }
+
+    pub fn submit_json_with_options(
+        &self,
+        body: Value,
+        options: &RequestOptions,
+    ) -> Result<ScanResponse> {
+        let request = options.apply(
             self.authorize(self.agent.post(&format!("{}/scan", self.base_url)))
-                .set("Content-Type", "application/json")
-                .set("Prefer", "wait=1")
-                .send_json(body),
-        )
+                .set("Content-Type", "application/json"),
+        )?;
+        self.decode(request.send_json(body))
     }
 
     pub fn get_job(&self, job_id: &str) -> Result<Value> {
@@ -210,21 +278,53 @@ impl Client {
     }
 
     pub fn scan_json(&self, body: Value) -> Result<ScanResponse> {
+        self.scan_json_with_options(body, &RequestOptions::default())
+    }
+
+    pub fn scan_json_with_options(
+        &self,
+        body: Value,
+        options: &RequestOptions,
+    ) -> Result<ScanResponse> {
         let deadline = Instant::now() + self.timeout;
-        let submission = self.submit_json(body)?;
+        let submission = self.submit_json_with_options(body, options)?;
         self.wait(submission, deadline)
     }
 
     pub fn scan_text(&self, text: impl Into<String>) -> Result<ScanResponse> {
-        self.scan_json(serde_json::json!({ "text": text.into() }))
+        self.scan_text_with_options(text, &RequestOptions::default())
+    }
+
+    pub fn scan_text_with_options(
+        &self,
+        text: impl Into<String>,
+        options: &RequestOptions,
+    ) -> Result<ScanResponse> {
+        self.scan_json_with_options(serde_json::json!({ "text": text.into() }), options)
     }
 
     pub fn scan_url(&self, url: impl Into<String>) -> Result<ScanResponse> {
-        self.scan_json(serde_json::json!({ "url": url.into() }))
+        self.scan_url_with_options(url, &RequestOptions::default())
+    }
+
+    pub fn scan_url_with_options(
+        &self,
+        url: impl Into<String>,
+        options: &RequestOptions,
+    ) -> Result<ScanResponse> {
+        self.scan_json_with_options(serde_json::json!({ "url": url.into() }), options)
     }
 
     pub fn scan_mcp_server(&self, url: impl Into<String>) -> Result<ScanResponse> {
-        self.scan_json(serde_json::json!({ "mcp_server_url": url.into() }))
+        self.scan_mcp_server_with_options(url, &RequestOptions::default())
+    }
+
+    pub fn scan_mcp_server_with_options(
+        &self,
+        url: impl Into<String>,
+        options: &RequestOptions,
+    ) -> Result<ScanResponse> {
+        self.scan_json_with_options(serde_json::json!({ "mcp_server_url": url.into() }), options)
     }
 
     pub fn scan_files(
@@ -232,6 +332,16 @@ impl Client {
         files: &[FileUpload],
         text: Option<&str>,
         config: Option<&Value>,
+    ) -> Result<ScanResponse> {
+        self.scan_files_with_options(files, text, config, &RequestOptions::default())
+    }
+
+    pub fn scan_files_with_options(
+        &self,
+        files: &[FileUpload],
+        text: Option<&str>,
+        config: Option<&Value>,
+        options: &RequestOptions,
     ) -> Result<ScanResponse> {
         if files.is_empty() {
             return Err(Error::new(
@@ -282,21 +392,28 @@ impl Client {
             }
         }
         body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
-        let deadline = Instant::now() + self.timeout;
-        let response = self.decode(
+        let request = options.apply(
             self.authorize(self.agent.post(&format!("{}/scan", self.base_url)))
                 .set(
                     "Content-Type",
                     &format!("multipart/form-data; boundary={boundary}"),
-                )
-                .set("Prefer", "wait=1")
-                .send_bytes(&body),
+                ),
         )?;
+        let deadline = Instant::now() + self.timeout;
+        let response = self.decode(request.send_bytes(&body))?;
         self.wait(response, deadline)
     }
 
     pub fn scan_file(&self, file: FileUpload) -> Result<ScanResponse> {
-        self.scan_files(&[file], None, None)
+        self.scan_file_with_options(file, &RequestOptions::default())
+    }
+
+    pub fn scan_file_with_options(
+        &self,
+        file: FileUpload,
+        options: &RequestOptions,
+    ) -> Result<ScanResponse> {
+        self.scan_files_with_options(&[file], None, None, options)
     }
 
     fn authorize(&self, request: ureq::Request) -> ureq::Request {
@@ -422,7 +539,7 @@ impl Client {
         let mut job = root.clone();
         let mut envelope = Map::new();
         envelope.insert("status".into(), Value::String("completed".into()));
-        for field in ["input", "extraction", "coverage", "usage", "request_id"] {
+        for field in ENVELOPE_FIELDS {
             job.remove(field);
             if let Some(value) = root.get(field) {
                 envelope.insert(field.into(), value.clone());
@@ -520,7 +637,7 @@ impl Client {
             .and_then(Value::as_str)
             .map(str::to_owned)
             .or(header_request_id);
-        let kind = if value.get("quota").is_some() {
+        let kind = if value.get("quota").is_some_and(Value::is_object) {
             ErrorKind::Quota
         } else {
             match status {

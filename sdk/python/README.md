@@ -84,6 +84,22 @@ except PatronusError as error:
         print(f"Retry in {error.retry_after} s")
 ```
 
+A `quota` error also carries `limit_kind` (for example `monthly_scan_units`), so
+you can tell a monthly limit from a short-term one.
+
+### Retrying safely
+
+Pass `idempotency_key` (1–128 visible ASCII characters) to any submitting
+method. A retry with the same key returns the original scan instead of creating
+and charging a new one:
+
+```python
+import uuid
+
+key = str(uuid.uuid4())
+result = client.scan_text("Some text", idempotency_key=key)
+```
+
 ### Polling yourself
 
 `submit` returns `accepted` jobs for longer work (short texts often complete
@@ -107,7 +123,7 @@ Use `scan_text`, `scan_url`, `scan_mcp_server`, `scan_file` or `scan_files` for
 high-level scans. `submit` and `get_job` expose the lower-level job API. Findings
 are returned as dictionaries. `PatronusError` represents authentication, quota,
 rate-limit, validation, timeout, transport and protocol failures and exposes
-`kind`, `status`, `code`, `request_id`, `retry_after` and `details`.
+`kind`, `status`, `code`, `request_id`, `retry_after`, `limit_kind` and `details`.
 
-The constructor accepts `base_url`, `timeout` and `poll_interval`. Non-local
+The constructor accepts `base_url`, `timeout` and `poll_interval` (default 1.0 s). Non-local
 custom endpoints must use HTTPS.

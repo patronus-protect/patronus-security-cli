@@ -1,0 +1,20 @@
+{
+  "error": {
+    "code": "MONTHLY_LIMIT_REACHED",
+    "message": "Monthly scan unit limit reached",
+    "request_id": "req_quota_monthly"
+  },
+  "quota": {
+    "limit_kind": "monthly_scan_units",
+    "retry_after": 3600,
+    "reset_at": 1798761600000,
+    "next_actions": {
+      "usage_url": "https://control.patronus.studio/usage",
+      "upgrade_url": "https://control.patronus.studio/billing"
+    }
+  },
+  "usage": {
+    "monthly_scan_units": 1000,
+    "monthly_limit": 1000
+  }
+}
