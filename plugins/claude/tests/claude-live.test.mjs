@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFile } from 'node:child_process';
-import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,21 +44,26 @@ async function fixture() {
   return { root, miniRepo };
 }
 
-async function claude(prompt, root) {
-  const transcript = join(root, 'claude-stream.jsonl');
+async function claude(prompt, root, { outputSchema = schema, approval, name = 'claude-stream' } = {}) {
+  const transcript = join(root, `${name}.jsonl`);
   const tools = [
     'Read', 'Skill',
     'mcp__plugin_patronus-security_patronus__patronus_scan',
     'mcp__plugin_patronus-security_patronus__patronus_check_result',
     'mcp__plugin_patronus-security_patronus__patronus_read_redacted',
+    ...(approval ? ['mcp__plugin_patronus-security_patronus__patronus_reveal_pii'] : []),
   ].join(',');
+  // With `approval`, Claude's permission dialog is answered by a local stand-in for the user.
+  const dialog = approval ? ['--mcp-config', join(root, 'approval-mcp.json'), '--permission-prompt-tool', 'mcp__fixture__approve'] : [];
+  if (approval) await writeFile(join(root, 'approval-mcp.json'), JSON.stringify({ mcpServers: { fixture: { command: process.execPath, args: [join(here, 'mcp-fixture.mjs')] } } }));
   const args = [
     '--print', '--verbose', '--output-format', 'stream-json', '--model', 'sonnet',
-    '--plugin-dir', plugin, '--permission-mode', 'dontAsk', '--no-chrome',
-    '--tools', tools, '--allowedTools', tools,
-    '--json-schema', JSON.stringify(schema), prompt,
+    '--plugin-dir', plugin, '--permission-mode', approval ? 'default' : 'dontAsk', '--no-chrome',
+    '--tools', tools, '--allowedTools', tools, ...dialog,
+    '--json-schema', JSON.stringify(outputSchema), prompt,
   ];
-  const env = { ...process.env, PATRONUS_SCANNER_BIN: scanner };
+  const env = { ...process.env, PATRONUS_SCANNER_BIN: scanner,
+    ...(approval ? { PATRONUS_FIXTURE_DIRECTORY: root, PATRONUS_FIXTURE_APPROVAL: approval } : {}) };
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_BASE_URL;
   delete env.CLAUDE_CONFIG_DIR;
@@ -118,3 +123,37 @@ Return the required JSON. Map CLEAN to clean, any findings to findings, and fail
     turns: result.num_turns, outcomes: output, transcript,
   }));
 });
+
+const disclosureSchema = {
+  type: 'object', additionalProperties: false, required: ['email', 'approval'],
+  properties: { email: { type: 'string' }, approval: { enum: ['granted', 'denied', 'not_requested'] } },
+};
+
+for (const approval of ['allow', 'deny']) {
+  test(`real Claude requests a selective PII disclosure and the user answers ${approval}`, {
+    timeout: 260_000,
+    skip: enabled ? false : 'set PATRONUS_CLAUDE_LIVE=1 to run the paid-plan Claude acceptance test',
+  }, async () => {
+    await access(scanner);
+    const { root } = await fixture();
+    await writeFile(join(root, 'customer.txt'), 'Release contact: live.person@example.com, phone 202-555-0163\n');
+    const prompt = `Read ${join(root, 'customer.txt')}. I need the exact release contact email address to send a message, but not the phone number.
+If Patronus masks it, use the Patronus tools to request a one-time disclosure of only the email; I will approve or deny it.
+Return the required JSON: email is the exact address you were allowed to see, or an empty string; approval is granted, denied or not_requested.`;
+    const { output, result, transcript } = await claude(prompt, root, { outputSchema: disclosureSchema, approval, name: `disclosure-${approval}` });
+    const asked = (await readFile(join(root, 'approvals.jsonl'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+    const stream = await readFile(transcript, 'utf8');
+    assert.doesNotMatch(stream, /202-555-0163/, `phone number reached the model; inspect ${transcript}`);
+    assert.equal(asked.filter(item => item.tool_name.endsWith('patronus_reveal_pii')).length, 1, `expected exactly one approval prompt; inspect ${transcript}`);
+    assert.deepEqual(asked.map(item => item.tool_name).filter(name => !name.endsWith('patronus_reveal_pii')), [], `only the disclosure may prompt; inspect ${transcript}`);
+    if (approval === 'allow') {
+      assert.equal(output.email, 'live.person@example.com', `approved email missing; inspect ${transcript}`);
+      assert.equal(output.approval, 'granted');
+    } else {
+      assert.equal(output.email, '', `denied email reached the answer; inspect ${transcript}`);
+      assert.doesNotMatch(stream, /live\.person@example\.com/, `denied email reached the model; inspect ${transcript}`);
+      assert.equal(output.approval, 'denied');
+    }
+    console.log(JSON.stringify({ test: `claude-live-disclosure-${approval}`, turns: result.num_turns, outcomes: output, prompts: asked.length, transcript }));
+  });
+}
