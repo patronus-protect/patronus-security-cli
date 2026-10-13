@@ -2,7 +2,7 @@ import { defineTool, type ToolDefinition, type ToolExecution } from '@deepseek-a
 import type { Context } from '@deepseek-ai/cordis'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { RuntimeClient } from './protocol.ts'
-import { receipt, unavailable } from './receipts.ts'
+import { receipt, redactedMessage, unavailable } from './receipts.ts'
 import { autoRedact } from './auto-redaction.ts'
 import type { StaticScanner } from './static.ts'
 import { elapsed, hashProtocolValue, type ProtocolEventSink } from './protocol-events.ts'
@@ -75,7 +75,7 @@ export function registerTools(ctx: Context, clientFor: (exec: ToolExecution) => 
             const result = await client.readRedacted(job, exec.signal)
             complete(result.status)
             return result.status === 'redacted' && result.result !== undefined
-              ? { scan_id, status: 'redacted', result: result.result }
+              ? { scan_id, status: 'redacted', result: result.result, message: redactedMessage }
               : unavailableScanReference()
           }
           const result = await autoRedact(await client.check(job, exec.signal), () => client.readRedacted(job, exec.signal))

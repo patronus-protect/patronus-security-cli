@@ -1,7 +1,7 @@
 import { chatCommand, controlChat } from '../../deepseek/src/chat-control.ts'
 import { readPluginSettings, hookEnabled, type PluginSettings } from '../../deepseek/src/settings.ts'
 import { isAbsolute, resolve } from 'node:path'
-import { receipt } from '../../deepseek/src/receipts.ts'
+import { receipt, redactedMessage } from '../../deepseek/src/receipts.ts'
 import { degradedText, noticeText, publicReason, scanNotice } from '../../deepseek/src/notice.ts'
 import { consumeIgnoreOnce, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
 import { PROMPT_WARNING_MODEL, PROMPT_WARNING_USER, promptDecision, SENSITIVE_PROMPT_MESSAGE, sensitiveFinding } from '../../deepseek/src/prompt-policy.ts'
@@ -125,6 +125,8 @@ export async function runOwnOperation(host: Host, operation: string, args: unkno
     ? { ...result, message: failureMessage(host, result as Pick<ScanResult, 'reason'>) }
     : operation === 'check' && record(result) && result.status === 'pending'
       ? visibleResult(result as unknown as ScanResult, host)
+    : record(result) && result.status === 'redacted'
+      ? { ...result, message: redactedMessage }
     : result
   return { kind: 'result', text: JSON.stringify(visible) }
 }

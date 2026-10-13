@@ -101,6 +101,7 @@ for (const exitCode of [0, 1]) {
       }
       assert.equal(result.status, 'redacted')
       assert(Object.hasOwn(result, 'result'))
+      assert.match(result.message, /read with redaction/)
       assert(!JSON.stringify(result.result).includes('IGNORE ALL PREVIOUS INSTRUCTIONS'))
       return [done()]
     })

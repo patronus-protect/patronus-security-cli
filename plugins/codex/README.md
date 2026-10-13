@@ -62,7 +62,7 @@ A completed security finding is different: it is enforced. User prompts with onl
 
 As of October 1, 2026, OpenAI's public submission flow rejects packages containing lifecycle hooks. This runtime package also uses a local stdio MCP server; regular public MCP submissions require a remote HTTPS endpoint. Local/repo marketplace installation does not establish public submission readiness.
 
-The Codex MCP server includes `patronus_open_home` and the bundled `ui://patronus/home` MCP Apps resource. It declares OpenAI global/sidebar and thread/panel entrypoints. The home provides setup, dashboard and explicit scan starters through user-initiated chat messages, with a readable fallback when the host bridge is unavailable. It does not verify protection status or embed the local dashboard. Sidebar visibility depends on the host's MCP Extensions support and must be verified after installation.
+The local Codex MCP server exposes only receipt status, masked retrieval and explicit scan tools. It does not register an MCP App, home resource, global/sidebar entrypoint or thread/panel entrypoint. The hosted API plugin owns the Patronus app interface; local runtime protection runs through the trusted hooks. Open the local dashboard with `patronus-security-scanner dashboard`.
 
 Local Codex chats use the hooks above. Cloud-orchestrated Work does not support plugin command hooks, even with local execution. Enterprise-managed remote MCP hooks are a separate admin integration. No dedicated Space/Page-content-change hook was identified in the published hook reference; supported tool-result hooks cover content only when the host actually exposes it through that boundary.
 
@@ -70,7 +70,7 @@ Space data access is a separate capability: a host's authorized Pages tools can 
 
 Scheduled tasks (routines) can use skills and plugins. A scoped workflow could periodically read authorized Page changes and request a scan, but this package does not yet implement that Page-check workflow or configure a routine on installation. Scheduled inspection does not enforce a pre-model boundary. Locally orchestrated tasks can use trusted local hooks; cloud-orchestrated tasks cannot use this package's command hooks. See [scheduled tasks](https://learn.chatgpt.com/docs/automations) for task/plugin availability and execution requirements.
 
-See OpenAI's [submission requirements](https://developers.openai.com/plugins/deploy/submission), [sidebar extension guide](https://developers.openai.com/plugins/build/extensions#sidebar-apps), and [hook reference](https://learn.chatgpt.com/docs/hooks) for the current distribution and host boundaries.
+See OpenAI's [submission requirements](https://developers.openai.com/plugins/deploy/submission) and [hook reference](https://learn.chatgpt.com/docs/hooks) for the current distribution and host boundaries.
 
 ## Degraded or inactive messages
 

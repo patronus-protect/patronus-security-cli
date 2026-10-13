@@ -3,6 +3,8 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ScanResult } from './protocol.ts'
 import { degradedText, publicReason, scanNotice } from './notice.ts'
 
+export const redactedMessage = 'The content was read with redaction. Use the available text in result to continue the task. Masked regions remain withheld. Do not rerun the source tool.'
+
 function hostProfile(): string {
   const index = process.argv.findIndex(value => value === '--profile')
   const candidate = index >= 0 ? process.argv[index + 1] : process.argv.find(value => value.startsWith('--profile='))?.slice(10)
@@ -31,7 +33,7 @@ export function receipt(result: ScanResult, direction: 'request' | 'response' = 
     }
   } else if (result.status === 'redacted' && direction === 'response') {
     metadata.result = result.result ?? null
-    metadata.message = 'Use this redacted result to continue the task. Sensitive regions were masked; the original remains withheld. Do not rerun the source tool.'
+    metadata.message = redactedMessage
   } else if (direction === 'request') {
     metadata.message = 'The user prompt did not receive complete security approval and was not sent to the model.'
   } else if (result.status === 'pending') {

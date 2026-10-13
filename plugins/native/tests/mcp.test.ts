@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { handleMcp } from '../src/mcp.ts'
 
-test('Codex MCP exposes scan/status/redacted tools and a navigation view without session credentials', async () => {
+test('Codex MCP exposes scan/status/redacted tools without session credentials', async () => {
   const response: any = await handleMcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
-  assert.deepEqual(response.result.tools.map((tool: any) => tool.name), ['patronus_check_result', 'patronus_read_redacted', 'patronus_scan', 'patronus_open_home'])
+  assert.deepEqual(response.result.tools.map((tool: any) => tool.name), ['patronus_check_result', 'patronus_read_redacted', 'patronus_scan'])
   for (const tool of response.result.tools) {
     assert.equal(tool.inputSchema.additionalProperties, false)
     assert(!JSON.stringify(tool.inputSchema).includes('session'))
@@ -16,20 +16,17 @@ test('Codex MCP exposes scan/status/redacted tools and a navigation view without
   assert.match(scan.description, /URL and MCP-server audits currently always use the Patronus Security API/)
 })
 
-test('Codex home entrypoints resolve to a packaged MCP Apps resource without invoking the scanner', async () => {
+test('local runtime does not register an app, navigation tool or UI resources', async () => {
+  const initialized: any = await handleMcp({ jsonrpc: '2.0', id: 0, method: 'initialize' })
+  assert.deepEqual(initialized.result.capabilities, { tools: {} })
   const list: any = await handleMcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
-  const tool = list.result.tools.find((value: any) => value.name === 'patronus_open_home')
-  assert.deepEqual(tool._meta['openai/ui'].entrypoints, [{ type: 'global' }, { type: 'thread' }])
-  const resource: any = await handleMcp({ jsonrpc: '2.0', id: 2, method: 'resources/read', params: { uri: tool._meta.ui.resourceUri } })
-  assert.equal(resource.result.contents[0].mimeType, 'text/html;profile=mcp-app')
-  assert.match(resource.result.contents[0].text, /Protection status has not been checked/)
-  const call: any = await handleMcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: tool.name, arguments: {} } })
-  assert.match(call.result.content[0].text, /Protection status has not been checked/)
-  const invalid: any = await handleMcp({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: tool.name, arguments: { path: '/private/canary' } } })
-  assert.equal(invalid.error.code, -32602)
-  assert(!JSON.stringify(invalid).includes('/private/canary'))
-  const missing: any = await handleMcp({ jsonrpc: '2.0', id: 5, method: 'resources/read', params: { uri: 'file:///private/canary' } })
-  assert.equal(missing.error.code, -32602)
+  assert(list.result.tools.every((tool: any) => !tool._meta))
+  for (const method of ['resources/list', 'resources/read']) {
+    const resource: any = await handleMcp({ jsonrpc: '2.0', id: 2, method, params: { uri: 'ui://patronus/home' } })
+    assert.equal(resource.error.code, -32601)
+  }
+  const call: any = await handleMcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'patronus_open_home', arguments: {} } })
+  assert.equal(call.result.isError, true)
 })
 
 test('missing native hook never releases data or reflects arguments', async () => {

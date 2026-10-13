@@ -16,6 +16,25 @@ const claudeTool = async (name: string, args: unknown, rpc: (config: any, reques
   return response.result as { isError: boolean; content: { type: string; text: string }[] }
 }
 
+test('successful masked retrieval tells every native host to continue with the available content', async () => {
+  const masked = 'AWS service: EC2. [REDACTED] Region: eu-central-1.'
+  const rpc = async () => ({ scan_id: 'scan-731', status: 'redacted', result: masked })
+  for (const name of ['patronus_read_redacted', 'patronus_check_result']) {
+    const codex: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', {
+      tool_name: 'mcp__patronus__' + name, tool_input: { scan_id: 'scan-731' },
+    }), {}, rpc)
+    const claude = await claudeTool(name, { scan_id: 'scan-731' }, rpc)
+    assert.equal(claude.isError, false)
+    for (const value of [codex.hookSpecificOutput.permissionDecisionReason, claude.content[0]!.text]) {
+      const receipt = JSON.parse(value)
+      assert.equal(receipt.status, 'redacted')
+      assert.equal(receipt.result, masked)
+      assert.match(receipt.message, /read with redaction/)
+      assert.match(receipt.message, /continue the task/)
+    }
+  }
+})
+
 test('ordinary tool requests are outside the runtime text contract for every host', async () => {
   const calls: unknown[] = []
   const rpc = async (config: unknown, request: unknown) => { calls.push({ config, request }); return { scan_id: 'scan-731', status: 'approved' } }
