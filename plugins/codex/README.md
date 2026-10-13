@@ -34,8 +34,8 @@ Start a new Codex task after installation. Try:
 | --- | --- |
 | `SessionStart` | Validates lifecycle input and reads protection settings so lifecycle failures can be reported. The scanner starts lazily with the first protected event; startup is not proof of an active scan. |
 | `UserPromptSubmit` | Checks user-authored text before model delivery to catch sensitive data and warn about pasted instructions. Also recognizes exact chat protection commands. User-prompt PII detection is off by default. |
-| `PreToolUse` | Attributes Patronus receipt-status, redaction and explicit scan operations to the current chat because the Codex MCP process has no chat identity. Ordinary tool requests are not scanned. |
-| `PostToolUse` | Gates raw tool-result text before model delivery to enforce findings without rerunning the tool. MCP text uses the separate MCP-result policy; Patronus receipts are not rescanned. |
+| `PreToolUse` | Attributes Patronus receipt-status, redaction and explicit scan operations to the current chat because the Codex MCP process has no chat identity, and arms a selective PII disclosure before Codex's approval prompt. Ordinary tool requests are not scanned. |
+| `PostToolUse` | Gates raw tool-result text before model delivery to enforce findings without rerunning the tool. MCP text uses the separate MCP-result policy; Patronus receipts are not rescanned. Delivers an approved selective PII disclosure. |
 | `Stop` | Releases the turn's private broker runtime state. Codex emits this event at turn end, not only when the chat closes. |
 
 `hooks/hooks.json` includes a top-level description and a `statusMessage` for each handler. Codex documents these fields; a persistent per-handler description is not documented. Changing hook definitions requires a new trust review. Review the updated hooks and start a new task after installation or update.

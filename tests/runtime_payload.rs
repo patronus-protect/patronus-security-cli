@@ -1094,3 +1094,24 @@ fn local_fallback_notice_survives_payload_analysis() {
         Some(ScanNotice::api_usage_limit("local", Some(90)))
     );
 }
+
+#[test]
+fn only_l1_pii_evidence_becomes_disclosable() {
+    let pii = |level: &'static str| {
+        Analyzer(move |input: ChunkInput<'_>| {
+            let mut outcome = classify(input, Some(vec![(5, 20)]));
+            let classification = &mut outcome.classifications[0];
+            classification.category = "pii".into();
+            classification.level = level.into();
+            classification.evidence[0].label = "EMAIL".into();
+            Ok(outcome)
+        })
+    };
+    let payload = json!("mail ada@example.com now");
+    assert_eq!(run(&pii("l1"), &payload).disclosure.len(), 1);
+    for level in ["l2", "l3"] {
+        let outcome = run(&pii(level), &payload);
+        assert_eq!(outcome.verdict, Some(Verdict::Dangerous));
+        assert!(outcome.disclosure.is_empty(), "{level}");
+    }
+}

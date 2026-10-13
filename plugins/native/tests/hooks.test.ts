@@ -549,3 +549,87 @@ test('hook trace records decision, outcome and scan count without changing the r
   const invalid = await run('PostToolUse', { session_id: '../foreign' }, async () => assert.fail('must not scan'))
   assert.equal(invalid.trace.error_code, 'hook_input_invalid')
 })
+
+const SCAN = 'a'.repeat(32)
+const GRANT = 'b'.repeat(32)
+const reveal = (extra = {}) => input('PreToolUse', { tool_name: 'mcp__patronus__patronus_reveal_pii', tool_input: { scan_id: SCAN, grant_id: GRANT }, ...extra })
+
+test('Claude PII disclosure offers counts, then asks the user through the host dialog', async () => {
+  const requests: unknown[] = []
+  const offer = await claudeTool('patronus_read_redacted', { scan_id: SCAN, reveal_pii: ['email', 'ip_address', 'email'] }, async (_c, request) => {
+    requests.push(request)
+    return { scan_id: SCAN, status: 'confirmation_required', grant_id: GRANT, counts: { email: 3, ip_address: 2 }, next_tool: 'patronus_reveal_pii' }
+  })
+  assert.deepEqual(requests, [{ method: 'prepare_reveal', scanId: SCAN, types: ['email', 'ip_address'] }])
+  const receipt = JSON.parse(offer.content[0]!.text)
+  assert.equal(receipt.status, 'confirmation_required')
+  assert.match(receipt.message, /patronus_reveal_pii/)
+
+  let armed: unknown
+  const asked: any = await handleHook('claude', 'PreToolUse', reveal({ permission_mode: 'default' }), {}, async (_c, request) => {
+    armed = request
+    return { scan_id: SCAN, status: 'armed', counts: { email: 3, ip_address: 2 } }
+  })
+  assert.deepEqual(armed, { method: 'arm_reveal', scanId: SCAN, grantId: GRANT })
+  assert.equal(asked.hookSpecificOutput.permissionDecision, 'ask')
+  assert.equal(asked.hookSpecificOutput.permissionDecisionReason,
+    'Patronus: Reveal 3 email addresses and 2 IP addresses from this result to the AI agent once? The values will be sent to its model. Deny to keep them masked.')
+
+  const delivered = await claudeTool('patronus_reveal_pii', { scan_id: SCAN, grant_id: GRANT }, async (_c, request) => {
+    assert.deepEqual(request, { method: 'reveal', scanId: SCAN, grantId: GRANT })
+    return { scan_id: SCAN, status: 'redacted', result: 'mail ada@example.com', disclosure: { authorized_pii_types: ['email'], user_confirmed: true } }
+  })
+  assert.equal(delivered.isError, false)
+  assert.equal(JSON.parse(delivered.content[0]!.text).disclosure.user_confirmed, true)
+})
+
+test('PII disclosure is denied without a prompting permission mode and never armed', async () => {
+  for (const permission_mode of ['bypassPermissions', 'dontAsk', 'auto', undefined]) {
+    const result: any = await handleHook('claude', 'PreToolUse', reveal(permission_mode ? { permission_mode } : {}), {}, async () => assert.fail('must not arm'))
+    assert.equal(result.hookSpecificOutput.permissionDecision, 'deny')
+    assert.equal(JSON.parse(result.hookSpecificOutput.permissionDecisionReason).status, 'disclosure_unavailable')
+  }
+  const stale: any = await handleHook('claude', 'PreToolUse', reveal({ permission_mode: 'default' }), {}, async () => ({ scan_id: SCAN, status: 'disclosure_unavailable' }))
+  assert.equal(stale.hookSpecificOutput.permissionDecision, 'deny')
+})
+
+test('PII disclosure rejects model-supplied confirmation and unknown types before the broker', async () => {
+  for (const args of [{ scan_id: SCAN, reveal_pii: ['email'], confirmed: true }, { scan_id: SCAN, reveal_pii: ['password'] }, { scan_id: SCAN, reveal_pii: [] }]) {
+    const result = await claudeTool('patronus_read_redacted', args, async () => assert.fail('must not contact the broker'))
+    assert.equal(result.isError, true)
+    assert.equal(JSON.parse(result.content[0]!.text).status, 'invalid_arguments')
+  }
+  const result = await claudeTool('patronus_reveal_pii', { scan_id: SCAN, grant_id: GRANT, user_confirmed: true }, async () => assert.fail('must not contact the broker'))
+  assert.equal(JSON.parse(result.content[0]!.text).status, 'invalid_arguments')
+})
+
+test('Codex arms a disclosure before its approval prompt and delivers it only from the result hook', async () => {
+  const requests: unknown[] = []
+  const rpc = async (_c: unknown, request: any): Promise<any> => {
+    requests.push(request)
+    if (request.method === 'prepare_reveal') return { scan_id: SCAN, status: 'confirmation_required', grant_id: GRANT, counts: { email: 1 }, next_tool: 'patronus_reveal_pii' }
+    if (request.method === 'arm_reveal') return { scan_id: SCAN, status: 'armed', counts: { email: 1 } }
+    return { scan_id: SCAN, status: 'redacted', result: 'mail ada@example.com', disclosure: { authorized_pii_types: ['email'], user_confirmed: true } }
+  }
+  const offer: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', { tool_name: 'mcp__patronus__patronus_read_redacted', tool_input: { scan_id: SCAN, reveal_pii: ['email'] } }), {}, rpc)
+  assert.equal(offer.hookSpecificOutput.permissionDecision, 'deny')
+  assert.equal(JSON.parse(offer.hookSpecificOutput.permissionDecisionReason).status, 'confirmation_required')
+
+  const tool = { tool_name: 'mcp__patronus__patronus_reveal_pii', tool_input: { scan_id: SCAN, grant_id: GRANT } }
+  const armed: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', { ...tool, permission_mode: 'default' }), {}, rpc)
+  // No permissionDecision: the call proceeds to Codex's own approval prompt.
+  assert.equal(armed.hookSpecificOutput.permissionDecision, undefined)
+  assert.match(armed.systemMessage, /Reveal 1 email address/)
+  const bypass: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', { ...tool, permission_mode: 'bypassPermissions' }), {}, rpc)
+  assert.equal(bypass.hookSpecificOutput.permissionDecision, 'deny')
+
+  const delivered: any = await handleHook('codex', 'PostToolUse', input('PostToolUse', { ...tool, tool_response: { content: [{ type: 'text', text: 'placeholder' }] } }), {}, rpc)
+  assert.equal(delivered.decision, 'block')
+  assert.equal(JSON.parse(delivered.reason).result, 'mail ada@example.com')
+  assert.deepEqual(requests.map((r: any) => r.method), ['prepare_reveal', 'arm_reveal', 'reveal'])
+})
+
+test('a failing disclosure hook denies instead of letting the call skip the dialog', async () => {
+  const result: any = await handleHook('claude', 'PreToolUse', reveal({ permission_mode: 'default' }), {}, async () => { throw Error('broker down') })
+  assert.equal(result.hookSpecificOutput.permissionDecision, 'deny')
+})

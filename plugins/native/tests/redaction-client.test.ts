@@ -59,3 +59,47 @@ for (const host of ['codex', 'claude'] as const) {
     }
   })
 }
+
+async function disclosureFixture(responses: unknown[]) {
+  const root = await mkdtemp(join(tmpdir(), 'patronus-disclosure-client-'))
+  const executable = join(root, 'scanner.mjs')
+  await writeFile(executable, `#!${process.execPath}
+import { createInterface } from 'node:readline';
+const responses = ${JSON.stringify(responses)};
+let calls = 0;
+createInterface({input:process.stdin}).on('line', line => {
+  const request = JSON.parse(line);
+  process.stdout.write(JSON.stringify({id:request.id,result:responses[Math.min(calls++, responses.length - 1)]})+'\\n');
+});
+`, { mode: 0o700 })
+  const client = new LocalClient({ executable, stateDir: join(root, 'state') })
+  return { client, async close() { await client.close(); await rm(root, {recursive:true,force:true}) } }
+}
+
+test('disclosure offers carry only fixed types and counts', async () => {
+  const scan_id = 'a'.repeat(32)
+  const grant_id = 'b'.repeat(32)
+  const valid = await disclosureFixture([{ scan_id, status: 'confirmation_required', grant_id, counts: { email: 2 }, expires_in_seconds: 300 }])
+  try {
+    assert.deepEqual(await valid.client.prepareDisclosure({ session: 's'.repeat(32), scan_id, reveal_pii: ['email'] }),
+      { scan_id, status: 'confirmation_required', grant_id, counts: { email: 2 }, expires_in_seconds: 300 })
+  } finally { await valid.close() }
+  const smuggled = await disclosureFixture([{ scan_id, status: 'confirmation_required', grant_id, counts: { email: 2 }, expires_in_seconds: 300, result: 'ada@example.com' }])
+  try {
+    await assert.rejects(smuggled.client.prepareDisclosure({ session: 's'.repeat(32), scan_id, reveal_pii: ['email'] }), /invalid response/)
+  } finally { await smuggled.close() }
+})
+
+test('disclosed reads require the confirmation marker', async () => {
+  const scan_id = 'a'.repeat(32)
+  const params = { session: 's'.repeat(32), scan_id, grant_id: 'b'.repeat(32) }
+  const disclosure = { authorized_pii_types: ['email'], user_confirmed: true }
+  const f = await disclosureFixture([{ scan_id, status: 'redacted', result: 'ada@example.com', disclosure }])
+  try {
+    assert.deepEqual(await f.client.readDisclosed(params), { scan_id, status: 'redacted', result: 'ada@example.com', disclosure })
+  } finally { await f.close() }
+  const unmarked = await disclosureFixture([{ scan_id, status: 'redacted', result: 'ada@example.com' }])
+  try {
+    await assert.rejects(unmarked.client.readDisclosed(params), /invalid response/)
+  } finally { await unmarked.close() }
+})

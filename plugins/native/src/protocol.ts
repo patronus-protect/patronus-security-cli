@@ -17,6 +17,7 @@ type Event = {
   status?: string
   duration_ms?: number
   payload_hash?: string
+  pii_types?: string[]
   hook_event?: string
   decision?: HookTrace['decision']
   outcome?: HookTrace['outcome']
@@ -26,7 +27,7 @@ type Event = {
 
 /** What one hook invocation decided; filled in by handleHook as it runs. */
 export type HookTrace = {
-  decision: 'allow' | 'deny' | 'replace' | 'stop' | 'warn'
+  decision: 'allow' | 'ask' | 'deny' | 'replace' | 'stop' | 'warn'
   outcome: 'ok' | 'degraded' | 'inactive' | 'error' | 'override' | 'disabled'
   error_code?: string
   scans: number
@@ -66,6 +67,9 @@ function details(request: BrokerRequest) {
   if (request.method === 'check') return { direction: 'status' as const, tool: 'patronus_check_result', payload: { scan_id: request.scanId } }
   if (request.method === 'read_redacted') return { direction: 'status' as const, tool: 'patronus_read_redacted', payload: { scan_id: request.scanId } }
   if (request.method === 'read_static_redacted') return { direction: 'status' as const, tool: 'patronus_read_redacted', payload: { file_id: request.fileId } }
+  // Disclosure events record the requested types and the grant, never values.
+  if (request.method === 'prepare_reveal') return { direction: 'status' as const, tool: 'patronus_read_redacted', payload: { scan_id: request.scanId, reveal_pii: request.types } }
+  if (request.method === 'arm_reveal' || request.method === 'reveal') return { direction: 'status' as const, tool: request.method === 'reveal' ? 'patronus_reveal_pii' : 'patronus_reveal_pii.arm', payload: { scan_id: request.scanId, grant_id: request.grantId } }
   return undefined
 }
 
@@ -87,6 +91,7 @@ export async function recordProtocolScan(config: BrokerConfig, request: BrokerRe
     direction: item.direction,
     tool_name: item.tool,
     payload_hash: hash(item.payload),
+    ...(request.method === 'prepare_reveal' ? { pii_types: request.types } : {}),
   }
   try {
     const result = await run()

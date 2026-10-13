@@ -27,7 +27,8 @@ node examples/n8n/verify.mjs      # terminal 3: run all cases
 ```
 
 `setup` installs the node exactly like a community package (`npm pack` of
-`plugins/automations/n8n` installed into `~/.n8n/nodes` of `tmp/n8n-home`). n8n is
+`plugins/automations/n8n` installed into `~/.n8n/nodes` of the n8n home in
+`~/.cache/patronus-automation-examples`; `PATRONUS_EXAMPLES_HOME` overrides the location). n8n is
 installed without native build scripts; `sqlite3` is rebuilt and the expression engine
 is set to `legacy`, because `isolated-vm` does not compile on Node 25.
 

@@ -125,6 +125,9 @@ export function mapClaude(event: string, decision: HookDecision, input?: HookInp
     hookSpecificOutput: { hookEventName: event, additionalContext: decision.context ?? decision.text },
   }
   if (event === 'UserPromptSubmit') return { decision: 'block', reason: promptBlockReason(decision.text) }
+  if (event === 'PreToolUse' && decision.kind === 'ask') {
+    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: decision.text } }
+  }
   if (event === 'PreToolUse') {
     return {
       hookSpecificOutput: {

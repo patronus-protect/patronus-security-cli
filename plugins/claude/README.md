@@ -34,7 +34,7 @@ Restart Claude Code after installation. Try:
 | --- | --- |
 | `SessionStart` | Loads the plugin lifecycle for the chat. The scanner starts lazily with the first protected event. |
 | `UserPromptSubmit` | Scans user-authored strings and text blocks before the model continues. |
-| `PreToolUse` | Intercepts only Patronus receipt-status, redaction and explicit scan operations. Ordinary tool requests are not scanned. |
+| `PreToolUse` | Intercepts only Patronus receipt-status, redaction and explicit scan operations, and asks the user to approve a selective PII disclosure. Ordinary tool requests are not scanned. |
 | `PostToolUse` | Scans supported raw strings, text blocks, terminal output and text-file content returned by tools. |
 | `PostToolUseFailure` | Scans the error text exposed by a failed tool result. |
 | `SessionEnd` | Closes the session runtime and releases private state. |

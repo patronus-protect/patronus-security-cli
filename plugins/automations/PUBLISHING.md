@@ -7,12 +7,12 @@ published package or listing; see the [README](README.md).
 
 | Platform | Distribution | Status |
 | --- | --- | --- |
-| n8n self-hosted | npm package `n8n-nodes-patronus` | Package verified on n8n 2.42.4; npm publication pending (official npm account) |
-| n8n Cloud | n8n-verified community node | Requires npm publication with provenance, then n8n verification |
+| n8n self-hosted | npm package `n8n-nodes-patronus` | `0.1.1` on npm with provenance; passes `@n8n/scan-community-package` |
+| n8n Cloud | n8n-verified community node | Waiting for n8n verification (Creator Portal) |
 | Make | Patronus custom app, invite link, then Make app review | Verified in a test organization; official app, invite link and review pending |
 | Zapier | Private integration invite link, then public listing | Verified as private integration 1.0.0 in a test account; official integration and review pending |
-| Dify | `.difypkg` release asset, later marketplace | Release asset prepared; not tested on a Dify host |
-| Activepieces | `.tgz` release asset, later community catalogue | Release asset prepared; not tested on an Activepieces host |
+| Dify | `.difypkg` release asset, later marketplace | In the `automation-v0.1.1` release; not tested on a Dify host |
+| Activepieces | npm `@patronus-protect/piece-patronus`, `.tgz` release asset | `0.1.1` on npm with provenance; not tested on an Activepieces host |
 
 Submission texts, review answers and test instructions are in [`listing/`](listing/README.md).
 

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -11,6 +12,12 @@ try {
   const files = process.argv.length > 2 ? process.argv.slice(2) : available
   if (files.some(name => !available.includes(name))) throw Error('Unknown native test file.')
   if (files.includes('broker.test.ts')) {
+    // The broker only starts an absolute scanner path; default to this checkout's build like CI does.
+    if (!process.env.PATRONUS_TEST_SCANNER) {
+      const built = ['release', 'debug'].map(profile => resolve(root, '../../target', profile, 'patronus-security-scanner')).find(path => existsSync(path))
+      if (!built) throw Error('Native broker tests need a scanner: run cargo build, or set PATRONUS_TEST_SCANNER to an absolute scanner path.')
+      process.env.PATRONUS_TEST_SCANNER = built
+    }
     const requirement = 'Native broker tests require Unix sockets and process inspection. Run with local host permissions; a restricted sandbox cannot exercise the broker.'
     if (process.platform === 'darwin') {
       const probe = spawnSync('/bin/ps', ['-p', String(process.pid), '-o', 'lstart='], { encoding: 'utf8', timeout: 2000 })

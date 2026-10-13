@@ -4,11 +4,14 @@
 //   node examples/make/run.mjs verify
 // Reads MAKE_API_TOKEN, MAKE_ZONE (default eu1.make.com) and MAKE_TEAM_ID from the environment.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 const { positionals, values: args } = parseArgs({ allowPositionals: true, options: {
   connection: { type: 'string' }, flow: { type: 'string', default: 'all' }, only: { type: 'string' },
-  state: { type: 'string', default: new URL('../../../../tmp/make-examples.json', import.meta.url).pathname },
+  // Scenario and data store ids live in the user cache, never inside the repository.
+  state: { type: 'string', default: join(process.env.PATRONUS_EXAMPLES_HOME ?? join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'patronus-automation-examples'), 'make-examples.json') },
   report: { type: 'string' },
 } });
 const zone = process.env.MAKE_ZONE ?? 'eu1.make.com';
@@ -67,7 +70,7 @@ async function deploy() {
     state[flow] = id;
     console.log(`deployed ${flow} as scenario ${id}`);
   }
-  await mkdir(new URL('../../../../tmp/', import.meta.url), { recursive: true });
+  await mkdir(dirname(args.state), { recursive: true });
   await writeFile(args.state, `${JSON.stringify(state, null, 2)}\n`);
 }
 

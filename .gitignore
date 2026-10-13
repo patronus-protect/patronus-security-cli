@@ -36,6 +36,7 @@ __pycache__/
 !/docs/licensing.md
 !/docs/output-format.md
 !/docs/privacy.md
+!/docs/runtime-flows.md
 !/docs/runtime-text-contract.md
 !/docs/threat-model.md
 /plugins/**/*.evidence.json
@@ -54,6 +55,3 @@ node_modules/
 /plugins/codex-api/server/
 # Incomplete local integration containing generated artifacts only.
 /plugins/n8n/
-
-# Local test runtimes and credentials (n8n home, Make/Zapier state)
-tmp/

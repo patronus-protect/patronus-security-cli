@@ -4,7 +4,7 @@ import { handleMcp } from '../src/mcp.ts'
 
 test('Codex MCP exposes scan/status/redacted tools without session credentials', async () => {
   const response: any = await handleMcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
-  assert.deepEqual(response.result.tools.map((tool: any) => tool.name), ['patronus_check_result', 'patronus_read_redacted', 'patronus_scan'])
+  assert.deepEqual(response.result.tools.map((tool: any) => tool.name), ['patronus_check_result', 'patronus_read_redacted', 'patronus_reveal_pii', 'patronus_scan'])
   for (const tool of response.result.tools) {
     assert.equal(tool.inputSchema.additionalProperties, false)
     assert(!JSON.stringify(tool.inputSchema).includes('session'))
@@ -12,6 +12,7 @@ test('Codex MCP exposes scan/status/redacted tools without session credentials',
   }
   const redacted = response.result.tools.find((tool: any) => tool.name === 'patronus_read_redacted')
   assert.equal(redacted.inputSchema.required, undefined)
+  assert.equal(redacted.inputSchema.properties.reveal_pii.type, 'array')
   const scan = response.result.tools.find((tool: any) => tool.name === 'patronus_scan')
   assert.match(scan.description, /URL and MCP-server audits currently always use the Patronus Security API/)
 })
@@ -41,4 +42,16 @@ test('failed static audit fallback is degraded but does not block continuation',
   assert.equal(response.result.isError, false)
   assert.match(response.result.content[0].text, /protection is degraded/)
   assert(!JSON.stringify(response).includes('https://example.org/'))
+})
+
+test('Claude MCP offers selective PII disclosure only through a separate approval tool', async () => {
+  const session = { host: 'claude' as const, cwd: '/private/tmp', scan: async () => ({}) }
+  const response: any = await handleMcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, session)
+  const names = response.result.tools.map((tool: any) => tool.name)
+  assert(names.includes('patronus_reveal_pii'))
+  const redacted = response.result.tools.find((tool: any) => tool.name === 'patronus_read_redacted')
+  assert.equal(redacted.inputSchema.properties.reveal_pii.items.enum[0], 'email')
+  const revealTool = response.result.tools.find((tool: any) => tool.name === 'patronus_reveal_pii')
+  assert.deepEqual(revealTool.inputSchema.required, ['scan_id', 'grant_id'])
+  assert(!JSON.stringify(revealTool.inputSchema).includes('confirm'))
 })
