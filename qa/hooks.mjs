@@ -244,7 +244,9 @@ async function hostSuites() {
   const flows = e2e?.results ?? []
   out.codex = { pass: flows.filter(flow => flow.status === 'PASS').length, fail: flows.filter(flow => flow.status !== 'PASS').length, code: codex.code, ms: codex.ms,
     tail: (codex.stdout + codex.stderr).split('\n').slice(-30).join('\n') }
-  return { suites: out, events: [...await journal(join(sandbox, 'claude-suite')), ...await journal(join(sandbox, 'codex-suite'))] }
+  // The suites build their own isolated environments and deliberately simulate outages, so their
+  // journals are neither reachable nor representative; they count as pass/fail only.
+  return { suites: out }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -333,9 +335,9 @@ let metrics = {}
 try {
   const { rows, events: replayEvents, coldStart } = await replay()
   const detection = detectionMetrics(rows, coldStart)
-  const { suites, events: suiteEvents } = options.quick ? { suites: {}, events: [] } : await hostSuites()
+  const { suites } = options.quick ? { suites: {} } : await hostSuites()
   const liveRun = options.live ? await live() : undefined
-  const hookStats = hookMetrics([...replayEvents, ...suiteEvents, ...(liveRun?.events ?? [])])
+  const hookStats = hookMetrics([...replayEvents, ...(liveRun?.events ?? [])])
   const previous = await previousMetrics('hooks')
   evaluate({ detection, hookStats, suites, liveRun, previous: previous?.ark_level === arkLevel ? previous : undefined })
   metrics = { ark_level: arkLevel, detection, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),

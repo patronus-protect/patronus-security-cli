@@ -34,9 +34,13 @@ for (const [host, [command, variable]] of Object.entries(hostCommands)) {
   const [a, b] = [semver(installed), semver(expected)]
   const drift = a[0] !== b[0] ? 'major' : a[1] !== b[1] ? 'minor' : a[2] !== b[2] ? 'patch' : 'none'
   check(`${host} CLI matches release pin`, drift === 'none' || drift === 'patch', `${installed} vs pinned ${expected}`)
-  if (drift === 'major' || drift === 'minor')
+  const newer = a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+  if ((drift === 'major' || drift === 'minor') && newer > 0)
     findings.push(finding('integrations', drift === 'major' ? 'high' : 'medium', `host-drift:${host}:${expected}`, `${host} ${installed} is newer than the tested release pin ${expected}`,
       { metric: { installed, pinned: expected }, suggestion: `Run the hook QA (qa/hooks.mjs) against ${host} ${installed}; if it passes, bump ${variable} in .github/release-host-versions.env.` }))
+  else if ((drift === 'major' || drift === 'minor') && newer < 0)
+    findings.push(finding('qa-env', 'low', `host-outdated:${host}`, `${host} ${installed} on the QA machine is older than the release pin ${expected}`,
+      { metric: { installed, pinned: expected }, suggestion: `Update ${host} on the QA machine so the hook QA tests what users get.` }))
 }
 
 // Plugin manifests must agree with the CLI version.
@@ -139,6 +143,9 @@ if (key) {
   const init = await timed(`${control}/api/mcp`, { method: 'POST', headers: auth,
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'patronus-qa', version: '1' } } }) })
   const session = init.response?.headers.get('mcp-session-id')
+  // The MCP lifecycle requires the initialized notification before any further request.
+  await timed(`${control}/api/mcp`, { method: 'POST', headers: { ...auth, ...(session ? { 'mcp-session-id': session } : {}) },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) })
   const list = await timed(`${control}/api/mcp`, { method: 'POST', headers: { ...auth, ...(session ? { 'mcp-session-id': session } : {}) },
     body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) })
   const tools = [...(list.body ?? '').matchAll(/"name"\s*:\s*"([^"]+)"/g)].map(match => match[1])
