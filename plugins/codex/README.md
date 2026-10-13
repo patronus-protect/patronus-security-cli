@@ -72,6 +72,24 @@ Scheduled tasks (routines) can use skills and plugins. A scoped workflow could p
 
 See OpenAI's [submission requirements](https://developers.openai.com/plugins/deploy/submission), [sidebar extension guide](https://developers.openai.com/plugins/build/extensions#sidebar-apps), and [hook reference](https://learn.chatgpt.com/docs/hooks) for the current distribution and host boundaries.
 
+## Degraded or inactive messages
+
+Unless a message says the content was scanned locally, it was not scanned and remains unverified. Scanner and integration failures name their public reason in parentheses. Commands below are `patronus-security-scanner` subcommands.
+
+| Message or reason | Cause | Fix |
+| --- | --- | --- |
+| `Patronus protection is inactive for this content` with `Check:` and `Repair:` commands | No scan result came back and no cause was reported: the plugin is disabled or its scanner is missing or broken. | `integration codex status --format json`, then `integration codex enable`, then ask the agent to run `probe` |
+| `Patronus is not signed in to the API`, `Your Patronus login has expired`, `The Patronus API rejected the saved login` | API scanning needs a valid login. If the message says `scanned locally instead`, the content was still scanned. | `auth login` |
+| `Patronus API usage limit reached` | The account's usage or rate limit is exhausted; the message gives the seconds until the API is available again. | `auth usage`; wait for the reset or raise the plan at https://control.patronus.studio/ |
+| `api_timeout`, `api_unavailable`, `api_invalid_response`, `api_request_rejected` | The Patronus API did not answer, could not be reached or rejected the request. | Check connectivity and `auth status --check`, then retry |
+| `broker_unavailable`, `runtime_start_failed`, `scanner_connection_lost`, `invalid_scanner_response`, `hook_input_invalid`, `hook_error` | The local integration (broker, scanner process or hook) failed. | `integration codex status --format json`, then `integration codex enable`, then ask the agent to run `probe` |
+| `runtime_version_mismatch` | The installed CLI and the plugin are different releases. | `maintenance update`, then `integration codex update`, and restart |
+| `configuration_unavailable` | The scanner configuration is invalid or unreadable. | `config print --format json` and fix the reported file |
+| `scan_timeout`, `payload_too_large`, `unsupported_content`, `unsupported_payload`, `invalid_chunking` | The content is too large, too slow to scan or in an unsupported shape. | Raise `scan_timeout_ms` or `max_payload_bytes` ([configuration](../../docs/configuration.md)) or treat the content as unverified |
+| `local_scanner_error`, `scanner_crashed`, `incomplete_classification`, `invalid_classification`, `invalid_evidence_span` | The local scanner or a classifier failed on this content. | `assets prepare` for L2/L3 profiles; if it repeats, report it with `support-us` |
+| `hook_event_unsupported` | Codex does not pass failed tool output to hooks. | Expected; treat that output as unverified |
+| `The Patronus remote audit ...` or `... static audit ...` | An explicitly requested URL, MCP or repository audit did not complete. | Follow the message: `auth login`, `auth usage`, a public HTTPS target, or retry later |
+
 ## Manage the integration
 
 Open `patronus-security-scanner dashboard` to review activity and change policy. After an update, restart Codex so new tasks load the current hooks and skills.
