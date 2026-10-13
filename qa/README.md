@@ -15,7 +15,7 @@ Reports are written to `~/.patronus-qa/runs/<date>/<area>.json`, and the metrics
 
 1. QA API key: create `~/.patronus-qa/env` with `PATRONUS_QA_API_KEY=...`, then run `chmod 600 ~/.patronus-qa/env`.
 2. QA account for live hook runs: `cargo build --release`, then run `PATRONUS_DATA_DIR=$HOME/.patronus-qa/data target/release/patronus-security-scanner auth login` from the repository root, using the QA account. The QA scripts use this repository build, so no global install is needed.
-3. Dashboard: sign in the QA account once in Claude's built-in browser. The routine never enters passwords.
+3. Dashboard: keep the QA account signed in to control.patronus.studio in Chrome (Claude in Chrome). The routine never enters passwords.
 4. `gh auth status` must have access to this repository.
 5. Ark models for the production profile (L3, ~390 MB): write `~/.patronus-qa/scanner-l3.toml` with `max_level = "l3"` and `model_dir = "$HOME/.patronus-qa/models"`, then run `target/release/patronus-security-scanner assets prepare --config ~/.patronus-qa/scanner-l3.toml`. The hook QA uses L3 unless `PATRONUS_QA_ARK_LEVEL` says otherwise.
 

@@ -18,7 +18,7 @@ Parse `--areas` from the arguments (default `all` = hooks, integrations, sdk, dx
 | integrations | Follow `.claude/skills/qa-integrations/SKILL.md` |
 | sdk | `node qa/sdk.mjs` (deterministic), then review its findings |
 | dx | Follow `.claude/skills/qa-dx/SKILL.md` (docs, examples, SDK readability) |
-| dashboard | Follow `.claude/skills/qa-dashboard/SKILL.md` (control.patronus.studio) |
+| dashboard | Follow `.claude/skills/qa-dashboard/SKILL.md` (control.patronus.studio in Chrome) |
 
 Run the areas in the order above. One failing area must not stop the others.
 
