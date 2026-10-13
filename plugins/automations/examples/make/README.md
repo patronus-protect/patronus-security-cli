@@ -37,7 +37,8 @@ node examples/make/run.mjs deploy --connection <connection id>   # creates/updat
 node examples/make/run.mjs verify                                # runs all shared cases
 ```
 
-`run.mjs` keeps the scenario and data store ids in `tmp/make-examples.json` and updates
+`run.mjs` keeps the scenario and data store ids in
+`~/.cache/patronus-automation-examples/make-examples.json` (`PATRONUS_EXAMPLES_HOME` overrides) and updates
 existing scenarios on later deploys.
 
 ## Make platform notes found while testing

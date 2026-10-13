@@ -55,5 +55,3 @@ node_modules/
 # Incomplete local integration containing generated artifacts only.
 /plugins/n8n/
 
-# Local test runtimes and credentials (n8n home, Make/Zapier state)
-tmp/

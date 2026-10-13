@@ -11,8 +11,10 @@ N8N_VERSION=2.42.4
 here="$(cd "$(dirname "$0")" && pwd)"
 automations="$(cd "$here/../.." && pwd)"
 repo="$(cd "$automations/../.." && pwd)"
-runtime="${N8N_RUNTIME_DIR:-$repo/tmp/n8n-runtime}"
-export N8N_USER_FOLDER="${N8N_USER_FOLDER:-$repo/tmp/n8n-home}"
+# Local runtime and state live in the user cache, never inside the repository.
+state="${PATRONUS_EXAMPLES_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/patronus-automation-examples}"
+runtime="${N8N_RUNTIME_DIR:-$state/n8n-runtime}"
+export N8N_USER_FOLDER="${N8N_USER_FOLDER:-$state/n8n-home}"
 export N8N_DIAGNOSTICS_ENABLED=false N8N_PERSONALIZATION_ENABLED=false N8N_VERSION_NOTIFICATIONS_ENABLED=false
 # The default "vm" expression engine needs the native isolated-vm build skipped below.
 export N8N_EXPRESSION_ENGINE="${N8N_EXPRESSION_ENGINE:-legacy}"
@@ -78,6 +80,6 @@ import_workflows() {
 case "${1:-}" in
   setup) install_runtime; install_node_package; import_credentials; import_workflows ;;
   start) exec "$runtime/node_modules/.bin/n8n" start ;;
-  stub) LLM_STUB_LOG="${LLM_STUB_LOG:-$repo/tmp/llm-stub/llm-calls.jsonl}" exec node "$automations/examples/llm-stub/server.mjs" ;;
+  stub) LLM_STUB_LOG="${LLM_STUB_LOG:-$state/llm-stub/llm-calls.jsonl}" exec node "$automations/examples/llm-stub/server.mjs" ;;
   *) echo "usage: $0 setup|start|stub" >&2; exit 2 ;;
 esac
