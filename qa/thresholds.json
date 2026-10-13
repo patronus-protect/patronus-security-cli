@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "min_success_rate": 0.98,
+    "max_error_rate": 0.01,
+    "max_timeout_rate": 0,
+    "max_p95_ms": { "PostToolUse": 8000, "UserPromptSubmit": 8000, "PreToolUse": 1000, "SessionStart": 500, "SessionEnd": 2000, "Stop": 2000 },
+    "min_recall": { "injection": 0.9, "pii": 0.95, "dlp": 0.9 },
+    "max_false_positive_rate": 0.05,
+    "max_message_chars": 600,
+    "max_cold_start_ms": 3000,
+    "regression_ratio": 1.5
+  },
+  "sdk": {
+    "max_quickstart_seconds": 120
+  },
+  "integrations": {
+    "host_version_drift": "minor"
+  }
+}
