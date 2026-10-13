@@ -14,7 +14,7 @@ Reports are written to `~/.patronus-qa/runs/<date>/<area>.json`, and the metrics
 ## One-time setup
 
 1. QA API key: create `~/.patronus-qa/env` with `PATRONUS_QA_API_KEY=...`, then run `chmod 600 ~/.patronus-qa/env`.
-2. QA account for live hook runs: run `PATRONUS_DATA_DIR=~/.patronus-qa/data patronus-security-scanner auth login`, using the QA account.
+2. QA account for live hook runs: `cargo build`, then run `PATRONUS_DATA_DIR=$HOME/.patronus-qa/data target/debug/patronus-security-scanner auth login` from the repository root, using the QA account. The QA scripts use this repository build, so no global install is needed.
 3. Dashboard: sign in the QA account once in Claude's built-in browser. The routine never enters passwords.
 4. `gh auth status` must have access to this repository.
 

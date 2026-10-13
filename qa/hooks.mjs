@@ -251,7 +251,7 @@ async function hostSuites() {
 async function live() {
   if (!existsSync(join(qaData, 'auth/credentials.json'))) {
     findings.push(finding('hooks', 'medium', 'live-login-missing', 'QA account is not signed in for live hook runs',
-      { suggestion: `Run once: PATRONUS_DATA_DIR=${qaData} patronus-security-scanner auth login (with the QA account).` }))
+      { suggestion: `Run once from the repository root: PATRONUS_DATA_DIR=${qaData} target/debug/patronus-security-scanner auth login (with the QA account).` }))
     return undefined
   }
   const since = Date.now()
