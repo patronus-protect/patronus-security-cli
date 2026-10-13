@@ -103,6 +103,6 @@ const daysLeft = expiresAt ? Math.floor((expiresAt - Date.now()) / 86_400_000) :
 metrics.qa_login_days_left = daysLeft ?? null
 if (!check('QA data dir signed in', daysLeft !== undefined && daysLeft >= 3, daysLeft === undefined ? 'not signed in' : `${daysLeft} days left`))
   findings.push(finding('integrations', daysLeft !== undefined && daysLeft >= 0 ? 'low' : 'medium', 'qa-login-expiring', daysLeft === undefined ? 'QA account is not signed in' : `QA login expires in ${daysLeft} days`,
-  { suggestion: 'From the repository root: PATRONUS_DATA_DIR=$HOME/.patronus-qa/data target/debug/patronus-security-scanner auth login (QA account).' }))
+  { suggestion: 'From the repository root: PATRONUS_DATA_DIR=$HOME/.patronus-qa/data target/release/patronus-security-scanner auth login (QA account).' }))
 
 await report('integrations', { findings, metrics, checks }, options)

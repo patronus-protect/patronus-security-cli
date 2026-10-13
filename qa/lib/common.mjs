@@ -12,7 +12,9 @@ export const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../.
 export const qaHome = process.env.PATRONUS_QA_HOME ?? join(homedir(), '.patronus-qa')
 /** Data dir of the dedicated QA account (`PATRONUS_DATA_DIR=... patronus-security-scanner auth login`). */
 export const qaData = join(qaHome, 'data')
-export const scanner = process.env.PATRONUS_SCANNER_BIN ?? join(repository, 'target/debug/patronus-security-scanner')
+// Release build: a debug scanner is ~25x slower and makes every latency metric meaningless.
+export const scanner = process.env.PATRONUS_SCANNER_BIN ?? join(repository, 'target/release/patronus-security-scanner')
+if (!existsSync(scanner)) throw Error(`Scanner not found at ${scanner}; run cargo build --release first.`)
 export const thresholds = JSON.parse(readFileSync(join(repository, 'qa/thresholds.json'), 'utf8'))
 
 /** Loads KEY=value lines from ~/.patronus-qa/env without overriding the environment. */

@@ -25,7 +25,7 @@ Run the areas in the order above. One failing area must not stop the others.
 ## Setup
 
 1. Work from an up-to-date `main`: `git fetch origin && git switch main && git pull --ff-only`. If the tree is dirty, stop and report: another session is working here.
-2. Build what the scripts use: `cargo build -q` and `node plugins/native/scripts/build.mjs`.
+2. Build what the scripts use: `cargo build --release -q` (the QA always measures the release scanner; debug builds are ~25x slower) and `node plugins/native/scripts/build.mjs`.
 3. Today's run directory is `~/.patronus-qa/runs/<YYYY-MM-DD>/`. All scripts write their `<area>.json` there.
 4. Secrets come from `~/.patronus-qa/env` (`PATRONUS_QA_API_KEY`). Never print, log or paste the key anywhere, including issues and PRs.
 

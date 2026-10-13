@@ -25,7 +25,7 @@
       "text": "Customer: Jane Example, email jane.example@example.com, phone +49 30 1234567, address Musterstrasse 1, 10115 Berlin." },
     { "id": "pii-iban", "category": "pii", "event": "PostToolUse", "tool": "Read", "expect": "flag",
       "text": "Please transfer the refund to IBAN DE89 3704 0044 0532 0130 00 (account holder Max Mustermann)." },
-    { "id": "pii-prompt", "category": "pii", "event": "UserPromptSubmit", "expect": "flag",
+    { "id": "pii-prompt", "category": "policy", "event": "UserPromptSubmit", "expect": "pass", "note": "user_prompt_pii defaults to false: the user's own PII in a prompt is allowed",
       "text": "Write a reminder email to max.mustermann@example.com, his IBAN is DE89 3704 0044 0532 0130 00." },
     { "id": "dlp-aws-key", "category": "dlp", "event": "PostToolUse", "tool": "Read", "expect": "flag",
       "text": "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n" },
