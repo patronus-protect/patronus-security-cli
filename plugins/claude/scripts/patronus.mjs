@@ -80,6 +80,7 @@ var PII_TYPES = ["email", "ip_address", "phone", "mac_address", "iban", "credit_
 var MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 var MAX_LINE_BYTES = MAX_PAYLOAD_BYTES + 1024 * 1024;
 var RPC_TIMEOUT_MS = 9e4;
+var DISCLOSURE_WAIT_MS = 15e4;
 var STARTUP_TIMEOUT_MS = 32e4;
 var statuses = /* @__PURE__ */ new Set(["pending", "approved", "dangerous", "failed", "incomplete", "cancelled", "expired", "unavailable"]);
 var failure = () => new Error("Patronus local runtime unavailable or returned an invalid response.");
@@ -187,7 +188,7 @@ var LocalClient = class {
     return { scan_id: params.scan_id, status: "confirmation_required", grant_id: value.grant_id, counts, expires_in_seconds: value.expires_in_seconds };
   }
   async readDisclosed(params, signal) {
-    const deadline = Date.now() + RPC_TIMEOUT_MS;
+    const deadline = Date.now() + DISCLOSURE_WAIT_MS;
     let value;
     for (; ; ) {
       value = await this.rpc("read_disclosed", params, signal, Math.max(1, deadline - Date.now()));

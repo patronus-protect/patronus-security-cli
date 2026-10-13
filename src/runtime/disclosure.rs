@@ -96,7 +96,7 @@ pub fn disclose(
         return None;
     }
     let (view, visible) = build_view(payload, original, &revealed)?;
-    verify(analyzer, &view, &visible, chunking, deadline).then_some(view)
+    verify(analyzer, &view, &visible, authorized, chunking, deadline).then_some(view)
 }
 
 /// Masks every finding except the revealed spans. Returns the view and, per
@@ -164,12 +164,27 @@ fn verify(
     analyzer: &dyn ContentAnalyzer,
     view: &Value,
     visible: &[Vec<Range>],
+    authorized: &BTreeSet<PiiType>,
     chunking: &ChunkingConfig,
     deadline: Instant,
 ) -> bool {
     let result = analyze_payload(analyzer, view, chunking, deadline);
     result.status == JobStatus::Completed
         && result.coverage.complete
+        // The re-scan must type the revealed text as exactly the confirmed PII types.
+        && result
+            .disclosure
+            .iter()
+            .all(|s| s.pii_type.is_some_and(|t| authorized.contains(&t)))
+        && result.findings.iter().filter(|f| f.category == "pii").all(|f| {
+            let spans: Vec<Range> = result
+                .disclosure
+                .iter()
+                .filter(|s| s.field_id == f.field_id)
+                .map(|s| (s.start_byte, s.end_byte))
+                .collect();
+            covered((f.start_byte, f.end_byte), &union(spans))
+        })
         && result.findings.iter().all(|f| {
             f.category == "pii"
                 && visible
@@ -342,5 +357,119 @@ mod tests {
         assert_eq!(view, "Grüße 🔑 [REDACTED], mail ä@b.de");
         let (s, e) = visible[0][0];
         assert_eq!(&view[s..e], "ä@b.de");
+    }
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::*;
+    use crate::ark::{AnalysisOutcome, ChunkInput, Evidence, FinalClassification};
+    use crate::runtime::payload::analyze_payload;
+    use serde_json::json;
+
+    /// Reports one PII classification at `level`, labelling every email-shaped word `label`.
+    struct Analyzer {
+        level: &'static str,
+        label: &'static str,
+    }
+
+    impl ContentAnalyzer for Analyzer {
+        fn prepare(&mut self) -> crate::error::Result<()> {
+            Ok(())
+        }
+        fn analyze(&self, input: ChunkInput<'_>) -> crate::error::Result<AnalysisOutcome> {
+            let evidence: Vec<Evidence> = input
+                .content
+                .split(' ')
+                .scan(0, |at, word| {
+                    let start = *at;
+                    *at += word.len() + 1;
+                    Some((start, word))
+                })
+                .filter(|(_, word)| word.contains('@'))
+                .map(|(start, word)| Evidence {
+                    start,
+                    end: start + word.len(),
+                    label: self.label.into(),
+                    confidence: 1.0,
+                    line_start: 1,
+                    line_end: 1,
+                    text: None,
+                })
+                .collect();
+            Ok(AnalysisOutcome {
+                classifications: vec![FinalClassification {
+                    schema: "test",
+                    run_id: "r".into(),
+                    chunk_id: input.chunk_id.into(),
+                    file_id: input.file_id.into(),
+                    path: input.path.into(),
+                    category: "pii".into(),
+                    source: "test".into(),
+                    level: self.level.into(),
+                    terminal: true,
+                    matched: !evidence.is_empty(),
+                    label: if evidence.is_empty() { "benign" } else { "pii" }.into(),
+                    confidence: 1.0,
+                    decision: None,
+                    evidence,
+                    duration_ms: 0,
+                    warnings: vec![],
+                }],
+                failures: vec![],
+                degraded: false,
+                notice: None,
+            })
+        }
+    }
+
+    fn chunking() -> ChunkingConfig {
+        ChunkingConfig {
+            target_bytes: 65_536,
+            overlap_bytes: 2_048,
+            prefer_line_boundaries: true,
+        }
+    }
+
+    fn run(original: &Analyzer, verifier: &Analyzer) -> (ScanOutcome, Option<Value>) {
+        let payload = json!("mail ada@example.com now");
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        let outcome = analyze_payload(original, &payload, &chunking(), deadline);
+        let view = disclose(
+            verifier,
+            &payload,
+            &outcome,
+            &[PiiType::Email].into(),
+            &chunking(),
+            deadline,
+        );
+        (outcome, view)
+    }
+
+    #[test]
+    fn only_l1_evidence_is_revealable() {
+        let l3 = Analyzer {
+            level: "l3",
+            label: "EMAIL",
+        };
+        let (outcome, view) = run(&l3, &l3);
+        assert!(outcome.disclosure.is_empty());
+        assert!(view.is_none());
+    }
+
+    #[test]
+    fn a_re_scan_that_types_revealed_text_differently_rejects_the_view() {
+        let email = Analyzer {
+            level: "l1",
+            label: "EMAIL",
+        };
+        assert_eq!(
+            run(&email, &email).1,
+            Some(json!("mail ada@example.com now"))
+        );
+        for label in ["PHONE", "UNKNOWN_LABEL"] {
+            let other = Analyzer { level: "l1", label };
+            assert!(run(&email, &other).1.is_none(), "{label}");
+        }
     }
 }

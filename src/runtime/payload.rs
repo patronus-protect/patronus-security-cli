@@ -250,7 +250,8 @@ impl PayloadScan<'_> {
                 chunk_start + span.end,
                 span.confidence,
             );
-            if category == "pii" {
+            // Only exact L1 evidence is revealable; model-level spans stay locked.
+            if category == "pii" && classification.level == "l1" {
                 self.disclosure.push(DisclosureSpan {
                     field_id,
                     start_byte: chunk_start + span.start,

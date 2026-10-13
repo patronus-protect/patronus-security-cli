@@ -16,6 +16,7 @@ export interface LocalClientConfig {
 const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024
 const MAX_LINE_BYTES = MAX_PAYLOAD_BYTES + 1024 * 1024
 const RPC_TIMEOUT_MS = 90_000
+const DISCLOSURE_WAIT_MS = 150_000
 const STARTUP_TIMEOUT_MS = 320_000
 const statuses = new Set(['pending', 'approved', 'dangerous', 'failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
 const failure = () => new Error('Patronus local runtime unavailable or returned an invalid response.')
@@ -136,7 +137,9 @@ export class LocalClient implements RuntimeClient {
   }
 
   async readDisclosed(params: DisclosedParams, signal?: AbortSignal): Promise<DisclosedResult> {
-    const deadline = Date.now() + RPC_TIMEOUT_MS
+    // An approved grant cannot be retried, so wait out the runtime's own bound on the
+    // disclosure job (scan budget plus expiry grace) instead of the generic RPC timeout.
+    const deadline = Date.now() + DISCLOSURE_WAIT_MS
     let value: unknown
     for (;;) {
       value = await this.rpc('read_disclosed', params, signal, Math.max(1, deadline - Date.now()))

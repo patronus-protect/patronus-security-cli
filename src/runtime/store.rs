@@ -40,6 +40,8 @@ const REDACTION_TOOL: &str = "redaction";
 const DISCLOSURE_TOOL: &str = "disclosure";
 /// How long a disclosure offer waits for the host's approval dialog.
 const DISCLOSURE_GRANT_MS: i64 = 300_000;
+/// A disclosure job and its copy of the original expire this long after its deadline.
+const DISCLOSURE_JOB_GRACE_MS: i64 = 60_000;
 /// Settled grants are kept briefly so a replay gets a clear answer.
 const DISCLOSURE_TOMBSTONE_MS: i64 = 3_600_000;
 
@@ -780,7 +782,8 @@ impl Store {
                     params![
                         child,
                         deadline
-                            .saturating_add(DISCLOSURE_GRANT_MS)
+                            // Bounds a queued attempt, so a reader never waits past it.
+                            .saturating_add(DISCLOSURE_JOB_GRACE_MS)
                             .min(parent_expires)
                     ],
                 ))?;
