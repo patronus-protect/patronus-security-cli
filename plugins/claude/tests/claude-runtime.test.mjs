@@ -232,3 +232,33 @@ for (const remote of [
   assert.doesNotMatch(feedback, /protection is inactive|integration is inactive/i);
   assert.doesNotMatch(result.stderr, /SessionEnd.*failed|Hook cancelled/i);
 });
+
+// Selective PII disclosure: the hook's `ask` reaches Claude's permission dialog, answered here by
+// --permission-prompt-tool exactly as a user would. Patronus tools are pre-allowed, so only the
+// hook can cause the dialog.
+for (const [approval, permissionMode] of [['allow', 'default'], ['deny', 'default'], ['allow', 'bypassPermissions']]) {
+  test(`PII disclosure with ${approval} in ${permissionMode} mode`, { timeout: 200000 }, async () => {
+    const email = 'ada.reveal@example.com';
+    const phone = '202-555-0147';
+    const result = await runHost({
+      name: `runtime-reveal-${approval}-${permissionMode}`, tool: 'Bash', flow: 'reveal', mcp: true, approval, permissionMode,
+      sourceText: `Contact: ${email}, phone ${phone}.\n`, runtime: { responseWaitMs: 20000 }, timeout: 180000,
+      input: (_directory, source) => ({ command: `cat ${quote(source)}` }),
+    });
+    assert.equal(result.timedOut, false, result.directory);
+    assert.equal(result.exitCode, 0, result.directory);
+    const seen = JSON.stringify(result.messages);
+    assert.match(seen, /confirmation_required/, result.directory);
+    assert(!seen.includes(phone), result.directory);
+    const approvals = await readFile(join(result.directory, 'approvals.jsonl'), 'utf8').catch(() => '');
+    if (approval === 'allow' && permissionMode === 'default') {
+      assert.match(approvals, /patronus_reveal_pii/, result.directory);
+      assert(seen.includes(email), result.directory);
+      assert.match(seen, /user_confirmed/, result.directory);
+    } else {
+      assert(!seen.includes(email), result.directory);
+      if (permissionMode === 'bypassPermissions') assert.equal(approvals, '', result.directory);
+    }
+    console.log(JSON.stringify({ test: `claude-reveal-${approval}-${permissionMode}`, root: result.directory }));
+  });
+}

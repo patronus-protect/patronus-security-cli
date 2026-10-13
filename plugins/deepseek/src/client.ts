@@ -3,7 +3,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { accessSync, constants, realpathSync, existsSync } from 'node:fs'
 import { delimiter, isAbsolute, join, relative } from 'node:path'
-import type { JobParams, RedactedResult, RuntimeClient, RuntimeHello, ScanResult, SubmitParams } from './protocol.ts'
+import { PII_TYPES, type DisclosedParams, type DisclosedResult, type DisclosureOffer, type DisclosureParams, type JobParams, type PiiType, type RedactedResult, type RuntimeClient, type RuntimeHello, type ScanResult, type SubmitParams } from './protocol.ts'
 
 export type { JobParams, RedactedResult, RuntimeClient, RuntimeHello, ScanResult, SubmitParams } from './protocol.ts'
 export interface LocalClientConfig {
@@ -122,6 +122,33 @@ export class LocalClient implements RuntimeClient {
   }
 
   cancel(params: JobParams, signal?: AbortSignal): Promise<unknown> { return this.rpc('cancel', params, signal) }
+
+  async prepareDisclosure(params: DisclosureParams, signal?: AbortSignal): Promise<DisclosureOffer> {
+    const value = await this.rpc('prepare_disclosure', params, signal)
+    if (record(value) && value.status === 'unavailable' && value.scan_id === undefined) return { scan_id: params.scan_id, status: 'unavailable' }
+    if (!record(value) || value.scan_id !== params.scan_id || Object.hasOwn(value, 'result')) throw failure()
+    if (value.status === 'nothing_to_reveal') return { scan_id: params.scan_id, status: 'nothing_to_reveal' }
+    const counts = value.counts
+    if (value.status !== 'confirmation_required' || typeof value.grant_id !== 'string' || !/^[a-f0-9]{32}$/.test(value.grant_id) ||
+        !record(counts) || !Object.entries(counts).every(([key, count]) => (PII_TYPES as readonly string[]).includes(key) && Number.isSafeInteger(count) && Number(count) > 0) ||
+        !Number.isSafeInteger(value.expires_in_seconds)) throw failure()
+    return { scan_id: params.scan_id, status: 'confirmation_required', grant_id: value.grant_id, counts: counts as DisclosureOffer['counts'], expires_in_seconds: value.expires_in_seconds as number }
+  }
+
+  async readDisclosed(params: DisclosedParams, signal?: AbortSignal): Promise<DisclosedResult> {
+    const value = await this.rpc('read_disclosed', params, signal)
+    if (record(value) && value.status === 'unavailable' && value.scan_id === undefined) return { scan_id: params.scan_id, status: 'unavailable' }
+    if (!record(value) || value.scan_id !== params.scan_id) throw failure()
+    if (['disclosure_expired', 'disclosure_invalid', 'disclosure_unavailable'].includes(String(value.status)) && !Object.hasOwn(value, 'result')) {
+      return { scan_id: params.scan_id, status: value.status as DisclosedResult['status'] }
+    }
+    const disclosure = value.disclosure
+    if (value.status !== 'redacted' || !Object.hasOwn(value, 'result') || !record(disclosure) || disclosure.user_confirmed !== true ||
+        !Array.isArray(disclosure.authorized_pii_types) ||
+        !disclosure.authorized_pii_types.every(type => (PII_TYPES as readonly string[]).includes(type))) throw failure()
+    return { scan_id: params.scan_id, status: 'redacted', result: value.result as DisclosedResult['result'],
+      disclosure: { authorized_pii_types: disclosure.authorized_pii_types as PiiType[], user_confirmed: true } }
+  }
 
   close(): Promise<void> {
     if (this.closing) return this.closing

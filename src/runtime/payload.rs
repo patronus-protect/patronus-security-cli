@@ -7,9 +7,11 @@ use serde_json::Value;
 use crate::ark::{ChunkInput, ContentAnalyzer, FinalClassification, ScanNotice};
 use crate::chunk::text_ranges;
 use crate::config::ChunkingConfig;
-use crate::runtime::protocol::{JobStatus, PayloadCoverage, RuntimeFinding, ScanOutcome, Verdict};
+use crate::runtime::protocol::{
+    DisclosureSpan, JobStatus, PayloadCoverage, PiiType, RuntimeFinding, ScanOutcome, Verdict,
+};
 
-const REDACTED: &str = "[REDACTED]";
+pub(super) const REDACTED: &str = "[REDACTED]";
 
 pub fn analyze_payload(
     analyzer: &dyn ContentAnalyzer,
@@ -23,6 +25,7 @@ pub fn analyze_payload(
         deadline,
         coverage: PayloadCoverage::default(),
         findings: Vec::new(),
+        disclosure: Vec::new(),
         next_field: 0,
         input_tokens: 0,
         notice: None,
@@ -44,6 +47,11 @@ pub fn analyze_payload(
         scan.value(payload)
     };
     merge_findings(&mut scan.findings);
+    // Overlapping chunks report the same span more than once.
+    scan.disclosure
+        .sort_by_key(|s| (s.field_id, s.start_byte, s.end_byte, s.pii_type));
+    scan.disclosure.dedup();
+    let complete = result.is_ok();
     let (status, verdict, redacted, reason) = match result {
         Ok(redacted) => {
             scan.coverage.complete = true;
@@ -72,6 +80,7 @@ pub fn analyze_payload(
         redacted,
         reason,
         notice: scan.notice,
+        disclosure: if complete { scan.disclosure } else { vec![] },
     }
 }
 
@@ -86,6 +95,7 @@ struct PayloadScan<'a> {
     deadline: Instant,
     coverage: PayloadCoverage,
     findings: Vec<RuntimeFinding>,
+    disclosure: Vec<DisclosureSpan>,
     next_field: usize,
     input_tokens: usize,
     notice: Option<ScanNotice>,
@@ -240,6 +250,15 @@ impl PayloadScan<'_> {
                 chunk_start + span.end,
                 span.confidence,
             );
+            // Only exact L1 evidence is revealable; model-level spans stay locked.
+            if category == "pii" && classification.level == "l1" {
+                self.disclosure.push(DisclosureSpan {
+                    field_id,
+                    start_byte: chunk_start + span.start,
+                    end_byte: chunk_start + span.end,
+                    pii_type: PiiType::from_scanner_label(&span.label),
+                });
+            }
         }
         Ok(())
     }
@@ -250,10 +269,16 @@ fn valid_confidence(value: f64) -> bool {
 }
 
 pub(super) fn redact(text: &str, findings: &[RuntimeFinding]) -> String {
-    let mut spans: Vec<_> = findings
-        .iter()
-        .map(|finding| (finding.start_byte, finding.end_byte))
-        .collect();
+    redact_ranges(
+        text,
+        findings
+            .iter()
+            .map(|finding| (finding.start_byte, finding.end_byte))
+            .collect(),
+    )
+}
+
+pub(super) fn redact_ranges(text: &str, mut spans: Vec<(usize, usize)>) -> String {
     spans.sort_unstable();
     let mut result = String::new();
     let mut cursor = 0;

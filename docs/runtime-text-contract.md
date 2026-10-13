@@ -1,5 +1,7 @@
 # Runtime text security contract
 
+How each flow runs, with diagrams, is described in [runtime-flows.md](runtime-flows.md).
+
 Patronus runtime plugins protect **external text before it reaches the agent model**.
 Each enabled surface uses the same text boundary across supported hosts. Users may explicitly disable a surface or pause a chat through the trusted dashboard or CLI settings; disabled surfaces do not grant scan approval. The default enables all three surfaces:
 
@@ -68,6 +70,52 @@ behavior applies to the DeepSeek response gate and status tool. User prompts
 retain their existing policy.
 
 A finding without evidence spans covers the chunk that carried the verdict, not its whole field; every other chunk was classified on its own. `patronus_read_redacted` on a prompt-injection finding narrows it on this device only, never through the API: the region is halved, each half that is still flagged is halved again, and the middle half is tried once when an instruction crosses the cut. Each finding has its own scan budget. A narrowed result must scan clean in its region and in its whole field; otherwise that finding or field keeps its coarse redaction. The original is never released.
+
+### Selective PII disclosure
+
+A user can let the agent see selected PII types from one dangerous runtime
+result, once, in Claude Code, Codex and DeepSeek Harness. Static `file_id`s keep
+the masked view.
+
+1. `patronus_read_redacted` with `scan_id` and `reveal_pii` (for example
+   `["email", "ip_address"]`) returns `status=confirmation_required`, a
+   `grant_id` and counts per type. It never returns values.
+2. `patronus_reveal_pii` with `scan_id` and `grant_id` asks the user, naming the
+   counts: "Reveal 3 email addresses and 2 IP addresses from this result to the
+   AI agent once? The values will be sent to its model."
+3. Only an approved call returns `status=redacted` with the confirmed PII
+   visible and `disclosure={authorized_pii_types, user_confirmed: true}`.
+
+How each host asks the user:
+
+| Host | Approval | Delivery |
+| --- | --- | --- |
+| Claude Code | The PreToolUse hook arms the offer and returns `permissionDecision: "ask"` with the question. This forces Claude's permission dialog even when Patronus tools are pre-allowed. | The plugin's MCP server, only for an armed offer. |
+| Codex | `.mcp.json` sets `approval_mode = "prompt"` for `patronus_reveal_pii`; Codex's PreToolUse rejects `ask`. The hook arms the offer and shows the question as a notice before Codex's MCP approval prompt. | Codex's MCP process has no session, so the PostToolUse hook replaces the placeholder result. A denied call never reaches it. |
+| DeepSeek Harness | The tool calls the Harness approval seam with the question and acts only on `allowed-once`. `rejected`, `cancelled` and a missing answerer (`unavailable`) keep the mask. | The tool itself. |
+
+Model arguments never carry a confirmation: a `confirmed` or `user_confirmed`
+argument is rejected. In Claude and Codex the hook denies the call when the
+permission mode would skip the prompt (anything but `default`, `acceptEdits` or
+`plan`); `codex exec` reports `bypassPermissions` and is denied. The broker
+releases nothing for an offer the hook did not arm, and a failing hook denies.
+A host configuration that auto-approves the tool cannot be detected; the host's
+approval prompt is the confirmation of record.
+
+Only results whose every finding is PII qualify. With any prompt-injection,
+DLP or threat finding, nothing becomes readable and the offer is
+`nothing_to_reveal`. Within such a result only exact L1 evidence spans with a
+type from the fixed list can be revealed. Other or unknown PII types and
+chunk-level verdicts without evidence spans stay masked and win on overlap.
+Card security codes and expiry dates are never revealable.
+
+A grant is bound to the session, scan ID, original payload hash, scanner policy
+fingerprint and the exact revealable locations shown for approval. It expires
+after five minutes, a newer offer for the same result supersedes it, and it is
+delivered once. The runtime builds the view directly from the hash-checked
+original; the disclosed view is never stored or cached. The scan verdict,
+`check` and `read_redacted` results are unchanged. The protocol journal records
+requested types, grant state and the hook decision, never values.
 
 Pending responses expose their current `job_status`. A queued response also
 includes `wait_reason=scanner_queue` and `next_tool=patronus_check_result` with

@@ -156,6 +156,34 @@ if (key) {
 } else findings.push(finding('integrations', 'medium', 'qa-key-missing', 'QA API key missing: hosted MCP was not checked',
   { suggestion: 'Add PATRONUS_QA_API_KEY=... to ~/.patronus-qa/env (chmod 600).' }))
 
+// Remote audits through the CLI (URL and MCP), repeated: one failure in a user's session is one too many.
+// A failure keeps its fixed reason, code and request ID so it can be traced in the API logs.
+const qaDataDir = join(process.env.PATRONUS_QA_HOME ?? join(homedir(), '.patronus-qa'), 'data')
+if (existsSync(join(qaDataDir, 'auth/credentials.json'))) {
+  const { mkdtemp, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const mcpConfig = join(await mkdtemp(join(tmpdir(), 'patronus-qa-remote-')), 'mcp.json')
+  await writeFile(mcpConfig, JSON.stringify({ mcpServers: { deepwiki: { type: 'http', url: 'https://mcp.deepwiki.com/mcp' } } }))
+  const audits = { url: ['scan', 'url', 'https://example.com/'], mcp: ['scan', 'mcp', mcpConfig, '--server', 'deepwiki'] }
+  const rounds = Number(process.env.PATRONUS_QA_REMOTE_ROUNDS ?? 5)
+  const results = []
+  for (let round = 0; round < rounds; round++) {
+    for (const [kind, argv] of Object.entries(audits)) {
+      const result = await run(scanner, [...argv, '--format', 'json'], { env: { ...env, PATRONUS_DATA_DIR: qaDataDir }, timeout: 180_000 })
+      let value = {}
+      try { value = JSON.parse(result.stdout) } catch {}
+      results.push({ kind, ok: result.code === 0 && value.status === 'CLEAN', status: value.status ?? null, reason: value.reason ?? null,
+        code: value.code ?? null, ms: result.ms, exit: result.code })
+    }
+  }
+  const failed = results.filter(item => !item.ok)
+  metrics.remote_audits = { runs: results.length, failures: failed.length, p95_ms: [...results.map(item => item.ms)].sort((a, b) => a - b)[Math.ceil(results.length * 0.95) - 1] }
+  if (!check('remote URL/MCP audits succeed', failed.length === 0, `${results.length - failed.length}/${results.length} ok`))
+    findings.push(finding('integrations', 'high', 'remote-audit-failures', `Remote audits failed ${failed.length} of ${results.length} times`,
+      { evidence: JSON.stringify(failed, null, 2),
+        suggestion: 'remote_api_unavailable means a network error or a 5xx from the API after the client retries; check the Control Plane API logs (patronus-protect) at these times.' }))
+}
+
 // The QA login token lasts 14 days; warn before scheduled live runs start failing. Only expires_at is read.
 const credentials = join(process.env.PATRONUS_QA_HOME ?? join(homedir(), '.patronus-qa'), 'data/auth/credentials.json')
 let expiresAt

@@ -119,7 +119,8 @@ export function lastReceipt(body) {
 export async function readCounter(path) { try { return await readFile(path, 'utf8') } catch (error) { if (error.code === 'ENOENT') return ''; throw error } }
 
 export function patronusCall(body, tool, args, id) {
-  const group = body.tools.find(item => item.type === 'namespace' && item.name === 'mcp__patronus__')
+  // Codex 0.162 names the namespace without the trailing separator.
+  const group = body.tools.find(item => item.type === 'namespace' && ['mcp__patronus__', 'mcp__patronus'].includes(item.name))
   if (group) {
     assert(group.tools.some(item => item.name === tool), 'Missing installed Patronus tool: ' + tool)
     return { ...call(tool, args, id), namespace: group.name }

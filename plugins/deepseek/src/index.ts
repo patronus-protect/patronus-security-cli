@@ -76,7 +76,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     name: 'patronus-security',
     description: 'Use when a tool result is withheld for a Patronus security scan.',
     source: 'runtime',
-    content: 'Follow the instructions in a Patronus receipt. A pending response means the source tool already executed; continue independent work and check its scan_id later. Only approved responses expose originals. Dangerous responses expose only a redacted view, when available. Failed or incomplete scans never grant approval. Do not repeat an action merely to recover a withheld result.',
+    content: 'Follow the instructions in a Patronus receipt. A pending response means the source tool already executed; continue independent work and check its scan_id later. Only approved responses expose originals. Dangerous responses expose only a redacted view, when available. Failed or incomplete scans never grant approval. Do not repeat an action merely to recover a withheld result. Only when the task needs specific masked personal data, call patronus_read_redacted with scan_id and reveal_pii, then patronus_reveal_pii with the returned grant_id; the user decides. If they deny, continue with the masked result.',
   })
   registerResponseGate(ctx, gate, config.responseWaitMs)
   registerPromptGate(ctx, sessions, controller.signal, events, config.requestTimeoutMs, session => hookEnabled(readPluginSettings(), 'deepseek', session, 'user_input'), { executable: config.executable, paused: session => { const policy = readPluginSettings(); return !policy.enabled || policy.disabled_chats.deepseek.includes(session) } }, degradedSessions)

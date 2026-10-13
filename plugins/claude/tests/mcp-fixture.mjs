@@ -3,7 +3,8 @@ import { createInterface } from 'node:readline';
 import { appendFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const tools = ['read_text', 'read_json', 'read_mixed', 'read_structured', 'read_error', 'read_source_error', 'patronus_check_result', 'patronus_read_redacted', 'patronus_scan'].map(name => ({
+// `approve` answers Claude's permission dialog in headless runs, like a user clicking allow or deny.
+const tools = ['approve', 'read_text', 'read_json', 'read_mixed', 'read_structured', 'read_error', 'read_source_error', 'patronus_check_result', 'patronus_read_redacted', 'patronus_scan'].map(name => ({
   name, description: 'Local hook proof fixture.',
   inputSchema: { type: 'object', properties: { scan_id: { type: 'string' } }, additionalProperties: true },
   annotations: { readOnlyHint: true },
@@ -18,6 +19,12 @@ for await (const line of createInterface({ input: process.stdin })) {
     result = { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'local-fixture', version: '1' } };
   } else if (message.method === 'tools/list') {
     result = { tools };
+  } else if (message.method === 'tools/call' && message.params.name === 'approve') {
+    await appendFile(join(process.env.PATRONUS_FIXTURE_DIRECTORY, 'approvals.jsonl'), JSON.stringify(message.params.arguments) + '\n');
+    const allow = process.env.PATRONUS_FIXTURE_APPROVAL === 'allow';
+    result = { content: [{ type: 'text', text: JSON.stringify(allow
+      ? { behavior: 'allow', updatedInput: message.params.arguments.input }
+      : { behavior: 'deny', message: 'The user denied this request.' }) }] };
   } else if (message.method === 'tools/call') {
     await appendFile(join(process.env.PATRONUS_FIXTURE_DIRECTORY, 'mcp-executions.jsonl'), JSON.stringify(message.params) + '\n');
     const data = { payload: 'RAW_RESPONSE_ONLY_SENTINEL' };

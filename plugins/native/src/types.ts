@@ -13,4 +13,4 @@ export interface HookInput {
   [key: string]: unknown
 }
 /** `context` is the model-facing text of a warning when it differs from the user-facing `text`. */
-export type HookDecision = { kind: 'deny' | 'replace' | 'stop' | 'warn'; text: string; context?: string }
+export type HookDecision = { kind: 'ask' | 'deny' | 'replace' | 'stop' | 'warn'; text: string; context?: string }

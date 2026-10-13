@@ -9,7 +9,7 @@ const fixture = fileURLToPath(new URL('./hook-fixture.mjs', import.meta.url));
 const mcpFixture = fileURLToPath(new URL('./mcp-fixture.mjs', import.meta.url));
 // Patronus answers its own tools from the plugin's MCP server. A user approves them
 // once; the headless contract test pre-approves them as that user would.
-const patronusTools = ['patronus_check_result', 'patronus_read_redacted', 'patronus_scan']
+const patronusTools = ['patronus_check_result', 'patronus_read_redacted', 'patronus_reveal_pii', 'patronus_scan']
   .map(name => `mcp__plugin_patronus-security_patronus__${name}`);
 const pluginRoot = process.env.PATRONUS_CLAUDE_PLUGIN_ROOT || fileURLToPath(new URL('../', import.meta.url));
 const root = process.env.PATRONUS_CLAUDE_PROOF_ROOT ||
@@ -46,7 +46,7 @@ function modelReply(response, body, content, stopReason) {
   response.end();
 }
 
-export async function runHost({ name, tool, input, policy = 'pass', batch = false, timeout = 30000, mcp = false, resume = false, postHookTimeout = 10, plugin = false, runtime = false, runtimeHookTimeout, flow, sourceText = 'RAW_RESPONSE_ONLY_SENTINEL\n', userPrompt = 'Perform the scripted local test.' }) {
+export async function runHost({ permissionMode = 'dontAsk', approval, name, tool, input, policy = 'pass', batch = false, timeout = 30000, mcp = false, resume = false, postHookTimeout = 10, plugin = false, runtime = false, runtimeHookTimeout, flow, sourceText = 'RAW_RESPONSE_ONLY_SENTINEL\n', userPrompt = 'Perform the scripted local test.' }) {
   plugin ||= Boolean(runtime);
   await mkdir(root, { recursive: true });
   const directory = await mkdtemp(join(root, `${name}-`));
@@ -57,6 +57,7 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
   const actualInput = typeof input === 'function' ? input(directory, source) : input;
   const requests = [];
   const messages = [];
+  let revealScan;
   const server = createServer(async (request, response) => {
     let text = '';
     for await (const part of request) text += part;
@@ -73,6 +74,19 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
         ? JSON.stringify(body.messages).match(/[a-f0-9]{32}/)?.[0] : undefined;
       const fileId = flow === 'static-redacted' && messages.length === 2
         ? JSON.stringify(body.messages).match(/file_[a-f0-9]{64}/)?.[0] : undefined;
+      if (flow === 'reveal' && !first) {
+        // Read a PII result, request an email disclosure, then ask for its approval.
+        const latest = JSON.stringify(body.messages.at(-1));
+        revealScan ??= latest.match(/[a-f0-9]{32}/)?.[0];
+        const grant = latest.match(/grant_id\W+([a-f0-9]{32})/)?.[1];
+        const step = messages.length === 2 && revealScan
+          ? { name: 'patronus_read_redacted', input: { scan_id: revealScan, reveal_pii: ['email'] } }
+          : messages.length === 3 && grant ? { name: 'patronus_reveal_pii', input: { scan_id: revealScan, grant_id: grant } } : undefined;
+        modelReply(response, body, step
+          ? [{ type: 'tool_use', id: `toolu_reveal_${messages.length}`, name: `mcp__plugin_patronus-security_patronus__${step.name}`, input: step.input }]
+          : [{ type: 'text', text: 'LOCAL_TEST_COMPLETE' }], step ? 'tool_use' : 'end_turn');
+        return;
+      }
       modelReply(response, body,
         first ? [{ type: 'tool_use', id: 'toolu_fixture', name: tool, input: actualInput }]
           : receiptId || fileId ? [{ type: 'tool_use', id: 'toolu_redacted',
@@ -137,6 +151,7 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
     HTTP_PROXY: baseURL, HTTPS_PROXY: baseURL, ALL_PROXY: baseURL,
     NO_PROXY: '127.0.0.1,localhost',
     PATRONUS_FIXTURE_DIRECTORY: directory, PATRONUS_FIXTURE_POLICY: policy,
+    ...(approval ? { PATRONUS_FIXTURE_APPROVAL: approval } : {}),
   };
   if (runtime?.isolatedDataDir || !runtime || process.env.PATRONUS_DATA_DIR) {
     env.PATRONUS_DATA_DIR = runtime?.isolatedDataDir
@@ -157,7 +172,8 @@ export async function runHost({ name, tool, input, policy = 'pass', batch = fals
       '--model', 'claude-sonnet-4-20250514', '--system-prompt', 'Local scripted hook contract test.',
       '--settings', join(directory, 'settings.json'), '--setting-sources', '',
       ...(!plugin ? ['--strict-mcp-config'] : []), '--mcp-config', join(directory, 'mcp.json'), '--no-chrome',
-      '--tools', 'Bash,Read', '--allowedTools', [`Bash,Read,${tool}`, ...(plugin ? patronusTools : [])].join(','), '--permission-mode', 'dontAsk',
+      '--tools', 'Bash,Read', '--allowedTools', [`Bash,Read,${tool}`, ...(plugin ? patronusTools : [])].join(','), '--permission-mode', permissionMode,
+      ...(approval ? ['--permission-prompt-tool', 'mcp__fixture__approve'] : []),
       ...(plugin ? ['--plugin-dir', join(directory, 'plugin')] : []),
       ...extra,
       userPrompt,

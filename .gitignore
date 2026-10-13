@@ -36,6 +36,7 @@ __pycache__/
 !/docs/licensing.md
 !/docs/output-format.md
 !/docs/privacy.md
+!/docs/runtime-flows.md
 !/docs/runtime-text-contract.md
 !/docs/threat-model.md
 /plugins/**/*.evidence.json

@@ -12,10 +12,12 @@
 //
 // --live additionally runs a real Claude session (paid model turns) against the QA account in
 // ~/.patronus-qa/data. Replay and scripted host suites need no network login.
+import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { createInterface } from 'node:readline'
 import { args, finding, loadEnv, percentile, previousMetrics, qaData, qaHome, rate, report, repository, run, scanner, sha256, thresholds } from './lib/common.mjs'
 
 loadEnv()
@@ -220,6 +222,70 @@ function detectionMetrics(rows, coldStart) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Layer 1b: selective PII disclosure against the runtime at the QA Ark level
+
+/** One private runtime per run; hook paths are covered by the host suites. */
+async function disclosure() {
+  const corpus = JSON.parse(await readFile(join(repository, 'qa/hooks/disclosure.json'), 'utf8')).cases
+  await sandboxEnv(replayData)
+  const child = spawn(scanner, ['serve', '--stdio', '--config', join(sandbox, 'scanner.toml'), '--state-dir', join(sandbox, 'disclosure-state')], { stdio: ['pipe', 'pipe', 'ignore'] })
+  const waiting = new Map()
+  let next = 0
+  createInterface({ input: child.stdout }).on('line', line => { try { const reply = JSON.parse(line); waiting.get(reply.id)?.(reply); waiting.delete(reply.id) } catch {} })
+  const rpc = (method, params) => new Promise(resolve => { const id = `q${++next}`; waiting.set(id, resolve); child.stdin.write(JSON.stringify({ id, method, params }) + '\n') })
+  const settle = async (method, params) => {
+    const deadline = Date.now() + 180_000
+    for (;;) {
+      const reply = await rpc(method, params)
+      if (reply.error || reply.result?.status !== 'pending' || Date.now() > deadline) return reply.result ?? { status: reply.error?.code ?? 'error' }
+      await new Promise(done => setTimeout(done, 200))
+    }
+  }
+  const session = `qa-disclosure-${runId}-${'0'.repeat(16)}`
+  const rows = []
+  try {
+    for (const item of corpus) {
+      const started = Date.now()
+      const submitted = (await rpc('submit', { session, direction: 'response', tool: 'Read', call_id: item.id, payload: item.text })).result
+      const scan = await settle('check', { session, scan_id: submitted.scan_id })
+      const offer = scan.status === 'dangerous' ? (await rpc('prepare_disclosure', { session, scan_id: submitted.scan_id, reveal_pii: item.reveal })).result : { status: 'not_dangerous' }
+      const offered = Date.now()
+      const view = offer.grant_id ? await settle('read_disclosed', { session, scan_id: submitted.scan_id, grant_id: offer.grant_id }) : undefined
+      const text = typeof view?.result === 'string' ? view.result : JSON.stringify(view?.result ?? '')
+      const applied = view?.status === 'redacted' && view.disclosure?.user_confirmed === true
+      rows.push({
+        id: item.id, expect: item.expect, scan: scan.status, offer: offer.status, counts: offer.counts ?? null,
+        outcome: applied ? 'applied' : view ? view.status : offer.status,
+        leaked: item.masked.filter(value => text.includes(value)),
+        missing: applied ? item.visible.filter(value => !text.includes(value)) : [],
+        reveal_ms: view ? Date.now() - offered : null, total_ms: Date.now() - started,
+      })
+    }
+  } finally { child.kill() }
+  const expected = rows.filter(row => row.expect === 'applied')
+  return { rows, metrics: {
+    applied_rate: rate(expected.filter(row => row.outcome === 'applied').length, expected.length),
+    leaks: rows.reduce((sum, row) => sum + row.leaked.length, 0),
+    p95_reveal_ms: percentile(rows.flatMap(row => row.reveal_ms ?? []), 95),
+    outcomes: Object.fromEntries(rows.map(row => [row.id, row.outcome])),
+  } }
+}
+
+function evaluateDisclosure({ rows, metrics }) {
+  check('disclosure never reveals masked values', metrics.leaks === 0, `${metrics.leaks} leaked values`)
+  for (const row of rows) {
+    if (row.leaked.length)
+      findings.push(finding('hooks', 'critical', `disclosure-leak:${row.id}`, `Disclosure case ${row.id} revealed values that must stay masked`,
+        { evidence: JSON.stringify(row), suggestion: 'Inspect the lock set in src/runtime/disclosure.rs for this case.' }))
+    if (row.expect === 'nothing' && row.offer === 'confirmation_required')
+      findings.push(finding('hooks', 'high', `disclosure-offer:${row.id}`, `Disclosure case ${row.id} offered types that are not in the text`, { evidence: JSON.stringify(row) }))
+    if (row.expect === 'applied' && (row.outcome !== 'applied' || row.missing.length))
+      findings.push(finding('hooks', 'medium', `disclosure-miss:${row.id}:${arkLevel}`, `Disclosure case ${row.id} was not revealed at Ark ${arkLevel} (${row.outcome})`,
+        { evidence: JSON.stringify(row), suggestion: 'Only pure-PII results with exact L1 spans are revealable. Check whether another category or a chunk-level verdict was reported.' }))
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Layer 2: scripted host suites (real host CLIs, scripted model, isolated config)
 
 function tapCounts(stdout) {
@@ -242,6 +308,8 @@ async function hostSuites() {
   let e2e
   try { e2e = JSON.parse(await readFile(join(reportDir, 'report.json'), 'utf8')) } catch {}
   const flows = e2e?.results ?? []
+  const reveal = await run(process.execPath, ['--test', '--test-reporter=tap', 'plugins/codex/tests/reveal.test.mjs'], { env: { ...codexEnv, PATRONUS_SCANNER_BIN: scanner }, timeout: 600_000 })
+  out['codex-disclosure'] = { ...tapCounts(reveal.stdout), code: reveal.code, ms: reveal.ms, tail: (reveal.stdout + reveal.stderr).split('\n').filter(line => /^not ok|Error|assert/i.test(line)).slice(0, 30).join('\n') }
   out.codex = { pass: flows.filter(flow => flow.status === 'PASS').length, fail: flows.filter(flow => flow.status !== 'PASS').length, code: codex.code, ms: codex.ms,
     tail: (codex.stdout + codex.stderr).split('\n').slice(-30).join('\n') }
   // The suites build their own isolated environments and deliberately simulate outages, so their
@@ -260,7 +328,10 @@ async function live() {
   }
   const since = Date.now()
   const env = { ...await sandboxEnv(qaData), PATRONUS_CLAUDE_LIVE: '1', PATRONUS_CLAUDE_BINARY: bin('claude') }
-  delete env.PATRONUS_CONFIG // the live run uses the QA account's hybrid configuration
+  // The QA account's data dir has no config of its own, so the CLI default (L1) would apply.
+  // Live runs use the QA Ark level in hybrid mode, so remote audits use the QA login.
+  env.PATRONUS_CONFIG = join(sandbox, 'live-scanner.toml')
+  await writeFile(env.PATRONUS_CONFIG, `[provider]\nmode="hybrid"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
   const result = await run(process.execPath, ['--test', '--test-reporter=tap', 'plugins/claude/tests/claude-live.test.mjs'], { env, timeout: 300_000 })
   return { ...tapCounts(result.stdout), code: result.code, ms: result.ms, events: await journal(qaData, since),
     tail: (result.stdout + result.stderr).split('\n').filter(line => /^not ok|inspect|Error/i.test(line)).slice(0, 20).join('\n') }
@@ -335,12 +406,14 @@ let metrics = {}
 try {
   const { rows, events: replayEvents, coldStart } = await replay()
   const detection = detectionMetrics(rows, coldStart)
+  const disclosed = await disclosure()
+  evaluateDisclosure(disclosed)
   const { suites } = options.quick ? { suites: {} } : await hostSuites()
   const liveRun = options.live ? await live() : undefined
   const hookStats = hookMetrics([...replayEvents, ...(liveRun?.events ?? [])])
   const previous = await previousMetrics('hooks')
   evaluate({ detection, hookStats, suites, liveRun, previous: previous?.ark_level === arkLevel ? previous : undefined })
-  metrics = { ark_level: arkLevel, detection, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
+  metrics = { ark_level: arkLevel, detection, disclosure: { ...disclosed.metrics, rows: disclosed.rows }, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
     ...(liveRun ? { live: { pass: liveRun.pass, fail: liveRun.fail, ms: liveRun.ms } } : {}), replay: rows.map(({ messages, ...row }) => row) }
 } finally {
   await teardown()

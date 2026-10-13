@@ -25,6 +25,9 @@ pub struct ProtocolEvent {
     pub duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload_hash: Option<String>,
+    /// PII types requested for a user-confirmed disclosure; never their values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pii_types: Option<Vec<crate::runtime::protocol::PiiType>>,
     /// Hook lifecycle fields; only `hook_started` and `hook_completed` carry them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hook_event: Option<String>,
@@ -83,6 +86,12 @@ impl ProtocolEvent {
                     | "cancelled"
                     | "expired"
                     | "completed"
+                    | "confirmation_required"
+                    | "nothing_to_reveal"
+                    | "armed"
+                    | "disclosure_unavailable"
+                    | "disclosure_expired"
+                    | "disclosure_invalid"
             )
         }) {
             return invalid("unsupported status");
@@ -115,11 +124,12 @@ impl ProtocolEvent {
         };
         bounded_token("hook_event", hook_event, 64)?;
         optional_token("decision", self.decision.as_deref(), 16)?;
-        if self
-            .decision
-            .as_deref()
-            .is_some_and(|value| !matches!(value, "allow" | "deny" | "replace" | "stop" | "warn"))
-        {
+        if self.decision.as_deref().is_some_and(|value| {
+            !matches!(
+                value,
+                "allow" | "ask" | "deny" | "replace" | "stop" | "warn"
+            )
+        }) {
             return invalid("unsupported decision");
         }
         optional_token("outcome", self.outcome.as_deref(), 16)?;

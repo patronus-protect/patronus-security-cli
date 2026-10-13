@@ -5,7 +5,8 @@ import { receipt } from '../../deepseek/src/receipts.ts'
 import { degradedText, noticeText, publicReason, scanNotice } from '../../deepseek/src/notice.ts'
 import { consumeIgnoreOnce, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
 import { PROMPT_WARNING_MODEL, PROMPT_WARNING_USER, promptDecision, SENSITIVE_PROMPT_MESSAGE, sensitiveFinding } from '../../deepseek/src/prompt-policy.ts'
-import type { ScanResult } from '../../deepseek/src/protocol.ts'
+import { PII_TYPES, type PiiType, type ScanResult } from '../../deepseek/src/protocol.ts'
+import { disclosureQuestion } from '../../deepseek/src/disclosure.ts'
 import { invalidScanReference } from '../../deepseek/src/references.ts'
 import { callBroker, type BrokerConfig } from './broker.ts'
 import { codexExternalTextPayload, mapCodex } from './hosts/codex.ts'
@@ -20,7 +21,11 @@ const ownPrefixes: Record<Host, string[]> = {
   codex: ['mcp__patronus__'],
   claude: ['mcp__patronus__', 'mcp__plugin_patronus-security_patronus__'],
 }
-const operations = new Map([['patronus_check_result', 'check'], ['patronus_read_redacted', 'read_redacted'], ['patronus_scan', 'static']])
+const operations = new Map([['patronus_check_result', 'check'], ['patronus_read_redacted', 'read_redacted'], ['patronus_reveal_pii', 'reveal'], ['patronus_scan', 'static']])
+
+/** Permission modes in which the host shows an approval dialog for an `ask` decision. */
+const promptingModes = new Set(['default', 'acceptEdits', 'plan'])
+const disclosureUnavailable = (scanId: string, message: string): JsonValue => ({ scan_id: scanId, status: 'disclosure_unavailable', message })
 
 function inactiveMessage(host: Host): string {
   const base = `patronus-security-scanner integration ${host}`
@@ -95,9 +100,29 @@ type Scan = (request: Parameters<typeof callBroker>[1]) => Promise<JsonValue>
 
 /** Runs a Patronus tool for one host session. Relative static paths resolve against cwd. */
 export async function runOwnOperation(host: Host, operation: string, args: unknown, cwd: string, scan: Scan): Promise<OwnOperationOutcome> {
-  if (!record(args)) return { kind: 'invalid', text: JSON.stringify(invalidArguments(operation === 'static' ? ['kind', 'path'] : operation === 'read_redacted' ? ['scan_id or file_id'] : ['scan_id'])) }
+  if (!record(args)) return { kind: 'invalid', text: JSON.stringify(invalidArguments(operation === 'static' ? ['kind', 'path'] : operation === 'read_redacted' ? ['scan_id or file_id'] : operation === 'reveal' ? ['scan_id', 'grant_id'] : ['scan_id'])) }
   let result: JsonValue
-  if (operation === 'static') {
+  const revealRequest = operation === 'read_redacted' && Object.hasOwn(args, 'reveal_pii')
+  if (revealRequest || operation === 'reveal') {
+    const required = operation === 'reveal' ? ['scan_id', 'grant_id'] : ['scan_id', 'reveal_pii']
+    const missing = required.filter(key => !Object.hasOwn(args, key))
+    const types = args.reveal_pii
+    if (missing.length || Object.keys(args).some(key => !required.includes(key)) || typeof args.scan_id !== 'string' ||
+        (operation === 'reveal' ? typeof args.grant_id !== 'string' || !/^[a-f0-9]{32}$/.test(args.grant_id)
+          : !Array.isArray(types) || !types.length || types.length > PII_TYPES.length || !types.every(type => (PII_TYPES as readonly unknown[]).includes(type)))) {
+      return { kind: 'invalid', text: JSON.stringify(invalidArguments(required, missing)) }
+    }
+    const invalid = invalidScanReference(args.scan_id)
+    if (invalid) return { kind: 'invalid', text: JSON.stringify(invalid) }
+    result = operation === 'reveal'
+      ? await scan({ method: 'reveal', scanId: args.scan_id, grantId: args.grant_id as string })
+      : await scan({ method: 'prepare_reveal', scanId: args.scan_id, types: [...new Set(types as PiiType[])] })
+    if (record(result) && result.status === 'confirmation_required') {
+      result.message = 'Call patronus_reveal_pii once with this scan_id and grant_id. The user is asked to approve; if they deny, continue with the masked result and do not ask again unprompted.'
+    } else if (record(result) && result.status === 'disclosure_unavailable' && operation === 'reveal') {
+      result.message = 'The user did not approve this disclosure through the host dialog, or it expired. Continue with the masked result.'
+    }
+  } else if (operation === 'static') {
     const missing = ['kind', 'path'].filter(key => typeof args[key] !== 'string' || !args[key])
     if (missing.length) return { kind: 'invalid', text: JSON.stringify(invalidArguments(['kind', 'path'], missing)) }
     if (Object.keys(args).some(key => !['kind', 'path', 'server'].includes(key)) ||
@@ -127,6 +152,37 @@ export async function runOwnOperation(host: Host, operation: string, args: unkno
       ? visibleResult(result as unknown as ScanResult, host)
     : result
   return { kind: 'result', text: JSON.stringify(visible) }
+}
+
+/** Arms a disclosure only where the host will ask the user, then requests that dialog.
+ * The broker releases values only for an armed grant, so skipping this hook releases nothing. */
+async function armDisclosure(host: Host, input: HookInput, scan: Scan, map: (decision: HookDecision) => object): Promise<object> {
+  const args = input.tool_input
+  const scanId = record(args) && typeof args.scan_id === 'string' && /^[a-f0-9]{32}$/.test(args.scan_id) ? args.scan_id : undefined
+  const grantId = record(args) && typeof args.grant_id === 'string' && /^[a-f0-9]{32}$/.test(args.grant_id) ? args.grant_id : undefined
+  if (!scanId || !grantId) return map({ kind: 'deny', text: JSON.stringify(invalidArguments(['scan_id', 'grant_id'], [])) })
+  if (typeof input.permission_mode !== 'string' || !promptingModes.has(input.permission_mode)) {
+    return map({ kind: 'deny', text: JSON.stringify(disclosureUnavailable(scanId, 'PII disclosure needs the user to approve it in a dialog, which this permission mode skips. Continue with the masked result; the user can switch to the default permission mode and ask again.')) })
+  }
+  const armed = await scan({ method: 'arm_reveal', scanId, grantId })
+  const question = record(armed) && armed.status === 'armed' && record(armed.counts) ? disclosureQuestion(armed.counts) : undefined
+  if (!question) return map({ kind: 'deny', text: JSON.stringify(disclosureUnavailable(scanId, 'This disclosure offer is no longer available. Continue with the masked result.')) })
+  // Claude shows this question in its own dialog. Codex rejects `ask` but prompts for this tool
+  // through its MCP approval_mode, so the question precedes that prompt as a visible notice.
+  return host === 'claude' ? map({ kind: 'ask', text: question }) : map({ kind: 'warn', text: question, context: 'Patronus asked the user to approve this disclosure. If the call is denied, continue with the masked result.' })
+}
+
+/** Codex's MCP server has no session; after an approved call its result hook delivers the view. */
+async function deliverDisclosure(input: HookInput, scan: Scan): Promise<string> {
+  const args = input.tool_input
+  const scanId = record(args) && typeof args.scan_id === 'string' && /^[a-f0-9]{32}$/.test(args.scan_id) ? args.scan_id : undefined
+  const grantId = record(args) && typeof args.grant_id === 'string' && /^[a-f0-9]{32}$/.test(args.grant_id) ? args.grant_id : undefined
+  if (!scanId || !grantId) return JSON.stringify(invalidArguments(['scan_id', 'grant_id'], []))
+  const result = await scan({ method: 'reveal', scanId, grantId })
+  if (record(result) && result.status === 'disclosure_unavailable') {
+    result.message = 'The user did not approve this disclosure through the host dialog, or it expired. Continue with the masked result.'
+  }
+  return JSON.stringify(result)
 }
 
 type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'>
@@ -200,6 +256,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     if (event === 'PreToolUse' && operation) {
       // Claude's MCP server knows its session and answers as an ordinary tool result.
       // Codex gives its MCP server no session identity, so the hook answers as deny feedback.
+      if (operation === 'reveal') return await armDisclosure(host, input, scan, map)
       if (host === 'claude') return {}
       const outcome = await runOwnOperation(host, operation, input.tool_input, input.cwd, scan)
       return map({ kind: outcome.kind === 'static_failed' ? 'warn' : 'deny', text: outcome.text })
@@ -207,6 +264,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     if (event === 'PreToolUse') {
       return {}
     }
+    if (operation === 'reveal' && host === 'codex') return map({ kind: 'replace', text: await deliverDisclosure(input, scan) })
     // Patronus' own results are already scan receipts; rescanning them would loop.
     if (operation) return {}
     if (!responseEnabled()) return {}
@@ -233,6 +291,11 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     if (result.status === 'approved' || degraded.has(result.status)) return noted(result)
     return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host, 'response', event, input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')) })
   } catch {
+    // A failed hook must not let a disclosure call through without the approval dialog.
+    if (event === 'PreToolUse' && record(value) && typeof value.tool_name === 'string' && ownOperation(host, value.tool_name) === 'reveal') {
+      traceFailure(trace, 'hook_error')
+      return map({ kind: 'deny', text: JSON.stringify(disclosureUnavailable('', 'Patronus could not ask for approval. Continue with the masked result.')) })
+    }
     return fail('hook_error')
   }
 }

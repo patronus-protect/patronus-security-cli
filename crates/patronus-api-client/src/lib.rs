@@ -67,6 +67,44 @@ impl Error {
     }
 }
 
+/// Waits before retrying a transient failure: a network error, a 5xx gateway
+/// response or an idempotent request the API is still processing.
+const RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(500), Duration::from_millis(1500)];
+
+fn transient(error: &Error) -> bool {
+    match error.status {
+        None => error.kind == ErrorKind::Transport,
+        Some(status) => {
+            matches!(status, 500 | 502 | 503 | 504)
+                || (status == 409 && error.retry_after.is_some())
+        }
+    }
+}
+
+/// Runs `attempt` again after a transient failure while the deadline allows it.
+fn with_retries<T>(deadline: Instant, mut attempt: impl FnMut() -> Result<T>) -> Result<T> {
+    for delay in RETRY_DELAYS {
+        match attempt() {
+            Err(error) if transient(&error) && Instant::now() + delay < deadline => {
+                std::thread::sleep(delay)
+            }
+            result => return result,
+        }
+    }
+    attempt()
+}
+
+/// A per-process unique key, so a retried submission is never scanned or billed twice.
+fn generated_idempotency_key() -> String {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let count = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("cli-{}-{nonce}-{count}", std::process::id())
+}
+
 /// Per-request options for `POST /scan`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RequestOptions {
@@ -83,6 +121,17 @@ impl RequestOptions {
     pub fn idempotency_key(mut self, key: impl Into<String>) -> Self {
         self.idempotency_key = Some(key.into());
         self
+    }
+
+    /// The same options with an idempotency key, generating one if none was given.
+    fn keyed(&self) -> Self {
+        Self {
+            idempotency_key: Some(
+                self.idempotency_key
+                    .clone()
+                    .unwrap_or_else(generated_idempotency_key),
+            ),
+        }
     }
 
     fn apply(&self, request: ureq::Request) -> Result<ureq::Request> {
@@ -253,11 +302,14 @@ impl Client {
         body: Value,
         options: &RequestOptions,
     ) -> Result<ScanResponse> {
-        let request = options.apply(
-            self.authorize(self.agent.post(&format!("{}/scan", self.base_url)))
-                .set("Content-Type", "application/json"),
-        )?;
-        self.decode(request.send_json(body))
+        let options = options.keyed();
+        with_retries(Instant::now() + self.timeout, || {
+            let request = options.apply(
+                self.authorize(self.agent.post(&format!("{}/scan", self.base_url)))
+                    .set("Content-Type", "application/json"),
+            )?;
+            self.decode(request.send_json(body.clone()))
+        })
     }
 
     pub fn get_job(&self, job_id: &str) -> Result<Value> {
@@ -270,11 +322,17 @@ impl Client {
             .checked_duration_since(Instant::now())
             .filter(|value| !value.is_zero())
             .ok_or_else(|| Error::new(ErrorKind::Timeout, "API scan timeout"))?;
-        self.decode_value(
-            self.authorize(self.agent.get(&format!("{}/scan/{job_id}", self.base_url)))
-                .timeout(remaining)
-                .call(),
-        )
+        with_retries(deadline, || {
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .filter(|value| !value.is_zero())
+                .unwrap_or(remaining);
+            self.decode_value(
+                self.authorize(self.agent.get(&format!("{}/scan/{job_id}", self.base_url)))
+                    .timeout(remaining)
+                    .call(),
+            )
+        })
     }
 
     pub fn scan_json(&self, body: Value) -> Result<ScanResponse> {
@@ -392,15 +450,18 @@ impl Client {
             }
         }
         body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
-        let request = options.apply(
-            self.authorize(self.agent.post(&format!("{}/scan", self.base_url)))
-                .set(
-                    "Content-Type",
-                    &format!("multipart/form-data; boundary={boundary}"),
-                ),
-        )?;
+        let options = options.keyed();
         let deadline = Instant::now() + self.timeout;
-        let response = self.decode(request.send_bytes(&body))?;
+        let response = with_retries(deadline, || {
+            let request = options.apply(
+                self.authorize(self.agent.post(&format!("{}/scan", self.base_url)))
+                    .set(
+                        "Content-Type",
+                        &format!("multipart/form-data; boundary={boundary}"),
+                    ),
+            )?;
+            self.decode(request.send_bytes(&body))
+        })?;
         self.wait(response, deadline)
     }
 

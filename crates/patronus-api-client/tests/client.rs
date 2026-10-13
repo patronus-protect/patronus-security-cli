@@ -355,7 +355,39 @@ fn sends_an_idempotency_key_on_every_post_method() {
         assert!(request.starts_with("POST "));
         assert_eq!(header(request, "idempotency-key"), Some("retry-0001"));
     }
-    assert_eq!(header(&requests[7], "idempotency-key"), None);
+    // Without an explicit key the client generates one, so its own retries stay idempotent.
+    assert!(header(&requests[7], "idempotency-key").is_some_and(|key| key.starts_with("cli-")));
+}
+
+#[test]
+fn retries_transient_gateway_failures_with_the_same_idempotency_key() {
+    let completed = include_str!("../../../contract/fixtures/completed.json");
+    let (base, thread) = serve_with(vec![(503, "", "{}"), (502, "", "{}"), (200, "", completed)]);
+    let client = Client::with_base_url(base, "secret").unwrap();
+    client.scan_text("hello").unwrap();
+    let requests: Vec<String> = thread
+        .join()
+        .unwrap()
+        .into_iter()
+        .map(|request| String::from_utf8_lossy(&request).into_owned())
+        .collect();
+    let keys: Vec<_> = requests
+        .iter()
+        .map(|r| header(r, "idempotency-key"))
+        .collect();
+    assert_eq!(keys.len(), 3);
+    assert!(keys[0].is_some() && keys.iter().all(|key| *key == keys[0]));
+}
+
+#[test]
+fn does_not_retry_client_errors() {
+    let (base, thread) = serve_with(vec![(422, "", r#"{"error":{"code":"INVALID"}}"#)]);
+    let client = Client::with_base_url(base, "secret").unwrap();
+    assert_eq!(
+        client.scan_text("hello").unwrap_err().kind,
+        ErrorKind::Validation
+    );
+    assert_eq!(thread.join().unwrap().len(), 1);
 }
 
 #[test]

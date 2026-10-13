@@ -21,7 +21,7 @@
       "required": ["id", "method", "params"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "method": { "enum": ["hello", "submit", "check", "read_redacted", "cancel"] },
+        "method": { "enum": ["hello", "submit", "check", "read_redacted", "cancel", "prepare_disclosure", "read_disclosed"] },
         "params": { "type": "object" }
       },
       "allOf": [
@@ -36,6 +36,14 @@
         {
           "if": { "properties": { "method": { "enum": ["check", "read_redacted", "cancel"] } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/lookup" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "prepare_disclosure" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/prepare_disclosure" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "read_disclosed" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/read_disclosed" } } }
         }
       ]
     },
@@ -59,6 +67,29 @@
         "scan_id": { "$ref": "#/$defs/id" }
       }
     },
+    "pii_type": {
+      "enum": ["email", "ip_address", "phone", "mac_address", "iban", "credit_card", "swift_code", "financial_account", "date_of_birth", "username", "employee_id", "customer_id", "patient_id", "student_id", "applicant_id", "tax_id", "social_id", "health_insurance_id", "physician_id", "passport_number", "id_card_number", "driver_license", "license_plate", "ssn", "national_id"]
+    },
+    "prepare_disclosure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session", "scan_id", "reveal_pii"],
+      "properties": {
+        "session": { "$ref": "#/$defs/session" },
+        "scan_id": { "$ref": "#/$defs/id" },
+        "reveal_pii": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pii_type" } }
+      },
+      "description": "Only a trusted adapter calls this, never with model-supplied confirmation. The offer carries counts, never values."
+    },
+    "read_disclosed": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session", "scan_id", "grant_id"],
+      "properties": {
+        "session": { "$ref": "#/$defs/session" },
+        "scan_id": { "$ref": "#/$defs/id" },
+        "grant_id": { "$ref": "#/$defs/id" }
+      },
+      "description": "Call only after the host's approval dialog allowed the disclosure. Consumes the grant: the view is delivered once."
+    },
     "reply": {
       "type": "object", "additionalProperties": false, "required": ["id", "result"],
       "properties": {
@@ -67,6 +98,8 @@
           { "$ref": "#/$defs/hello" },
           { "$ref": "#/$defs/status" },
           { "$ref": "#/$defs/redacted" },
+          { "$ref": "#/$defs/disclosure_offer" },
+          { "$ref": "#/$defs/disclosure_state" },
           { "$ref": "#/$defs/unavailable" }
         ] }
       }
@@ -114,7 +147,35 @@
     },
     "redacted": {
       "type": "object", "additionalProperties": false, "required": ["scan_id", "status", "result"],
-      "properties": { "scan_id": { "$ref": "#/$defs/id" }, "status": { "const": "redacted" }, "result": { "$ref": "#/$defs/text_payload" } }
+      "properties": {
+        "scan_id": { "$ref": "#/$defs/id" }, "status": { "const": "redacted" }, "result": { "$ref": "#/$defs/text_payload" },
+        "disclosure": {
+          "type": "object", "additionalProperties": false,
+          "required": ["authorized_pii_types", "user_confirmed"],
+          "properties": {
+            "authorized_pii_types": { "type": "array", "items": { "$ref": "#/$defs/pii_type" } },
+            "user_confirmed": { "const": true }
+          },
+          "description": "Present only for read_disclosed."
+        }
+      }
+    },
+    "disclosure_offer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scan_id", "status", "grant_id", "counts", "expires_in_seconds"],
+      "properties": {
+        "scan_id": { "$ref": "#/$defs/id" }, "status": { "const": "confirmation_required" },
+        "grant_id": { "$ref": "#/$defs/id" },
+        "counts": { "type": "object", "propertyNames": { "$ref": "#/$defs/pii_type" }, "additionalProperties": { "type": "integer", "minimum": 1 } },
+        "expires_in_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "disclosure_state": {
+      "type": "object", "additionalProperties": false, "required": ["scan_id", "status"],
+      "properties": {
+        "scan_id": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["nothing_to_reveal", "disclosure_expired", "disclosure_invalid", "disclosure_unavailable"] }
+      }
     },
     "unavailable": {
       "type": "object", "additionalProperties": false, "required": ["status"],
