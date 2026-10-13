@@ -12,6 +12,9 @@ use std::{
     time::Duration,
 };
 
+/// Hooks wait on these scans, so the CLI polls faster than the SDK's 1 s default.
+const CLI_POLL_INTERVAL: Duration = Duration::from_millis(200);
+
 pub fn error(message: &str) -> ScannerError {
     ScannerError::Ark(message.into())
 }
@@ -103,6 +106,7 @@ fn submit_at(base_url: &str, token: &str, body: Value, timeout: Duration) -> Res
         let result = Client::with_base_url(base_url, token)
             .map_err(map_error)?
             .with_timeout(remaining)
+            .with_poll_interval(CLI_POLL_INTERVAL)
             .scan_json(body.clone());
         match result {
             Ok(response) => return Ok(response.jobs),
@@ -176,7 +180,8 @@ fn with_anonymous_client<T>(
     let previous = load_anonymous_identity(&root)?;
     let client = Client::with_base_url_anonymous(&config.provider.api_base_url, previous)
         .map_err(map_error)?
-        .with_timeout(Duration::from_millis(config.runtime.scan_timeout_ms));
+        .with_timeout(Duration::from_millis(config.runtime.scan_timeout_ms))
+        .with_poll_interval(CLI_POLL_INTERVAL);
     let result = operation(&client);
     if let Some(cookie) = client.anonymous_cookie() {
         save_anonymous_identity(&root, &cookie)?;
