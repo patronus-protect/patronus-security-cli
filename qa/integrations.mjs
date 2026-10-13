@@ -95,6 +95,14 @@ if (key) {
 } else findings.push(finding('integrations', 'medium', 'qa-key-missing', 'QA API key missing: hosted MCP was not checked',
   { suggestion: 'Add PATRONUS_QA_API_KEY=... to ~/.patronus-qa/env (chmod 600).' }))
 
-check('QA data dir signed in', existsSync(join(process.env.PATRONUS_QA_HOME ?? join(homedir(), '.patronus-qa'), 'data/auth/credentials.json')))
+// The QA login token lasts 14 days; warn before scheduled live runs start failing. Only expires_at is read.
+const credentials = join(process.env.PATRONUS_QA_HOME ?? join(homedir(), '.patronus-qa'), 'data/auth/credentials.json')
+let expiresAt
+try { expiresAt = Number(JSON.parse(await readFile(credentials, 'utf8')).expires_at) * 1000 } catch {}
+const daysLeft = expiresAt ? Math.floor((expiresAt - Date.now()) / 86_400_000) : undefined
+metrics.qa_login_days_left = daysLeft ?? null
+if (!check('QA data dir signed in', daysLeft !== undefined && daysLeft >= 3, daysLeft === undefined ? 'not signed in' : `${daysLeft} days left`))
+  findings.push(finding('integrations', daysLeft !== undefined && daysLeft >= 0 ? 'low' : 'medium', 'qa-login-expiring', daysLeft === undefined ? 'QA account is not signed in' : `QA login expires in ${daysLeft} days`,
+  { suggestion: 'From the repository root: PATRONUS_DATA_DIR=$HOME/.patronus-qa/data target/debug/patronus-security-scanner auth login (QA account).' }))
 
 await report('integrations', { findings, metrics, checks }, options)
