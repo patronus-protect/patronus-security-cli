@@ -124,12 +124,18 @@ test('mixed MCP text and media exposes every ordered text block in PostToolUse',
   assert.equal(result.exitCode, 0, `host did not finish: ${result.directory}`);
   const events = (await readFile(join(result.directory, 'hooks.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   const response = events.find(event => event.hook_event_name === 'PostToolUse').tool_response;
-  assert.deepEqual(response.map(block => block.type), ['text', 'image', 'text']);
-  assert.deepEqual(response.filter(block => block.type === 'text').map(block => block.text), [
+  // Claude Code 2.1.29x adds an "[Image: source: <saved path>]" text block after each image.
+  const imageNote = block => block.type === 'text' && /^\[Image: source: [^\]]+\]$/.test(block.text);
+  const content = response.filter(block => !imageNote(block));
+  assert.deepEqual(content.map(block => block.type), ['text', 'image', 'text']);
+  assert.deepEqual(content.filter(block => block.type === 'text').map(block => block.text), [
     '{"payload":"RAW_RESPONSE_ONLY_SENTINEL"}', 'RAW_ADDITIONAL_BLOCK_SENTINEL',
   ]);
   const next = result.messages[1].messages.at(-1).content.find(block => block.type === 'tool_result').content;
-  assert.deepEqual(next, response);
+  // Newer hosts append their own <system-reminder> block and a trailing newline to the last text block.
+  const hostAdded = block => block.type === 'text' && /^<system-reminder>[\s\S]*<\/system-reminder>$/.test(block.text);
+  const normalized = blocks => blocks.filter(block => !hostAdded(block)).map(block => block.type === 'text' ? { ...block, text: block.text.replace(/\n$/, '') } : block);
+  assert.deepEqual(normalized(next), normalized(response));
   process.stdout.write(`proof: ${result.directory}\n`);
 });
 
