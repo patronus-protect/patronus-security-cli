@@ -66,14 +66,15 @@ provenance; it is off by default. Make and Zapier are never published by CI.
 ## One-time owner setup (official accounts)
 
 1. **GitHub:** create the `automation-releases` environment with required reviewers.
-2. **npm:** npm accepts a trusted publisher only for an existing package, and n8n
-   verifies only versions published from GitHub Actions with provenance. For the first
-   release, add a one-time granular `NPM_TOKEN` secret to the `automation-releases`
-   environment and run the release workflow with `publish_npm` (and
-   `publish_activepieces` once the `patronus-protect` npm org exists). Then configure
-   trusted publishing for repository `patronus-protect/patronus-security-cli`, workflow
-   `automation-release.yml` and environment `automation-releases` (npm ≥ 11.5.1), and
-   delete the token and the secret. Later releases use OIDC only.
+2. **npm:** the official npm account `patronus-protect` owns the `@patronus-protect`
+   scope (it also publishes `@patronus-protect/api-client`). npm accepts a trusted
+   publisher only for an existing package, so, as for the API client, publish a first
+   pre-release (`0.1.1-rc.0`, `--tag next`) once from a logged-in machine. Then add the
+   trusted publisher for repository `patronus-protect/patronus-security-cli`, workflow
+   `automation-release.yml` and environment `automation-releases` (npm ≥ 11.5.1) and run
+   the release workflow with `publish_npm` (and `publish_activepieces`). n8n verifies only
+   versions published from GitHub Actions with provenance, so submit the CI-published
+   version.
 3. **Make:** with the official Make organization, run
    `node make/install.mjs --zone <zone> --apply` (needs `MAKE_API_TOKEN` with
    `sdk-apps:write`). It creates the app, connection, five modules and the app icon and

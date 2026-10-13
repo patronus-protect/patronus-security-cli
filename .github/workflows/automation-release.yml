@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       publish_activepieces:
-        description: Also publish @patronus-protect/piece-patronus (needs the npm org)
+        description: Also publish @patronus-protect/piece-patronus
         type: boolean
         default: false
 
@@ -71,10 +71,6 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           PUBLISH_ACTIVEPIECES: ${{ inputs.publish_activepieces }}
-          # Trusted publishing (OIDC) is used when no token is set. npm accepts a trusted
-          # publisher only for an existing package, so the very first release of a package
-          # uses a one-time granular NPM_TOKEN environment secret; delete it afterwards.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm publish "release-assets/n8n-nodes-patronus-$RELEASE_VERSION.tgz" --access public --provenance
           if [ "$PUBLISH_ACTIVEPIECES" = "true" ]; then
