@@ -21,6 +21,7 @@ import { args, finding, loadEnv, percentile, previousMetrics, qaData, qaHome, ra
 loadEnv()
 const options = { ...args(), keep: process.argv.includes('--keep'), quick: process.argv.includes('--quick') }
 const limits = thresholds.hooks
+const arkLevel = process.env.PATRONUS_QA_ARK_LEVEL ?? 'l3'
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
 const hosts = ['claude', 'codex']
 const findings = []
@@ -61,7 +62,8 @@ let tornDown = false
 async function sandboxEnv(dataDir) {
   await mkdir(dataDir, { recursive: true, mode: 0o700 })
   const config = join(sandbox, 'scanner.toml')
-  if (!existsSync(config)) await writeFile(config, '[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
+  // Production profile: L3 with the models `assets prepare` placed in ~/.patronus-qa/models.
+  if (!existsSync(config)) await writeFile(config, `[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
   return {
     ...process.env,
     PATH: `${join(homedir(), '.local/bin')}:${process.env.PATH}`,
@@ -335,8 +337,8 @@ try {
   const liveRun = options.live ? await live() : undefined
   const hookStats = hookMetrics([...replayEvents, ...suiteEvents, ...(liveRun?.events ?? [])])
   const previous = await previousMetrics('hooks')
-  evaluate({ detection, hookStats, suites, liveRun, previous })
-  metrics = { detection, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
+  evaluate({ detection, hookStats, suites, liveRun, previous: previous?.ark_level === arkLevel ? previous : undefined })
+  metrics = { ark_level: arkLevel, detection, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
     ...(liveRun ? { live: { pass: liveRun.pass, fail: liveRun.fail, ms: liveRun.ms } } : {}), replay: rows.map(({ messages, ...row }) => row) }
 } finally {
   await teardown()
