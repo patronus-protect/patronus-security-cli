@@ -1,5 +1,7 @@
 # Runtime text security contract
 
+How each flow runs, with diagrams, is described in [runtime-flows.md](runtime-flows.md).
+
 Patronus runtime plugins protect **external text before it reaches the agent model**.
 Each enabled surface uses the same text boundary across supported hosts. Users may explicitly disable a surface or pause a chat through the trusted dashboard or CLI settings; disabled surfaces do not grant scan approval. The default enables all three surfaces:
 
