@@ -348,7 +348,15 @@ fn protocol_summaries(root: &Path, protocol_root: &Path) -> Result<Vec<ProtocolS
             host: last.host.clone(),
             session_id: last.session_id.clone(),
             latest: last.timestamp,
-            status: last.status.clone().unwrap_or_else(|| last.event.clone()),
+            // Hook lifecycle events follow every scan; the session status is the last scan's.
+            status: events
+                .iter()
+                .rev()
+                .find(|event| !event.event.starts_with("hook_"))
+                .unwrap_or(last)
+                .status
+                .clone()
+                .unwrap_or_else(|| last.event.clone()),
             events: events.len(),
         });
     }
@@ -492,6 +500,19 @@ pub fn render_report_with_index(report: &Report, index_href: &str) -> String {
     ))
 }
 
+/// Hook rows show their decision and outcome where scan rows show the scan status.
+fn hook_status(event: &ProtocolEvent) -> String {
+    [
+        event.decision.as_deref(),
+        event.outcome.as_deref(),
+        event.error_code.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" / ")
+}
+
 fn render_protocol(events: &[ProtocolEvent]) -> String {
     let title = events
         .first()
@@ -505,8 +526,8 @@ fn render_protocol(events: &[ProtocolEvent]) -> String {
                 event.timestamp.to_rfc3339(),
                 html(&event.event),
                 html(event.direction.as_deref().unwrap_or("")),
-                html(event.tool_name.as_deref().unwrap_or("")),
-                html(event.status.as_deref().unwrap_or("")),
+                html(event.tool_name.as_deref().or(event.hook_event.as_deref()).unwrap_or("")),
+                html(&event.status.clone().unwrap_or_else(|| hook_status(event))),
                 html(event.scan_id.as_deref().unwrap_or("")),
                 event.duration_ms.map(|value| value.to_string()).unwrap_or_default(),
                 html(event.payload_hash.as_deref().unwrap_or(""))

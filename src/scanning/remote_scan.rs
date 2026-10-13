@@ -194,7 +194,7 @@ pub fn scan(
     // Categories with identical gates share one fetch. Per-category overrides
     // get their own request so no disabled L1 gate or model level is lost.
     let mut groups: Vec<(Value, Vec<String>)> = Vec::new();
-    for category in &categories {
+    for category in categories.iter().filter(|_| !anonymous) {
         let canonical = if category == "injection" {
             "prompt_injection"
         } else {
@@ -230,17 +230,16 @@ pub fn scan(
         target_id,
         scanned_at: Some(chrono::Utc::now()),
     };
-    if groups.is_empty() {
+    if categories.is_empty() {
         return Err(error("No categories enabled"));
     }
-    for (mut settings, members) in groups {
-        settings["categories"] = json!(members);
-        let mut body = json!({"config":settings});
-        body[if kind == "url" {
-            "url"
-        } else {
-            "mcp_server_url"
-        }] = json!(target);
+    // The anonymous API accepts only the target and applies its fixed policy,
+    // so every category is covered by one request without a `config` field.
+    if anonymous {
+        groups.push((Value::Null, categories.clone()));
+    }
+    for (settings, members) in groups {
+        let body = request_body(kind, &target, (!anonymous).then_some(settings), &members);
         let jobs = crate::api_client::submit(config, body, kind == "url")?;
         let partial = summarize(kind, &members, &jobs)?;
         report.jobs += partial.jobs;
@@ -266,6 +265,22 @@ pub fn scan(
     report.duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
     persist_report(&report)?;
     Ok(report)
+}
+
+/// The JSON scan request. `settings` is `None` for anonymous requests, which
+/// the API rejects when they carry a `config` field.
+fn request_body(kind: &str, target: &str, settings: Option<Value>, categories: &[String]) -> Value {
+    let field = if kind == "url" {
+        "url"
+    } else {
+        "mcp_server_url"
+    };
+    let mut body = json!({ field: target });
+    if let Some(mut settings) = settings {
+        settings["categories"] = json!(categories);
+        body["config"] = settings;
+    }
+    body
 }
 
 fn persist_report(report: &RemoteReport) -> Result<()> {
@@ -359,11 +374,7 @@ fn remote_file(path: &Path, options: &ScanOptions) -> Result<RemoteReport> {
             }
         })
         .collect();
-    let settings = json!({
-        "categories": categories,
-        "max_level": config.ark.max_level.to_uppercase(),
-        "gates": {"rules": config.analysis.l1_rules, "models": config.analysis.l1_detectors.iter().map(|(key,value)| (format!("native:{key}"), *value)).collect::<std::collections::BTreeMap<_,_>>()}
-    });
+    let settings = anonymous_file_settings(&config, &categories);
     let bytes = std::fs::read(path).map_err(|_| error("File unavailable"))?;
     let target_id = crate::chunk::hash(&bytes);
     let start = std::time::Instant::now();
@@ -380,6 +391,15 @@ fn remote_file(path: &Path, options: &ScanOptions) -> Result<RemoteReport> {
     report.duration_ms = start.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
     persist_report(&report)?;
     Ok(report)
+}
+
+/// The anonymous upload API accepts only `categories` and `max_level`; any
+/// other field (such as `gates`) makes it reject the scan configuration.
+fn anonymous_file_settings(config: &Config, categories: &[String]) -> Value {
+    json!({
+        "categories": categories,
+        "max_level": config.ark.max_level.to_uppercase(),
+    })
 }
 
 pub fn execute_file(path: &Path, options: ScanOptions) -> Result<i32> {
@@ -542,6 +562,32 @@ mod tests {
                 .approved
         );
         assert!(summarize("url", &["injection".into(), "dlp".into()], &[good]).is_err());
+    }
+
+    #[test]
+    fn anonymous_requests_carry_only_the_target() {
+        let members = vec!["injection".to_string(), "dlp".to_string()];
+        assert_eq!(
+            request_body("url", "https://example.com/", None, &members),
+            json!({"url": "https://example.com/"})
+        );
+        let signed_in = request_body(
+            "mcp",
+            "https://example.com/mcp",
+            Some(json!({"max_level": "L2"})),
+            &members,
+        );
+        assert_eq!(
+            signed_in,
+            json!({"mcp_server_url": "https://example.com/mcp",
+                "config": {"max_level": "L2", "categories": ["injection", "dlp"]}})
+        );
+        let config: Config = toml::from_str(crate::config::DEFAULTS).unwrap();
+        let file = anonymous_file_settings(&config, &members);
+        assert_eq!(
+            file.as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["categories", "max_level"]
+        );
     }
 
     #[test]

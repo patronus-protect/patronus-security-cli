@@ -1,10 +1,13 @@
 {
+  "ark_version": "1",
   "status": "completed",
   "jobs": [{
     "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "source": "text",
     "status": "completed",
+    "progress": {},
     "decision": "block",
+    "safety_status": "attack",
     "categories": {
       "injection": {
         "category": "injection",
@@ -13,10 +16,16 @@
         "level": "L2",
         "model": "prompt-injection-v1",
         "accepted": true,
+        "final_result": {
+          "class_name": "attack",
+          "confidence": 0.97,
+          "source": "default"
+        },
         "decision_evidence": {
           "stage": "union",
           "decisive_chunks": [{
             "chunk_id": 0,
+            "source": "l2",
             "class_name": "attack",
             "confidence": 0.97,
             "span": { "start": 0, "end": 33 }
@@ -30,8 +39,27 @@
           "end_char": 6
         }]
       }
-    }
+    },
+    "completion": { "state": "complete" }
   }],
-  "coverage": { "state": "complete" },
-  "usage": { "scan_units": 1, "unit_version": "scan-unit-v1" }
+  "input": { "kind": "text", "media_types": ["text/plain"] },
+  "extraction": {
+    "version": "document-v1",
+    "state": "complete",
+    "documents_total": 1,
+    "documents_scanned": 1,
+    "warnings": []
+  },
+  "coverage": {
+    "state": "complete",
+    "input_tokens": 7,
+    "documents_total": 1,
+    "documents_scanned": 1
+  },
+  "usage": {
+    "input_tokens": 7,
+    "scan_units": 1,
+    "request_units": 1,
+    "unit_version": "scan-unit-v1"
+  }
 }

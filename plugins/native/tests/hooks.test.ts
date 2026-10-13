@@ -513,3 +513,20 @@ test('the MCP status tool returns the fallback notice with the approved result',
   assert.equal(result.isError, false)
   assert.deepEqual(JSON.parse(result.content[0]!.text).notice, notice)
 })
+
+test('hook trace records decision, outcome and scan count without changing the response', async () => {
+  const run = async (event: string, extra: object, rpc: (config: any, request: any) => Promise<any>) => {
+    const trace: any = { decision: 'allow', outcome: 'ok', scans: 0 }
+    const result = await runHook('codex', event, input(event, extra), {}, rpc, noProtocol, undefined, undefined, trace)
+    return { result, trace }
+  }
+  const clean = await run('PostToolUse', { tool_response: 'CLEAN-731' }, async () => ({ scan_id: 'scan-731', status: 'approved' }))
+  assert.deepEqual(clean.result, {})
+  assert.deepEqual(clean.trace, { decision: 'allow', outcome: 'ok', scans: 1 })
+  const pending = await run('PostToolUse', { tool_response: 'RAW-731' }, async () => ({ scan_id: 'scan-731', status: 'pending' }))
+  assert.deepEqual(pending.trace, { decision: 'replace', outcome: 'ok', scans: 1 })
+  const failed = await run('PostToolUse', { tool_response: 'RAW-731' }, async () => { throw Error('PRIVATE-731') })
+  assert.deepEqual(failed.trace, { decision: 'warn', outcome: 'error', error_code: 'hook_error', scans: 1 })
+  const invalid = await run('PostToolUse', { session_id: '../foreign' }, async () => assert.fail('must not scan'))
+  assert.equal(invalid.trace.error_code, 'hook_input_invalid')
+})

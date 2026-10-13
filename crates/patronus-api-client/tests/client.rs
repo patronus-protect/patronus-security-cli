@@ -1,5 +1,16 @@
-use patronus_api_client::{Client, ErrorKind, FileUpload, ScanResponse};
+use patronus_api_client::{Client, ErrorKind, FileUpload, RequestOptions, ScanResponse};
 use std::io::{BufRead, Read, Write};
+use std::time::{Duration, Instant};
+
+const QUOTA_MONTHLY_LIMIT: &str =
+    include_str!("../../../contract/fixtures/quota-monthly-limit.json");
+
+fn header<'a>(request: &'a str, name: &str) -> Option<&'a str> {
+    request.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        key.eq_ignore_ascii_case(name).then(|| value.trim())
+    })
+}
 
 fn serve(responses: Vec<&'static str>) -> (String, std::thread::JoinHandle<Vec<Vec<u8>>>) {
     serve_with(responses.into_iter().map(|body| (200, "", body)).collect())
@@ -79,6 +90,10 @@ fn normalizes_a_flat_completed_job_from_the_control_plane() {
     assert_eq!(submitted.status, "completed");
     assert_eq!(submitted.jobs[0]["decision"], "allow");
     assert_eq!(submitted.usage.as_ref().unwrap()["scan_units"], 1);
+    assert_eq!(submitted.coverage.as_ref().unwrap()["input_tokens"], 8);
+    assert_eq!(submitted.extra["ark_version"], "1");
+    assert!(submitted.jobs[0].get("ark_version").is_none());
+    assert_eq!(submitted.jobs[0]["source"], "text");
 
     let scanned = client.scan_text("hello").unwrap();
     assert_eq!(
@@ -262,5 +277,144 @@ fn typed_anonymous_quota_contract_remains_available_to_callers() {
         error.details.as_deref().unwrap()["quota"]["limit_kind"],
         "anonymous_daily_scan_units"
     );
+    assert_eq!(error.limit_kind(), Some("anonymous_daily_scan_units"));
     thread.join().unwrap();
+}
+
+#[test]
+fn monthly_limit_body_is_a_quota_error_with_limit_kind_and_body_retry_after() {
+    let (base, thread) = serve_with(vec![
+        (429, "", QUOTA_MONTHLY_LIMIT),
+        (429, "Retry-After: 5\r\n", QUOTA_MONTHLY_LIMIT),
+    ]);
+    let client = Client::with_base_url(base, "secret").unwrap();
+    let error = client.scan_text("hello").unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Quota);
+    assert_eq!(error.code.as_deref(), Some("MONTHLY_LIMIT_REACHED"));
+    assert_eq!(error.limit_kind(), Some("monthly_scan_units"));
+    assert_eq!(error.retry_after, Some(3600));
+    assert_eq!(error.request_id.as_deref(), Some("req_quota_monthly"));
+
+    let error = client
+        .submit_json(serde_json::json!({"text":"hello"}))
+        .unwrap_err();
+    assert_eq!(error.retry_after, Some(5));
+    thread.join().unwrap();
+}
+
+#[test]
+fn plain_429_stays_a_rate_limit() {
+    let (base, thread) = serve_with(vec![(
+        429,
+        "",
+        r#"{"error":{"code":"RATE_LIMITED","message":"Slow down","request_id":"req_rate"}}"#,
+    )]);
+    let error = Client::with_base_url(base, "secret")
+        .unwrap()
+        .scan_text("hello")
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::RateLimit);
+    assert_eq!(error.limit_kind(), None);
+    thread.join().unwrap();
+}
+
+#[test]
+fn sends_an_idempotency_key_on_every_post_method() {
+    let completed = include_str!("../../../contract/fixtures/completed.json");
+    let (base, thread) = serve(vec![completed; 8]);
+    let client = Client::with_base_url(base, "secret").unwrap();
+    let options = RequestOptions::new().idempotency_key("retry-0001");
+    let upload = || FileUpload::new("a.txt", "text/plain", b"a".to_vec());
+
+    client
+        .submit_json_with_options(serde_json::json!({"text":"hello"}), &options)
+        .unwrap();
+    client
+        .scan_json_with_options(serde_json::json!({"text":"hello"}), &options)
+        .unwrap();
+    client.scan_text_with_options("hello", &options).unwrap();
+    client
+        .scan_url_with_options("https://example.com", &options)
+        .unwrap();
+    client
+        .scan_mcp_server_with_options("https://example.com/mcp", &options)
+        .unwrap();
+    client
+        .scan_files_with_options(&[upload()], Some("hi"), None, &options)
+        .unwrap();
+    client.scan_file_with_options(upload(), &options).unwrap();
+    client.scan_text("hello").unwrap();
+
+    let requests: Vec<String> = thread
+        .join()
+        .unwrap()
+        .into_iter()
+        .map(|request| String::from_utf8_lossy(&request).into_owned())
+        .collect();
+    for request in &requests[..7] {
+        assert!(request.starts_with("POST "));
+        assert_eq!(header(request, "idempotency-key"), Some("retry-0001"));
+    }
+    assert_eq!(header(&requests[7], "idempotency-key"), None);
+}
+
+#[test]
+fn rejects_invalid_idempotency_keys_before_sending() {
+    let client = Client::with_base_url("http://127.0.0.1:1", "secret").unwrap();
+    let long = "x".repeat(129);
+    for key in ["", "has space", "line\nbreak", long.as_str(), "ümlaut"] {
+        let options = RequestOptions::new().idempotency_key(key);
+        let error = client
+            .scan_text_with_options("hello", &options)
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Validation, "{key:?}");
+        let error = client
+            .scan_file_with_options(
+                FileUpload::new("a.txt", "text/plain", b"a".to_vec()),
+                &options,
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Validation, "{key:?}");
+    }
+
+    let completed = include_str!("../../../contract/fixtures/completed.json");
+    let (base, thread) = serve(vec![completed]);
+    Client::with_base_url(base, "secret")
+        .unwrap()
+        .submit_json_with_options(
+            serde_json::json!({"text":"hello"}),
+            &RequestOptions::new().idempotency_key("x".repeat(128)),
+        )
+        .unwrap();
+    thread.join().unwrap();
+}
+
+#[test]
+fn polls_once_per_second_by_default_and_honours_with_poll_interval() {
+    let accepted =
+        r#"{"status":"accepted","jobs":[{"job_id":"job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}"#;
+    let running =
+        r#"{"job_id":"job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"running","categories":{}}"#;
+    let completed =
+        r#"{"job_id":"job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"completed","categories":{}}"#;
+
+    let (base, thread) = serve(vec![accepted, running, completed]);
+    let started = Instant::now();
+    let result = Client::with_base_url(base, "secret")
+        .unwrap()
+        .scan_url("https://example.com")
+        .unwrap();
+    assert_eq!(result.status, "completed");
+    assert!(started.elapsed() >= Duration::from_millis(950));
+    assert_eq!(thread.join().unwrap().len(), 3);
+
+    let (base, thread) = serve(vec![accepted, running, completed]);
+    let started = Instant::now();
+    Client::with_base_url(base, "secret")
+        .unwrap()
+        .with_poll_interval(Duration::from_millis(10))
+        .scan_url("https://example.com")
+        .unwrap();
+    assert!(started.elapsed() < Duration::from_millis(900));
+    assert_eq!(thread.join().unwrap().len(), 3);
 }

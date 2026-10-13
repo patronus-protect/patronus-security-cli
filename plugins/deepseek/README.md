@@ -63,6 +63,22 @@ Patronus is fail-open when scanning infrastructure is unavailable. Missing authe
 
 A completed finding is enforced: dangerous prompt or result text does not continue as an approved original. Fully covered PII/DLP-only results may use the separately retrieved masked view.
 
+## Degraded or inactive messages
+
+Unless a message says the content was scanned locally, it was not scanned and remains unverified. Scanner and integration failures name their public reason in parentheses. Commands below are `patronus-security-scanner` subcommands.
+
+| Message or reason | Cause | Fix |
+| --- | --- | --- |
+| `Patronus protection is inactive for this content` without a reason, or a receipt saying `Patronus is unavailable or inactive` | No scan result came back and no cause was reported: the plugin is disabled or its scanner is missing or broken. | `integration deepseek status --format json`, then `integration deepseek enable` |
+| `Patronus is not signed in to the API`, `Your Patronus login has expired`, `The Patronus API rejected the saved login` | API scanning needs a valid login. If the message says `scanned locally instead`, the content was still scanned. | `auth login` |
+| `Patronus API usage limit reached` | The account's usage or rate limit is exhausted; the message gives the seconds until the API is available again. | `auth usage`; wait for the reset or raise the plan at https://control.patronus.studio/ |
+| `api_timeout`, `api_unavailable`, `api_invalid_response`, `api_request_rejected` | The Patronus API did not answer, could not be reached or rejected the request. | Check connectivity and `auth status --check`, then retry |
+| `broker_unavailable`, `runtime_start_failed`, `scanner_connection_lost`, `invalid_scanner_response`, `hook_input_invalid`, `hook_error` | The local integration (broker, scanner process or hook) failed. | `integration deepseek status --format json`, then `integration deepseek enable` |
+| `runtime_version_mismatch` | The installed CLI and the plugin are different releases. | `maintenance update`, then `integration deepseek update`, and restart |
+| `configuration_unavailable` | The scanner configuration is invalid or unreadable. | `config print --format json` and fix the reported file |
+| `scan_timeout`, `payload_too_large`, `unsupported_content`, `unsupported_payload`, `invalid_chunking` | The content is too large, too slow to scan or in an unsupported shape. | Raise `scan_timeout_ms` or `max_payload_bytes` ([configuration](../../docs/configuration.md)) or treat the content as unverified |
+| `local_scanner_error`, `scanner_crashed`, `incomplete_classification`, `invalid_classification`, `invalid_evidence_span` | The local scanner or a classifier failed on this content. | `assets prepare` for L2/L3 profiles; if it repeats, report it with `support-us` |
+
 ## Manage the integration
 
 Open `patronus-security-scanner dashboard` to review activity and change policy. Restart the Harness after installation or an update.

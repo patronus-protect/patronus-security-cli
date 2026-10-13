@@ -2,13 +2,16 @@ export type Json = null | boolean | number | string | Json[] | { [key: string]: 
 
 export interface ScanJob {
   job_id: string;
+  source?: string;
   status?: string;
+  progress?: Record<string, Json>;
   decision?: string;
   categories?: Record<string, Json>;
   [key: string]: Json | undefined;
 }
 
 export interface ScanResponse {
+  ark_version?: string;
   status: string;
   jobs: ScanJob[];
   input?: Json;
@@ -30,6 +33,8 @@ export class PatronusError extends Error {
     readonly requestId?: string,
     readonly retryAfter?: number,
     readonly details?: Json,
+    /** `quota.limit_kind` from a quota error body, e.g. "monthly_scan_units". */
+    readonly limitKind?: string,
   ) { super(message); this.name = "PatronusError"; }
 }
 
@@ -41,6 +46,17 @@ export interface ClientOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+/** Per-request options for POST /scan. */
+export interface RequestOptions {
+  /** Idempotency-Key header: 1-128 visible ASCII characters. Reuse the same key when retrying the same request. */
+  idempotencyKey?: string;
+}
+
+export interface UploadOptions extends RequestOptions {
+  text?: string;
+  config?: Json;
+}
+
 export interface Upload {
   name: string;
   data: Blob;
@@ -49,6 +65,8 @@ export interface Upload {
 
 const DEFAULT_BASE_URL = "https://control.patronus.studio/api/v1";
 const JOB_ID = /^job_[0-9a-f]{32}$/i;
+const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,128}$/;
+const ENVELOPE_FIELDS = ["ark_version", "input", "extraction", "coverage", "usage", "request_id"] as const;
 
 export class Patronus {
   private readonly baseUrl: string;
@@ -59,7 +77,7 @@ export class Patronus {
   constructor(private readonly options: ClientOptions) {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     this.timeoutMs = options.timeoutMs ?? 60_000;
-    this.pollIntervalMs = options.pollIntervalMs ?? 200;
+    this.pollIntervalMs = options.pollIntervalMs ?? 1_000;
     this.fetcher = options.fetch ?? globalThis.fetch;
     if (!options.apiKey.trim() || /[\r\n]/.test(options.apiKey)) throw new PatronusError("API key is required", "authentication");
     const url = new URL(this.baseUrl);
@@ -69,26 +87,28 @@ export class Patronus {
     }
   }
 
-  scanText(text: string, config?: Json) { return this.scanJson({ text, ...(config === undefined ? {} : { config }) }); }
-  scanUrl(url: string, config?: Json) { return this.scanJson({ url, ...(config === undefined ? {} : { config }) }); }
-  scanMcpServer(mcp_server_url: string, config?: Json) { return this.scanJson({ mcp_server_url, ...(config === undefined ? {} : { config }) }); }
+  scanText(text: string, config?: Json, options?: RequestOptions) { return this.scanJson({ text, ...(config === undefined ? {} : { config }) }, options); }
+  scanUrl(url: string, config?: Json, options?: RequestOptions) { return this.scanJson({ url, ...(config === undefined ? {} : { config }) }, options); }
+  scanMcpServer(mcp_server_url: string, config?: Json, options?: RequestOptions) { return this.scanJson({ mcp_server_url, ...(config === undefined ? {} : { config }) }, options); }
 
-  async scanFiles(files: Upload[], options: { text?: string; config?: Json } = {}): Promise<ScanResponse> {
+  async scanFiles(files: Upload[], options: UploadOptions = {}): Promise<ScanResponse> {
     if (!files.length) throw new PatronusError("At least one file is required", "validation");
+    const headers = this.postHeaders(options);
     const form = new FormData();
     for (const file of files) form.append("files", file.mediaType ? new Blob([file.data], { type: file.mediaType }) : file.data, file.name);
     if (options.text !== undefined) form.append("text", options.text);
     if (options.config !== undefined) form.append("config", JSON.stringify(options.config));
     const deadline = Date.now() + this.timeoutMs;
-    return this.wait(this.normalizeSubmission(await this.request("/scan", { method: "POST", headers: { Prefer: "wait=1" }, body: form }, deadline)), deadline);
+    return this.wait(this.normalizeSubmission(await this.request("/scan", { method: "POST", headers, body: form }, deadline)), deadline);
   }
 
-  scanFile(file: Upload, options: { text?: string; config?: Json } = {}) {
+  scanFile(file: Upload, options: UploadOptions = {}) {
     return this.scanFiles([file], options);
   }
 
-  async submit(body: Json): Promise<ScanResponse> {
-    return this.normalizeSubmission(await this.request("/scan", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "wait=1" }, body: JSON.stringify(body) }, Date.now() + this.timeoutMs));
+  async submit(body: Json, options?: RequestOptions): Promise<ScanResponse> {
+    const headers = { "Content-Type": "application/json", ...this.postHeaders(options) };
+    return this.normalizeSubmission(await this.request("/scan", { method: "POST", headers, body: JSON.stringify(body) }, Date.now() + this.timeoutMs));
   }
 
   async getJob(jobId: string): Promise<ScanJob> {
@@ -96,10 +116,18 @@ export class Patronus {
     return this.request(`/scan/${jobId}`, {}, Date.now() + this.timeoutMs) as Promise<ScanJob>;
   }
 
-  async scanJson(body: Json): Promise<ScanResponse> {
+  async scanJson(body: Json, options?: RequestOptions): Promise<ScanResponse> {
+    const headers = { "Content-Type": "application/json", ...this.postHeaders(options) };
     const deadline = Date.now() + this.timeoutMs;
-    const submission = this.normalizeSubmission(await this.request("/scan", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "wait=1" }, body: JSON.stringify(body) }, deadline));
+    const submission = this.normalizeSubmission(await this.request("/scan", { method: "POST", headers, body: JSON.stringify(body) }, deadline));
     return this.wait(submission, deadline);
+  }
+
+  private postHeaders(options?: RequestOptions): Record<string, string> {
+    const key = options?.idempotencyKey;
+    if (key === undefined) return { Prefer: "wait=1" };
+    if (typeof key !== "string" || !IDEMPOTENCY_KEY.test(key)) throw new PatronusError("Idempotency key must be 1-128 visible ASCII characters", "validation");
+    return { Prefer: "wait=1", "Idempotency-Key": key };
   }
 
   private normalizeSubmission(value: Json): ScanResponse {
@@ -111,7 +139,7 @@ export class Patronus {
 
     const job = { ...value } as Record<string, Json | undefined>;
     const response: Record<string, Json | ScanJob[] | undefined> = { status: "completed", jobs: [job as ScanJob] };
-    for (const field of ["input", "extraction", "coverage", "usage", "request_id"] as const) {
+    for (const field of ENVELOPE_FIELDS) {
       delete job[field];
       if (value[field] !== undefined) response[field] = value[field];
     }
@@ -194,9 +222,14 @@ export class Patronus {
     const code = typeof nested.code === "string" ? nested.code : undefined;
     const message = typeof nested.message === "string" ? nested.message : "API request failed";
     const requestId = typeof nested.request_id === "string" ? nested.request_id : response.headers.get("x-request-id") ?? undefined;
-    const kind: ErrorKind = response.status === 401 || response.status === 403 ? "authentication" : response.status === 429 && code?.includes("QUOTA") ? "quota" : response.status === 429 ? "rate_limit" : [400, 404, 409, 413, 422].includes(response.status) ? "validation" : "transport";
+    const quota = "quota" in root && root.quota && typeof root.quota === "object" && !Array.isArray(root.quota) ? root.quota : undefined;
+    const kind: ErrorKind = quota ? "quota" : response.status === 401 || response.status === 403 ? "authentication" : response.status === 429 && code?.includes("QUOTA") ? "quota" : response.status === 429 ? "rate_limit" : [400, 404, 409, 413, 422].includes(response.status) ? "validation" : "transport";
     const retryHeader = response.headers.get("retry-after");
-    const retryAfter = retryHeader === null ? undefined : Number(retryHeader);
-    return new PatronusError(message, kind, response.status, code, requestId, retryAfter !== undefined && Number.isFinite(retryAfter) ? retryAfter : undefined, value);
+    const headerRetry = retryHeader === null ? undefined : Number(retryHeader);
+    const bodyRetry = quota?.retry_after;
+    const retryAfter = headerRetry !== undefined && Number.isFinite(headerRetry) ? headerRetry
+      : typeof bodyRetry === "number" && Number.isInteger(bodyRetry) && bodyRetry >= 0 ? bodyRetry : undefined;
+    const limitKind = typeof quota?.limit_kind === "string" ? quota.limit_kind : undefined;
+    return new PatronusError(message, kind, response.status, code, requestId, retryAfter, value, limitKind);
   }
 }

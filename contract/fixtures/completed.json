@@ -1,11 +1,34 @@
 {
+  "ark_version": "1",
   "status": "completed",
   "jobs": [{
     "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": "text",
     "status": "completed",
+    "progress": {},
     "decision": "allow",
-    "categories": {}
+    "safety_status": "benign",
+    "categories": {},
+    "completion": { "state": "complete" }
   }],
-  "coverage": { "state": "complete" },
-  "usage": { "scan_units": 1, "unit_version": "scan-unit-v1" }
+  "input": { "kind": "text", "media_types": ["text/plain"] },
+  "extraction": {
+    "version": "document-v1",
+    "state": "complete",
+    "documents_total": 1,
+    "documents_scanned": 1,
+    "warnings": []
+  },
+  "coverage": {
+    "state": "complete",
+    "input_tokens": 8,
+    "documents_total": 1,
+    "documents_scanned": 1
+  },
+  "usage": {
+    "input_tokens": 8,
+    "scan_units": 1,
+    "request_units": 1,
+    "unit_version": "scan-unit-v1"
+  }
 }

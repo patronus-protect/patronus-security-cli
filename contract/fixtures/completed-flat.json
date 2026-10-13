@@ -1,13 +1,29 @@
 {
+  "ark_version": "1",
   "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "source": "text",
   "status": "completed",
+  "input": { "kind": "text", "media_types": ["text/plain"] },
+  "extraction": {
+    "version": "document-v1",
+    "state": "complete",
+    "documents_total": 1,
+    "documents_scanned": 1,
+    "warnings": []
+  },
+  "coverage": {
+    "state": "complete",
+    "input_tokens": 8,
+    "documents_total": 1,
+    "documents_scanned": 1
+  },
   "progress": {},
   "categories": {},
   "completion": {
     "state": "complete"
   },
   "decision": "allow",
+  "safety_status": "benign",
   "timings": {},
   "usage": {
     "input_tokens": 8,

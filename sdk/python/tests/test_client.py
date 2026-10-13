@@ -1,5 +1,6 @@
 import json
 import sys
+import time
 import threading
 import tempfile
 import unittest
@@ -12,6 +13,8 @@ from patronus_api_client import FileUpload, Patronus, PatronusError
 FIXTURE = json.loads((Path(__file__).parents[3] / "contract/fixtures/completed.json").read_text())
 FLAT_FIXTURE = json.loads((Path(__file__).parents[3] / "contract/fixtures/completed-flat.json").read_text())
 INJECTION_FIXTURE = json.loads((Path(__file__).parents[3] / "contract/fixtures/completed-injection.json").read_text())
+QUOTA_FIXTURE = json.loads((Path(__file__).parents[3] / "contract/fixtures/quota-monthly-limit.json").read_text())
+JOB_ID = "job_" + "a" * 32
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -67,6 +70,10 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(submitted["status"], "completed")
         self.assertEqual(submitted["jobs"][0]["decision"], "allow")
         self.assertEqual(submitted["usage"]["scan_units"], 1)
+        self.assertEqual(submitted["ark_version"], "1")
+        self.assertEqual(submitted["coverage"]["input_tokens"], 8)
+        self.assertNotIn("ark_version", submitted["jobs"][0])
+        self.assertEqual(submitted["jobs"][0]["source"], "text")
 
         scanned = self.client.scan_text("hello")
         self.assertEqual(scanned["jobs"][0]["job_id"], "job_" + "a" * 32)
@@ -135,6 +142,71 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(raised.exception.kind, "quota")
         self.assertEqual(raised.exception.retry_after, 17)
         self.assertEqual(raised.exception.request_id, "req_test")
+
+    def test_monthly_limit_body_is_a_quota_error_with_limit_kind_and_body_retry_after(self):
+        Handler.responses = [(429, {}, QUOTA_FIXTURE)]
+        with self.assertRaises(PatronusError) as raised:
+            self.client.scan_text("hello")
+        error = raised.exception
+        self.assertEqual(error.kind, "quota")
+        self.assertEqual(error.code, "MONTHLY_LIMIT_REACHED")
+        self.assertEqual(error.limit_kind, "monthly_scan_units")
+        self.assertEqual(error.retry_after, 3600)
+        self.assertEqual(error.request_id, "req_quota_monthly")
+
+        Handler.responses = [(429, {"retry-after": "5"}, QUOTA_FIXTURE)]
+        with self.assertRaises(PatronusError) as raised:
+            self.client.submit({"text": "hello"})
+        self.assertEqual(raised.exception.retry_after, 5)
+
+    def test_plain_429_stays_a_rate_limit(self):
+        Handler.responses = [(429, {}, {"error": {"code": "RATE_LIMITED", "message": "Slow down", "request_id": "req_rate"}})]
+        with self.assertRaises(PatronusError) as raised:
+            self.client.scan_text("hello")
+        self.assertEqual(raised.exception.kind, "rate_limit")
+        self.assertIsNone(raised.exception.limit_kind)
+
+    def test_sends_idempotency_key_on_every_post_method(self):
+        Handler.responses = [FIXTURE] * 7
+        key = "retry-0001"
+        self.client.submit({"text": "hello"}, idempotency_key=key)
+        self.client.scan({"text": "hello"}, idempotency_key=key)
+        self.client.scan_text("hello", idempotency_key=key)
+        self.client.scan_url("https://example.com", config={"categories": ["injection"]}, idempotency_key=key)
+        self.client.scan_mcp_server("https://example.com/mcp", idempotency_key=key)
+        self.client.scan_files([FileUpload("a.txt", b"a", "text/plain")], idempotency_key=key)
+        self.client.scan_file(FileUpload("b.txt", b"b", "text/plain"), text="hi", idempotency_key=key)
+        self.assertEqual([headers["idempotency-key"] for _, headers, _ in Handler.requests], [key] * 7)
+
+        Handler.requests.clear()
+        Handler.responses = [FIXTURE]
+        self.client.scan_text("hello")
+        self.assertIsNone(Handler.requests[0][1]["idempotency-key"])
+
+    def test_rejects_invalid_idempotency_keys_before_sending(self):
+        for key in ["", "has space", "line\nbreak", "x" * 129, "ümlaut"]:
+            with self.assertRaises(PatronusError) as raised:
+                self.client.scan_text("hello", idempotency_key=key)
+            self.assertEqual(raised.exception.kind, "validation")
+            with self.assertRaises(PatronusError):
+                self.client.scan_files([FileUpload("a.txt", b"a")], idempotency_key=key)
+        self.assertEqual(Handler.requests, [])
+        Handler.responses = [FIXTURE]
+        self.client.submit({"text": "hello"}, idempotency_key="x" * 128)
+        self.assertEqual(len(Handler.requests), 1)
+
+    def test_polls_once_per_second_by_default(self):
+        client = Patronus("secret", base_url=self.client.base_url)
+        self.assertEqual(client.poll_interval, 1.0)
+        Handler.responses = [
+            (202, {}, {"status": "accepted", "jobs": [{"job_id": JOB_ID}]}),
+            {**FIXTURE["jobs"][0], "status": "running"},
+            FIXTURE["jobs"][0],
+        ]
+        started = time.monotonic()
+        self.assertEqual(client.scan_url("https://example.com")["status"], "completed")
+        self.assertGreaterEqual(time.monotonic() - started, 0.95)
+        self.assertEqual(len(Handler.requests), 3)
 
 
 if __name__ == "__main__": unittest.main()

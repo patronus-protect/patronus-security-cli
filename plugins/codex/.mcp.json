@@ -5,8 +5,12 @@
     },
     "patronus": {
       "command": "node",
-      "args": ["scripts/patronus.mjs", "mcp"],
-      "cwd": "."
+      "args": [
+        "scripts/patronus.mjs",
+        "mcp"
+      ],
+      "cwd": ".",
+      "default_tools_approval_mode": "approve"
     }
   }
 }

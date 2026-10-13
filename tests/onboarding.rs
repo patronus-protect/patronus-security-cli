@@ -112,15 +112,18 @@ fn no_interactive_setup_and_remote_scan_authentication_contract() {
         .assert()
         .failure()
         .stderr(predicates::str::contains("interactive terminal"));
+    // URL scans fall back to the anonymous API: they either complete or fail
+    // for a reason other than missing authentication (e.g. no network).
     let url = cli(root.path())
         .args(["scan", "url", "https://example.org/", "--format", "json"])
-        .assert()
-        .failure()
-        .get_output()
-        .stdout
-        .clone();
+        .output()
+        .unwrap()
+        .stdout;
     let url: Value = serde_json::from_slice(&url).unwrap();
-    assert_eq!(url["schema"], "patronus.remote.scan.error.v1");
+    assert!(matches!(
+        url["schema"].as_str(),
+        Some("patronus.remote.scan.v1" | "patronus.remote.scan.error.v1")
+    ));
     assert_eq!(url["kind"], "url");
     assert_eq!(url["provider"], "api");
     assert_ne!(url["reason"], "authentication_missing");

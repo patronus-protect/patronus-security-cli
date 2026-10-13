@@ -12,6 +12,9 @@ use std::{
     time::Duration,
 };
 
+/// Hooks wait on these scans, so the CLI polls faster than the SDK's 1 s default.
+const CLI_POLL_INTERVAL: Duration = Duration::from_millis(200);
+
 pub fn error(message: &str) -> ScannerError {
     ScannerError::Ark(message.into())
 }
@@ -103,6 +106,7 @@ fn submit_at(base_url: &str, token: &str, body: Value, timeout: Duration) -> Res
         let result = Client::with_base_url(base_url, token)
             .map_err(map_error)?
             .with_timeout(remaining)
+            .with_poll_interval(CLI_POLL_INTERVAL)
             .scan_json(body.clone());
         match result {
             Ok(response) => return Ok(response.jobs),
@@ -176,7 +180,8 @@ fn with_anonymous_client<T>(
     let previous = load_anonymous_identity(&root)?;
     let client = Client::with_base_url_anonymous(&config.provider.api_base_url, previous)
         .map_err(map_error)?
-        .with_timeout(Duration::from_millis(config.runtime.scan_timeout_ms));
+        .with_timeout(Duration::from_millis(config.runtime.scan_timeout_ms))
+        .with_poll_interval(CLI_POLL_INTERVAL);
     let result = operation(&client);
     if let Some(cookie) = client.anonymous_cookie() {
         save_anonymous_identity(&root, &cookie)?;
@@ -294,6 +299,55 @@ fn save_anonymous_identity(root: &Path, cookie: &str) -> Result<()> {
     result
 }
 
+/// Server-supplied text, made safe to print: control characters become spaces,
+/// whitespace runs collapse, and the result is cut to `limit` characters.
+fn printable(text: &str, limit: usize) -> String {
+    let cleaned = text
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>();
+    let mut words = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    if let Some((index, _)) = words.char_indices().nth(limit) {
+        words.truncate(index);
+        words.push('…');
+    }
+    words
+}
+
+/// `<prefix> (<CODE>): <server message> Request ID: <id>. <outcome>` with every
+/// server-controlled part bounded and stripped of control characters.
+fn server_failure(prefix: &str, source: &patronus_api_client::Error, outcome: &str) -> String {
+    let code = source
+        .code
+        .as_deref()
+        .map(|code| printable(code, 64))
+        .filter(|code| !code.is_empty())
+        .or_else(|| source.status.map(|status| format!("HTTP {status}")));
+    let mut message = prefix.to_owned();
+    if let Some(code) = code {
+        message.push_str(&format!(" ({code})"));
+    }
+    let detail = printable(&source.message, 300);
+    if !detail.is_empty() {
+        message.push_str(": ");
+        message.push_str(&detail);
+    }
+    if !message.ends_with(['.', '!', '?', '…']) {
+        message.push('.');
+    }
+    if let Some(id) = source
+        .request_id
+        .as_deref()
+        .map(|id| printable(id, 128))
+        .filter(|id| !id.is_empty())
+    {
+        message.push_str(&format!(" Request ID: {id}."));
+    }
+    message.push(' ');
+    message.push_str(outcome);
+    message
+}
+
 fn map_error(source: patronus_api_client::Error) -> ScannerError {
     let message = match source.kind {
         // The server refused a credential that looked valid locally (expired or revoked).
@@ -309,12 +363,17 @@ fn map_error(source: patronus_api_client::Error) -> ScannerError {
             retry_after: source.retry_after,
             details: source.details,
         },
-        ErrorKind::Timeout => "API scan timeout",
-        ErrorKind::Protocol => "Invalid API response",
-        ErrorKind::Validation => "API request rejected; no approval granted.",
-        ErrorKind::Transport => "API request failed; no approval granted.",
-    }
-    .to_owned();
+        ErrorKind::Timeout => "API scan timeout".to_owned(),
+        ErrorKind::Protocol => "Invalid API response".to_owned(),
+        ErrorKind::Validation => {
+            server_failure("API request rejected", &source, "Nothing was scanned.")
+        }
+        ErrorKind::Transport => server_failure(
+            "API request failed",
+            &source,
+            "Nothing was scanned; no approval granted.",
+        ),
+    };
     ScannerError::Api {
         kind: source.kind,
         message,
@@ -340,6 +399,38 @@ mod tests {
                 "quota": {"limit_kind": limit_kind}
             }))),
         }
+    }
+
+    #[test]
+    fn rejected_requests_report_server_code_message_and_request_id() {
+        let mapped = map_error(patronus_api_client::Error {
+            kind: ErrorKind::Validation,
+            message: "The URL scan request contains unsupported fields.".into(),
+            status: Some(400),
+            code: Some("INVALID_URL".into()),
+            request_id: Some("req-123".into()),
+            retry_after: None,
+            details: None,
+        });
+        assert_eq!(
+            mapped.to_string(),
+            "API request rejected (INVALID_URL): The URL scan request contains unsupported fields. Request ID: req-123. Nothing was scanned."
+        );
+
+        let hostile = map_error(patronus_api_client::Error {
+            kind: ErrorKind::Transport,
+            message: format!("bad\x1b[31m\r\ngateway{}", "x".repeat(5000)),
+            status: Some(502),
+            code: None,
+            request_id: Some("id\u{7}".into()),
+            retry_after: None,
+            details: None,
+        })
+        .to_string();
+        assert!(hostile.starts_with("API request failed (HTTP 502): bad [31m gateway"));
+        assert!(hostile.ends_with("Request ID: id. Nothing was scanned; no approval granted."));
+        assert!(!hostile.chars().any(char::is_control));
+        assert!(hostile.chars().count() < 450);
     }
 
     #[test]

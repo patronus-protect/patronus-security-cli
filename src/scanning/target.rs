@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -110,10 +110,40 @@ pub fn find_repo_root(start: &Path) -> Option<PathBuf> {
 }
 
 pub fn display_path(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
-        .components()
-        .map(|part| part.as_os_str().to_string_lossy())
-        .collect::<Vec<_>>()
-        .join("/")
+    let mut display = String::new();
+    for part in path.strip_prefix(root).unwrap_or(path).components() {
+        match part {
+            Component::Prefix(prefix) => display.push_str(&prefix.as_os_str().to_string_lossy()),
+            // The root already is a separator; joining it with '/' would print `//`.
+            Component::RootDir => display.push('/'),
+            other => {
+                if !display.is_empty() && !display.ends_with('/') {
+                    display.push('/');
+                }
+                display.push_str(&other.as_os_str().to_string_lossy());
+            }
+        }
+    }
+    display
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_path_keeps_a_single_leading_slash_outside_the_root() {
+        assert_eq!(
+            display_path(Path::new("/work/repo"), Path::new("/work/repo/src/main.rs")),
+            "src/main.rs"
+        );
+        #[cfg(unix)]
+        assert_eq!(
+            display_path(
+                Path::new("/work/repo"),
+                Path::new("/Users/me/.patronus/runs/1/report.md")
+            ),
+            "/Users/me/.patronus/runs/1/report.md"
+        );
+    }
 }

@@ -36,6 +36,7 @@ fn protocol_append_writes_safe_session_html_and_shared_index() {
         status: Some("pending".into()),
         duration_ms: Some(4),
         payload_hash: Some(format!("blake3:{}", "b".repeat(64))),
+        ..Default::default()
     };
     let session_html = append_protocol_event(&root, &event).unwrap();
     assert!(session_html.is_file());
@@ -86,11 +87,61 @@ fn protocol_rejects_unknown_or_path_shaped_metadata() {
         status: None,
         duration_ms: None,
         payload_hash: None,
+        ..Default::default()
     };
     assert!(append_protocol_event(dir.path(), &event).is_err());
     event.session_id = format!("blake3:{}", "a".repeat(64));
     event.schema = "unknown".into();
     assert!(append_protocol_event(dir.path(), &event).is_err());
+}
+
+#[test]
+fn hook_lifecycle_events_are_journaled_without_changing_session_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join(".patronus-security-scanner");
+    let session_id = format!("sha256:{}", "e".repeat(64));
+    let scan = ProtocolEvent {
+        schema: "patronus.protocol.event.v1".into(),
+        timestamp: Utc::now(),
+        host: "claude".into(),
+        session_id: session_id.clone(),
+        event: "scan_completed".into(),
+        direction: Some("response".into()),
+        tool_name: Some("Read".into()),
+        status: Some("dangerous".into()),
+        duration_ms: Some(12),
+        payload_hash: Some(format!("sha256:{}", "f".repeat(64))),
+        ..Default::default()
+    };
+    persist_protocol_event(&root, &scan, false).unwrap();
+    let hook = ProtocolEvent {
+        schema: "patronus.protocol.event.v1".into(),
+        timestamp: Utc::now(),
+        host: "claude".into(),
+        session_id,
+        event: "hook_completed".into(),
+        duration_ms: Some(20),
+        hook_event: Some("PostToolUse".into()),
+        decision: Some("replace".into()),
+        outcome: Some("ok".into()),
+        scan_count: Some(1),
+        ..Default::default()
+    };
+    let session = std::fs::read_to_string(append_protocol_event(&root, &hook).unwrap()).unwrap();
+    assert!(session.contains("PostToolUse"));
+    assert!(session.contains("replace / ok"));
+    let index = std::fs::read_to_string(root.join("index.html")).unwrap();
+    assert!(index.contains("dangerous"));
+
+    let mut invalid = hook.clone();
+    invalid.outcome = None;
+    assert!(append_protocol_event(&root, &invalid).is_err());
+    let mut invalid = hook.clone();
+    invalid.decision = Some("block".into());
+    assert!(append_protocol_event(&root, &invalid).is_err());
+    let mut invalid = scan.clone();
+    invalid.outcome = Some("ok".into());
+    assert!(append_protocol_event(&root, &invalid).is_err());
 }
 
 #[test]
@@ -111,6 +162,7 @@ fn corrupt_old_protocol_does_not_block_new_dashboard_events() {
         status: Some("approved".into()),
         duration_ms: Some(8),
         payload_hash: Some(format!("sha256:{}", "b".repeat(64))),
+        ..Default::default()
     };
     append_protocol_event(&root, &event).unwrap();
     let index = std::fs::read_to_string(root.join("index.html")).unwrap();
@@ -175,6 +227,7 @@ fn forged_or_tampered_protocol_is_not_rendered_or_extended() {
         status: Some("approved".into()),
         duration_ms: Some(1),
         payload_hash: Some(format!("sha256:{}", "d".repeat(64))),
+        ..Default::default()
     };
     std::fs::write(
         protocol.join("attacker.jsonl"),
@@ -357,6 +410,7 @@ fn protocol_root_symlink_cannot_escape_the_workspace() {
         status: Some("pending".into()),
         duration_ms: Some(1),
         payload_hash: Some(format!("sha256:{}", "b".repeat(64))),
+        ..Default::default()
     };
     assert!(append_protocol_event(&workspace.join(".patronus-security-scanner"), &event).is_err());
     assert!(!outside.join("index.html").exists());
