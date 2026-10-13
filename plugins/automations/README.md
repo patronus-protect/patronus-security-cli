@@ -17,16 +17,15 @@ automation host: the step calls the Patronus API with your API key.
 
 | Platform | How to install | Guide |
 | --- | --- | --- |
-| **n8n** (self-hosted) | Settings → Community Nodes → Install → `n8n-nodes-patronus` | [n8n](n8n/README.md) |
-| **n8n Cloud** | Search "Patronus" in the node panel once the node is verified by n8n | [n8n](n8n/README.md) |
+| **n8n** (self-hosted) | Settings → Community Nodes → Install → [`n8n-nodes-patronus`](https://www.npmjs.com/package/n8n-nodes-patronus) | [n8n](n8n/README.md) |
+| **n8n Cloud** | Search "Patronus" in the node panel once n8n has verified the node | [n8n](n8n/README.md) |
 | **Make** | Open the Patronus app invite link, then add the **Patronus** module to a scenario | [Make](make/README.md) |
 | **Zapier** | Open the Patronus integration invite link, then add **Patronus → Guard Input** to a Zap | [Zapier](zapier/README.md) |
-| **Dify** | Install the `.difypkg` from the latest GitHub release | [Dify](dify/README.md) |
-| **Activepieces** | Upload the piece `.tgz` from the latest GitHub release | [Activepieces](activepieces/README.md) |
+| **Dify** | Install `patronus-dify-0.1.1.difypkg` from the [automation release](https://github.com/patronus-protect/patronus-security-cli/releases/tag/automation-v0.1.1) | [Dify](dify/README.md) |
+| **Activepieces** | Install [`@patronus-protect/piece-patronus`](https://www.npmjs.com/package/@patronus-protect/piece-patronus) or upload its `.tgz` from the [automation release](https://github.com/patronus-protect/patronus-security-cli/releases/tag/automation-v0.1.1) | [Activepieces](activepieces/README.md) |
 
 Make and Zapier invite links and the Patronus listings in the n8n, Make and Zapier
-directories are added to this table as soon as each platform has published them; until
-then the guides describe the current way to get each integration.
+directories are added to this table as soon as each platform has published them.
 
 ## Quick start
 
