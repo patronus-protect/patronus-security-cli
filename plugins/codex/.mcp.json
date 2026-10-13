@@ -10,7 +10,12 @@
         "mcp"
       ],
       "cwd": ".",
-      "default_tools_approval_mode": "approve"
+      "default_tools_approval_mode": "approve",
+      "tools": {
+        "patronus_reveal_pii": {
+          "approval_mode": "prompt"
+        }
+      }
     }
   }
 }

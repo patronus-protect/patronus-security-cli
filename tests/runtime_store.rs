@@ -38,6 +38,7 @@ fn approved() -> ScanOutcome {
         redacted: None,
         reason: None,
         notice: None,
+        disclosure: vec![],
     }
 }
 
@@ -797,4 +798,198 @@ fn fixed_failure_and_incomplete_codes_are_exposed() {
         let result = store.check(&id, "session-a").unwrap();
         assert_eq!(result["reason"], reason, "{result}");
     }
+}
+
+const CONTACT: &str = "Mail ada@example.com, Tel 202-555-0100";
+
+fn contact_outcome() -> ScanOutcome {
+    use patronus_security_scanner::runtime::protocol::{DisclosureSpan, PiiType, RuntimeFinding};
+    let pii = |start, end| RuntimeFinding {
+        field_id: 0,
+        start_byte: start,
+        end_byte: end,
+        category: "pii".into(),
+        label: "personal_data".into(),
+        level: Some("l1".into()),
+        confidence: 1.0,
+    };
+    let mut outcome = approved();
+    outcome.verdict = Some(Verdict::Dangerous);
+    outcome.findings = vec![pii(5, 20), pii(26, 38)];
+    outcome.disclosure = vec![
+        DisclosureSpan {
+            field_id: 0,
+            start_byte: 5,
+            end_byte: 20,
+            pii_type: Some(PiiType::Email),
+        },
+        DisclosureSpan {
+            field_id: 0,
+            start_byte: 26,
+            end_byte: 38,
+            pii_type: Some(PiiType::Phone),
+        },
+    ];
+    outcome.redacted = Some(json!("Mail [REDACTED], Tel [REDACTED]"));
+    outcome
+}
+
+fn email() -> std::collections::BTreeSet<patronus_security_scanner::runtime::protocol::PiiType> {
+    [patronus_security_scanner::runtime::protocol::PiiType::Email].into()
+}
+
+/// Plays the worker for one disclosure job.
+fn run_disclosure(store: &mut Store, verified: bool) {
+    use patronus_security_scanner::runtime::disclosure::{build_view, revealable};
+    let work = store.claim_next("config-a").unwrap().unwrap();
+    let (original, types) = work.disclosure.expect("disclosure job");
+    let outcome = if verified {
+        let open = revealable(&original, &types);
+        ScanOutcome {
+            redacted: Some(build_view(&work.payload, &original, &open).unwrap().0),
+            ..original
+        }
+    } else {
+        ScanOutcome::failed("disclosure_check_failed")
+    };
+    store.complete(&work.scan_id, &outcome).unwrap();
+}
+
+#[test]
+fn disclosure_reveals_confirmed_types_once_for_its_owner_and_never_through_the_cache() {
+    let (temp, mut store) = setup();
+    let id = store.enqueue(job(json!(CONTACT))).unwrap();
+    finish(&mut store, &id, &contact_outcome());
+
+    assert_eq!(
+        store
+            .prepare_disclosure(&id, "session-b", &email(), "config-a")
+            .unwrap()["status"],
+        "unavailable"
+    );
+    let offer = store
+        .prepare_disclosure(&id, "session-a", &email(), "config-a")
+        .unwrap();
+    assert_eq!(offer["status"], "confirmation_required");
+    assert_eq!(offer["counts"], json!({"email": 1}));
+    assert!(!offer.to_string().contains("ada@"));
+    let grant = offer["grant_id"].as_str().unwrap();
+
+    assert_eq!(
+        store
+            .read_disclosed(&id, "session-b", grant, "config-a", 60_000)
+            .unwrap()["status"],
+        "unavailable"
+    );
+    let pending = store
+        .read_disclosed(&id, "session-a", grant, "config-a", 60_000)
+        .unwrap();
+    assert_eq!(pending["status"], "pending");
+    assert!(!pending.to_string().contains("ada@"));
+    run_disclosure(&mut store, true);
+    let view = store
+        .read_disclosed(&id, "session-a", grant, "config-a", 60_000)
+        .unwrap();
+    assert_eq!(view["status"], "redacted");
+    assert_eq!(view["result"], "Mail ada@example.com, Tel [REDACTED]");
+    assert_eq!(
+        view["disclosure"],
+        json!({"authorized_pii_types":["email"],"user_confirmed":true,"applied":true})
+    );
+
+    // Single delivery; the standard views and the scan verdict are unchanged.
+    assert_eq!(
+        store
+            .read_disclosed(&id, "session-a", grant, "config-a", 60_000)
+            .unwrap()["status"],
+        "disclosure_unavailable"
+    );
+    assert_eq!(
+        store.check(&id, "session-a").unwrap()["status"],
+        "dangerous"
+    );
+    assert_eq!(
+        store.read_redacted(&id, "session-a").unwrap()["result"],
+        "Mail [REDACTED], Tel [REDACTED]"
+    );
+    let replay = store.enqueue(job(json!(CONTACT))).unwrap();
+    assert_eq!(store.check(&replay, "session-a").unwrap()["cached"], true);
+    assert_eq!(
+        store.read_redacted(&replay, "session-a").unwrap()["result"],
+        "Mail [REDACTED], Tel [REDACTED]"
+    );
+    // The disclosure job and its copy of the original are gone.
+    let files = std::fs::read_dir(temp.path().join("store"))
+        .unwrap()
+        .filter(|e| {
+            e.as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".json")
+        })
+        .count();
+    assert_eq!(files, 4);
+}
+
+#[test]
+fn disclosure_grants_are_superseded_policy_bound_and_fall_back_when_unverified() {
+    let (_temp, mut store) = setup();
+    let id = store.enqueue(job(json!(CONTACT))).unwrap();
+    finish(&mut store, &id, &contact_outcome());
+    let missing = [patronus_security_scanner::runtime::protocol::PiiType::Iban].into();
+    assert_eq!(
+        store
+            .prepare_disclosure(&id, "session-a", &missing, "config-a")
+            .unwrap()["status"],
+        "nothing_to_reveal"
+    );
+    assert_eq!(
+        store
+            .prepare_disclosure(&id, "session-a", &email(), "config-b")
+            .unwrap()["status"],
+        "unavailable"
+    );
+
+    let first = store
+        .prepare_disclosure(&id, "session-a", &email(), "config-a")
+        .unwrap()["grant_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let second = store
+        .prepare_disclosure(&id, "session-a", &email(), "config-a")
+        .unwrap()["grant_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        store
+            .read_disclosed(&id, "session-a", &first, "config-a", 60_000)
+            .unwrap()["status"],
+        "disclosure_unavailable"
+    );
+    assert_eq!(
+        store
+            .read_disclosed(&id, "session-a", &second, "config-b", 60_000)
+            .unwrap()["status"],
+        "disclosure_invalid"
+    );
+
+    let grant = store
+        .prepare_disclosure(&id, "session-a", &email(), "config-a")
+        .unwrap()["grant_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    store
+        .read_disclosed(&id, "session-a", &grant, "config-a", 60_000)
+        .unwrap();
+    run_disclosure(&mut store, false);
+    let fallback = store
+        .read_disclosed(&id, "session-a", &grant, "config-a", 60_000)
+        .unwrap();
+    assert_eq!(fallback["status"], "redacted");
+    assert_eq!(fallback["result"], "Mail [REDACTED], Tel [REDACTED]");
+    assert_eq!(fallback["disclosure"]["applied"], false);
 }

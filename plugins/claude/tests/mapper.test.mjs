@@ -92,3 +92,9 @@ test('warnings add model context without stopping or replacing the result', () =
     hookSpecificOutput: { hookEventName: 'PostToolUseFailure', additionalContext: 'UNTRUSTED' },
   });
 });
+
+test('a disclosure question becomes a host approval dialog, never a stop', () => {
+  assert.deepEqual(mapClaude('PreToolUse', { kind: 'ask', text: 'Reveal 1 email address?' }), {
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: 'Reveal 1 email address?' },
+  });
+});

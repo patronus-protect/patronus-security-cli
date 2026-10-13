@@ -51,6 +51,26 @@ export interface RedactedResult {
   result?: JsonValue
 }
 
+/** PII types a user can confirm for one-time disclosure; mirrors the runtime's fixed list. */
+export const PII_TYPES = ['email', 'ip_address', 'phone', 'mac_address', 'iban', 'credit_card', 'swift_code', 'financial_account', 'date_of_birth', 'username', 'employee_id', 'customer_id', 'patient_id', 'student_id', 'applicant_id', 'tax_id', 'social_id', 'health_insurance_id', 'physician_id', 'passport_number', 'id_card_number', 'driver_license', 'license_plate', 'ssn', 'national_id'] as const
+export type PiiType = typeof PII_TYPES[number]
+export interface DisclosureParams { session: string; scan_id: string; reveal_pii: PiiType[] }
+export interface DisclosedParams { session: string; scan_id: string; grant_id: string }
+/** An offer carries counts per type, never values. */
+export interface DisclosureOffer {
+  scan_id: string
+  status: 'confirmation_required' | 'nothing_to_reveal' | 'unavailable'
+  grant_id?: string
+  counts?: Partial<Record<PiiType, number>>
+  expires_in_seconds?: number
+}
+export interface DisclosedResult {
+  scan_id: string
+  status: 'redacted' | 'disclosure_expired' | 'disclosure_invalid' | 'disclosure_unavailable' | 'unavailable'
+  result?: JsonValue
+  disclosure?: { authorized_pii_types: PiiType[]; user_confirmed: true; applied: boolean }
+}
+
 /** Transport boundary; tests inject this interface, never a model-accessible backend. */
 export interface RuntimeClient {
   hello(signal?: AbortSignal): Promise<RuntimeHello>
@@ -58,5 +78,8 @@ export interface RuntimeClient {
   check(params: JobParams, signal?: AbortSignal): Promise<ScanResult>
   readRedacted(params: JobParams, signal?: AbortSignal): Promise<RedactedResult>
   cancel(params: JobParams, signal?: AbortSignal): Promise<unknown>
+  /** Only a trusted adapter calls these, after the host's own approval dialog. */
+  prepareDisclosure?(params: DisclosureParams, signal?: AbortSignal): Promise<DisclosureOffer>
+  readDisclosed?(params: DisclosedParams, signal?: AbortSignal): Promise<DisclosedResult>
   close(): void | Promise<void>
 }

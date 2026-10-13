@@ -17,6 +17,10 @@ import { autoRedact } from '../../deepseek/src/auto-redaction.ts'
 import { brokerFailure, CALL_TIMEOUT, failureReason, prepareBroker, privateDirectory, readFrame, readPrivate, record, unavailable, validRequest, writeFrame, type BrokerConfig, type BrokerRequest } from './broker.ts'
 
 const IDLE_MS = 30 * 60_000 // Greater than the maximum five-minute runtime scan deadline.
+/** How long an approval dialog opened by the PreToolUse hook may stay open. */
+const ARMED_MS = 5 * 60_000
+
+interface Offer { scanId: string; counts: Record<string, number>; armedUntil?: number }
 const run = promisify(execFile)
 
 interface Owner { pid: number; started: string }
@@ -188,6 +192,8 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
   let snapshot: string | undefined
   let closing = false
   let idle: ReturnType<typeof setTimeout> | undefined
+  // Disclosure offers live only in this session's broker; a grant ID alone never releases values.
+  const offers = new Map<string, Offer>()
   const boot = (): Promise<SessionRuntime> => {
     sessions.assertUsable(id)
     runtime ??= (async () => {
@@ -232,6 +238,36 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
     if (request.method === 'read_redacted') {
       const value = await client.readRedacted({ session, scan_id: request.scanId }, signal)
       return value.status === 'redacted' && value.result !== undefined ? { scan_id: request.scanId, status: 'redacted', result: value.result } : unavailableScanReference()
+    }
+    if (request.method === 'prepare_reveal') {
+      if (!client.prepareDisclosure) return { scan_id: request.scanId, status: 'disclosure_unavailable' }
+      const offer = await client.prepareDisclosure({ session, scan_id: request.scanId, reveal_pii: request.types }, signal)
+      if (offer.status !== 'confirmation_required' || !offer.grant_id || !offer.counts) {
+        return offer.status === 'unavailable' ? unavailableScanReference() : { scan_id: request.scanId, status: offer.status }
+      }
+      for (const [grant, value] of offers) if (value.scanId === request.scanId) offers.delete(grant)
+      offers.set(offer.grant_id, { scanId: request.scanId, counts: offer.counts as Record<string, number> })
+      return { scan_id: request.scanId, status: 'confirmation_required', grant_id: offer.grant_id, counts: offer.counts as Record<string, number>,
+        next_tool: 'patronus_reveal_pii' }
+    }
+    if (request.method === 'arm_reveal') {
+      const offer = offers.get(request.grantId)
+      if (!offer || offer.scanId !== request.scanId) return { scan_id: request.scanId, status: 'disclosure_unavailable' }
+      offer.armedUntil = Date.now() + ARMED_MS
+      return { scan_id: request.scanId, status: 'armed', counts: offer.counts }
+    }
+    if (request.method === 'reveal') {
+      const offer = offers.get(request.grantId)
+      // Without the hook's arming the host never asked the user.
+      if (!offer || offer.scanId !== request.scanId || !offer.armedUntil || offer.armedUntil <= Date.now() || !client.readDisclosed) {
+        return { scan_id: request.scanId, status: 'disclosure_unavailable' }
+      }
+      offers.delete(request.grantId)
+      const value = await client.readDisclosed({ session, scan_id: request.scanId, grant_id: request.grantId }, signal)
+      if (value.status === 'unavailable') return unavailableScanReference()
+      return value.status === 'redacted' && value.result !== undefined && value.disclosure
+        ? { scan_id: request.scanId, status: 'redacted', result: value.result, disclosure: value.disclosure as unknown as JsonValue }
+        : { scan_id: request.scanId, status: value.status }
     }
     if (request.method !== 'request' && request.method !== 'response') throw brokerFailure()
     if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable('payload_too_large')

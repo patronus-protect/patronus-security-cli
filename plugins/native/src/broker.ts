@@ -9,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import type { JsonValue } from './types.ts'
 import { SessionState } from '../../deepseek/src/sessions.ts'
-import type { TextPayload } from '../../deepseek/src/protocol.ts'
+import { PII_TYPES, type PiiType, type TextPayload } from '../../deepseek/src/protocol.ts'
 import { boundedMilliseconds } from '../../deepseek/src/wait.ts'
 
 export interface BrokerConfig {
@@ -26,6 +26,12 @@ export type BrokerRequest =
   | { method: 'request' | 'response'; tool: string; callId: string; payload: TextPayload }
   | { method: 'check' | 'read_redacted'; scanId: string }
   | { method: 'read_static_redacted'; fileId: string }
+  /** Offers a one-time PII disclosure; the reply carries counts, never values. */
+  | { method: 'prepare_reveal'; scanId: string; types: PiiType[] }
+  /** Sent only by the PreToolUse hook right before the host's approval dialog. */
+  | { method: 'arm_reveal'; scanId: string; grantId: string }
+  /** Reaches the broker only after the host allowed the tool call. */
+  | { method: 'reveal'; scanId: string; grantId: string }
   | { method: 'static'; kind: 'repo' | 'directory' | 'file' | 'url' | 'mcp'; path: string; server?: string }
   | { method: 'close' }
 
@@ -66,6 +72,15 @@ export function validRequest(value: unknown): value is BrokerRequest {
     case 'check': case 'read_redacted':
       keys = ['method', 'scanId']
       if (typeof value.scanId !== 'string' || !/^[a-f0-9]{32}$/.test(value.scanId)) return false
+      break
+    case 'prepare_reveal':
+      keys = ['method', 'scanId', 'types']
+      if (typeof value.scanId !== 'string' || !/^[a-f0-9]{32}$/.test(value.scanId) || !Array.isArray(value.types) || value.types.length === 0 ||
+          value.types.length > PII_TYPES.length || !value.types.every(type => (PII_TYPES as readonly unknown[]).includes(type))) return false
+      break
+    case 'arm_reveal': case 'reveal':
+      keys = ['method', 'scanId', 'grantId']
+      if (typeof value.scanId !== 'string' || !/^[a-f0-9]{32}$/.test(value.scanId) || typeof value.grantId !== 'string' || !/^[a-f0-9]{32}$/.test(value.grantId)) return false
       break
     case 'read_static_redacted':
       keys = ['method', 'fileId']

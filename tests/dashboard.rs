@@ -498,3 +498,23 @@ fn write_authenticated_report(root: &std::path::Path, output: &std::path::Path, 
     )
     .unwrap();
 }
+
+#[test]
+fn disclosure_events_record_fixed_pii_types_and_never_values() {
+    let event = |types: serde_json::Value| {
+        serde_json::from_value::<ProtocolEvent>(serde_json::json!({
+            "schema": "patronus.protocol.event.v1",
+            "timestamp": "2026-10-13T08:00:00Z",
+            "host": "claude",
+            "session_id": format!("sha256:{}", "a".repeat(64)),
+            "event": "scan_completed",
+            "direction": "status",
+            "tool_name": "patronus_read_redacted",
+            "status": "confirmation_required",
+            "pii_types": types,
+        }))
+    };
+    let valid = event(serde_json::json!(["email", "ip_address"])).unwrap();
+    valid.validate().unwrap();
+    assert!(event(serde_json::json!(["ada@example.com"])).is_err());
+}

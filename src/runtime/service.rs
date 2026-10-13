@@ -2,7 +2,10 @@ use std::io::{self, BufRead, Read, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use super::protocol::{Direction, LookupParams, RpcRequest, SubmitParams, PROTOCOL_VERSION};
+use super::protocol::{
+    Direction, LookupParams, PrepareDisclosureParams, ReadDisclosedParams, RpcRequest,
+    SubmitParams, PROTOCOL_VERSION,
+};
 use super::store::{NewJob, Store, StoreLimits};
 use super::worker::Worker;
 use super::RuntimeResult;
@@ -82,6 +85,50 @@ impl Runtime {
                 )
             }
             "submit" => self.submit(params),
+            "prepare_disclosure" => {
+                let params: PrepareDisclosureParams =
+                    serde_json::from_value(params).map_err(|_| "invalid_params")?;
+                if !valid_session(&params.session)
+                    || !valid_id(&params.scan_id)
+                    || params.reveal_pii.is_empty()
+                {
+                    return Err("invalid_params".into());
+                }
+                let owner = blake3::hash(params.session.as_bytes()).to_hex().to_string();
+                let types = params.reveal_pii.into_iter().collect();
+                self.store
+                    .lock()
+                    .map_err(|_| "store_unavailable")?
+                    .prepare_disclosure(&params.scan_id, &owner, &types, &self.fingerprint)
+                    .map_err(|_| "store_unavailable".into())
+            }
+            "read_disclosed" => {
+                let params: ReadDisclosedParams =
+                    serde_json::from_value(params).map_err(|_| "invalid_params")?;
+                if !valid_session(&params.session)
+                    || !valid_id(&params.scan_id)
+                    || !valid_id(&params.grant_id)
+                {
+                    return Err("invalid_params".into());
+                }
+                let owner = blake3::hash(params.session.as_bytes()).to_hex().to_string();
+                let result = self
+                    .store
+                    .lock()
+                    .map_err(|_| "store_unavailable")?
+                    .read_disclosed(
+                        &params.scan_id,
+                        &owner,
+                        &params.grant_id,
+                        &self.fingerprint,
+                        self.config.runtime.scan_timeout_ms,
+                    )
+                    .map_err(|_| "store_unavailable")?;
+                if result["status"] == "pending" {
+                    self.worker.notify().map_err(|_| "worker_unavailable")?;
+                }
+                Ok(result)
+            }
             "check" | "read_redacted" | "cancel" => {
                 let params: LookupParams =
                     serde_json::from_value(params).map_err(|_| "invalid_params")?;

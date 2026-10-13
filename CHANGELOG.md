@@ -6,6 +6,7 @@
 - Add a shared interactive Patronus home for native and hosted MCP connections, with scan results, bounded polling, account navigation and optional local setup guidance.
 - Add `patronus-security-scanner probe` and in-session runtime checks that distinguish hook scan coverage from host delivery and withholding.
 - Include host event and surface context in runtime receipts, and preserve the scanner's coverage and fail-open behavior across Codex, Claude and DeepSeek.
+- Let the user reveal selected PII types (for example email or IP addresses) from one redacted runtime result to the agent, once, through the host's approval prompt in Claude Code, Codex and DeepSeek Harness (`patronus_read_redacted` with `reveal_pii`, then `patronus_reveal_pii`). Other findings stay masked; static file results keep the masked view.
 - Keep internal deployment and review evidence, generated server files and incomplete integration artifacts out of the public repository.
 
 ## 0.1.2 - 2026-09-23

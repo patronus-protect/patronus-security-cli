@@ -256,3 +256,55 @@ fn runtime_applies_scoped_rule_settings_and_rejects_mismatched_direction() {
         assert_eq!(wait_result(&runtime, id)["status"], expected);
     }
 }
+
+#[test]
+fn confirmed_pii_disclosure_reveals_only_selected_types_with_real_ark() {
+    let dir = tempfile::tempdir().unwrap();
+    let config: Config = toml::from_str(DEFAULTS).unwrap();
+    let runtime = Runtime::start(config, &dir.path().join("state")).unwrap();
+    let text = "Reserved example contact: ada@example.com, 202-555-0100.";
+    let submitted = call(
+        &runtime,
+        "submit",
+        json!({"session":OWNER,"direction":"response","tool":"doc","call_id":"a","payload":text}),
+    );
+    let id = submitted["result"]["scan_id"].as_str().unwrap();
+    assert_eq!(wait_result(&runtime, id)["status"], "dangerous");
+    assert!(call(
+        &runtime,
+        "prepare_disclosure",
+        json!({"session":OWNER,"scan_id":id,"reveal_pii":["email"],"confirmed":true})
+    )
+    .get("error")
+    .is_some());
+    let offer = call(
+        &runtime,
+        "prepare_disclosure",
+        json!({"session":OWNER,"scan_id":id,"reveal_pii":["email"]}),
+    );
+    assert_eq!(
+        offer["result"]["status"], "confirmation_required",
+        "{offer}"
+    );
+    assert_eq!(offer["result"]["counts"]["email"], 1);
+    assert!(!offer.to_string().contains("ada@"));
+    let grant = offer["result"]["grant_id"].as_str().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let view = loop {
+        let response = call(
+            &runtime,
+            "read_disclosed",
+            json!({"session":OWNER,"scan_id":id,"grant_id":grant}),
+        );
+        if response["result"]["status"] != "pending" {
+            break response["result"].clone();
+        }
+        assert!(Instant::now() < deadline, "disclosure never completed");
+        thread::sleep(Duration::from_millis(10));
+    };
+    assert_eq!(view["status"], "redacted", "{view}");
+    assert_eq!(view["disclosure"]["applied"], true, "{view}");
+    let result = view["result"].as_str().unwrap();
+    assert!(result.contains("ada@example.com"), "{result}");
+    assert!(!result.contains("202-555-0100"), "{result}");
+}

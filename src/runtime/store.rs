@@ -1,10 +1,12 @@
 //! Durable scan jobs. A process lock and the service mutex serialize all writers.
-use super::protocol::{Direction, JobStatus, ScanOutcome, Verdict};
+use super::disclosure;
+use super::protocol::{Direction, JobStatus, PiiType, ScanOutcome, Verdict};
 use super::result_cache::ResultCache;
 use super::RuntimeResult;
 use fs2::FileExt;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -31,6 +33,15 @@ const PUBLIC_REASONS: &[&str] = &[
     "invalid_classification",
     "invalid_evidence_span",
 ];
+
+/// Internal job kinds. Their IDs are never exported, and they never read from
+/// or write to the shared result cache.
+const REDACTION_TOOL: &str = "redaction";
+const DISCLOSURE_TOOL: &str = "disclosure";
+/// How long a disclosure offer waits for the host's approval dialog.
+const DISCLOSURE_GRANT_MS: i64 = 300_000;
+/// Settled grants are kept briefly so a replay gets a clear answer.
+const DISCLOSURE_TOMBSTONE_MS: i64 = 3_600_000;
 
 #[derive(Debug, Clone)]
 pub struct StoreLimits {
@@ -69,6 +80,8 @@ pub struct JobWork {
     pub payload: Value,
     pub deadline_ms: i64,
     pub refinement: Option<ScanOutcome>,
+    /// The original result and the confirmed PII types for a disclosure job.
+    pub disclosure: Option<(ScanOutcome, BTreeSet<PiiType>)>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -92,6 +105,16 @@ pub struct Store {
     cache: ResultCache,
     // File locks are released by closing the file, including after a crash.
     _lock: File,
+}
+
+struct Grant {
+    payload_hash: String,
+    config_hash: String,
+    types: String,
+    spans_digest: String,
+    state: String,
+    child: Option<String>,
+    expires_ms: i64,
 }
 
 struct StoredJob {
@@ -142,7 +165,7 @@ impl Store {
             "PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA secure_delete=ON;",
         ))?;
         let version: i64 = sql(db.query_row("PRAGMA user_version", [], |r| r.get(0)))?;
-        if version != 0 && version != 1 && version != 2 && version != 3 {
+        if !(0..=4).contains(&version) {
             return Err("unsupported runtime store version".into());
         }
         sql(db.execute_batch(
@@ -188,6 +211,18 @@ impl Store {
                 "ALTER TABLE jobs ADD COLUMN cached INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=3;",
             ))?;
         }
+        if version < 4 {
+            // A grant records which PII types a user may confirm for one result, never values.
+            sql(db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS disclosure_grants (
+                    grant_id TEXT PRIMARY KEY, session_hash TEXT NOT NULL, scan_id TEXT NOT NULL,
+                    payload_hash TEXT NOT NULL, config_hash TEXT NOT NULL, pii_types TEXT NOT NULL,
+                    spans_digest TEXT NOT NULL, state TEXT NOT NULL, child_id TEXT UNIQUE,
+                    expires_ms INTEGER NOT NULL
+                 );
+                 PRAGMA user_version=4;",
+            ))?;
+        }
         Ok(Self {
             db,
             root: root.to_path_buf(),
@@ -220,7 +255,7 @@ impl Store {
             direction,
             job.policy_scope.as_deref(),
         );
-        let cached = if job.tool == "redaction" {
+        let cached = if matches!(job.tool.as_str(), REDACTION_TOOL | DISCLOSURE_TOOL) {
             None
         } else {
             self.cache.load(&cache_key, now())?
@@ -248,10 +283,7 @@ impl Store {
         if cached.is_none() && self.pending_count()? >= self.limits.max_pending_jobs {
             return Err("runtime queue is full".into());
         }
-        let id = rand::random::<[u8; 16]>()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>();
+        let id = random_id();
         let path = self.payload_path(&id, "original")?;
         let redacted_path = self.payload_path(&id, "redacted")?;
         let cached_redacted = cached.as_ref().and_then(|(_, bytes, _)| bytes.as_ref());
@@ -328,6 +360,7 @@ impl Store {
                 Ok(payload) => Ok(Some(JobWork {
                     policy_scope,
                     refinement: self.refinement_original(&id)?,
+                    disclosure: self.disclosure_original(&id)?,
                     scan_id: id,
                     direction,
                     payload,
@@ -426,7 +459,7 @@ impl Store {
         }
         let updated = result.map_err(CompletionError::Storage)?;
         if updated == 1
-            && tool != "redaction"
+            && !matches!(tool.as_str(), REDACTION_TOOL | DISCLOSURE_TOOL)
             && outcome.status == JobStatus::Completed
             && complete_coverage(&outcome)
             && matches!(
@@ -561,7 +594,7 @@ impl Store {
             policy_scope,
             session_hash: session_hash.into(),
             direction: Direction::Response,
-            tool: "redaction".into(),
+            tool: REDACTION_TOOL.into(),
             call_id: scan_id.into(),
             payload,
             config_hash,
@@ -610,6 +643,279 @@ impl Store {
         let mut outcome = decode_outcome(&metadata)?;
         outcome.redacted = Some(self.read_payload(&parent, "redacted", &hash)?);
         Ok(Some(outcome))
+    }
+
+    /// Offers a one-time disclosure of confirmed PII types. Returns counts per
+    /// type, never values; the host must show them for approval before
+    /// `read_disclosed` may run.
+    pub fn prepare_disclosure(
+        &mut self,
+        scan_id: &str,
+        session_hash: &str,
+        types: &BTreeSet<PiiType>,
+        config_hash: &str,
+    ) -> RuntimeResult<Value> {
+        self.cleanup()?;
+        if types.is_empty() {
+            return Ok(unavailable());
+        }
+        let Some((payload_hash, outcome)) =
+            self.disclosure_source(scan_id, session_hash, config_hash)?
+        else {
+            return Ok(unavailable());
+        };
+        let spans = disclosure::revealable(&outcome, types);
+        if spans.is_empty() {
+            return Ok(json!({"scan_id":scan_id,"status":"nothing_to_reveal"}));
+        }
+        let grant = random_id();
+        let tx = sql(self.db.transaction())?;
+        // Only the newest offer for a result can be approved.
+        sql(tx.execute(
+            "UPDATE disclosure_grants SET state='superseded' WHERE scan_id=?1 AND session_hash=?2 AND state='pending'",
+            params![scan_id, session_hash],
+        ))?;
+        sql(tx.execute(
+            "INSERT INTO disclosure_grants (grant_id,session_hash,scan_id,payload_hash,config_hash,pii_types,spans_digest,state,expires_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,'pending',?8)",
+            params![grant, session_hash, scan_id, payload_hash, config_hash,
+                String::from_utf8(encode(types)?).map_err(|_| "invalid grant".to_string())?,
+                disclosure::digest(&spans), now() + DISCLOSURE_GRANT_MS],
+        ))?;
+        sql(tx.commit())?;
+        Ok(
+            json!({"scan_id":scan_id,"status":"confirmation_required","grant_id":grant,
+            "counts":disclosure::counts(&spans),"expires_in_seconds":DISCLOSURE_GRANT_MS / 1000}),
+        )
+    }
+
+    /// Consumes an approved grant once. The first call claims it and schedules a
+    /// local disclosure job; a later call delivers the view exactly once and
+    /// removes it. A view that fails its check falls back to the standard mask.
+    pub fn read_disclosed(
+        &mut self,
+        scan_id: &str,
+        session_hash: &str,
+        grant_id: &str,
+        config_hash: &str,
+        timeout_ms: u64,
+    ) -> RuntimeResult<Value> {
+        self.cleanup()?;
+        if !valid_id(grant_id) {
+            return Ok(unavailable());
+        }
+        let grant = sql(self.db.query_row(
+            "SELECT payload_hash,config_hash,pii_types,spans_digest,state,child_id,expires_ms FROM disclosure_grants WHERE grant_id=?1 AND scan_id=?2 AND session_hash=?3",
+            params![grant_id, scan_id, session_hash],
+            |r| Ok(Grant { payload_hash: r.get(0)?, config_hash: r.get(1)?, types: r.get(2)?, spans_digest: r.get(3)?, state: r.get(4)?, child: r.get(5)?, expires_ms: r.get(6)? }),
+        ).optional())?;
+        let Some(Grant {
+            payload_hash,
+            config_hash: grant_config,
+            types,
+            spans_digest,
+            state,
+            child,
+            expires_ms: expires,
+        }) = grant
+        else {
+            return Ok(unavailable());
+        };
+        let types: BTreeSet<PiiType> =
+            serde_json::from_str(&types).map_err(|_| "stored grant is invalid".to_string())?;
+        match state.as_str() {
+            "pending" if expires <= now() => {
+                self.settle_grant(grant_id, "expired")?;
+                Ok(json!({"scan_id":scan_id,"status":"disclosure_expired"}))
+            }
+            "pending" => {
+                // The content, policy and exact locations must be the ones shown for approval.
+                let current = self.disclosure_source(scan_id, session_hash, config_hash)?;
+                let valid = grant_config == config_hash
+                    && current.as_ref().is_some_and(|(hash, outcome)| {
+                        *hash == payload_hash
+                            && disclosure::digest(&disclosure::revealable(outcome, &types))
+                                == spans_digest
+                    });
+                if !valid {
+                    self.settle_grant(grant_id, "invalid")?;
+                    return Ok(json!({"scan_id":scan_id,"status":"disclosure_invalid"}));
+                }
+                let claimed = sql(self.db.execute(
+                    "UPDATE disclosure_grants SET state='claimed' WHERE grant_id=?1 AND state='pending'",
+                    [grant_id],
+                ))?;
+                if claimed != 1 {
+                    return Ok(unavailable());
+                }
+                let (parent_expires, policy_scope): (i64, Option<String>) =
+                    sql(self.db.query_row(
+                        "SELECT expires_ms,policy_scope FROM jobs WHERE scan_id=?1",
+                        [scan_id],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    ))?;
+                let payload = self.read_payload(scan_id, "original", &payload_hash)?;
+                let deadline = now()
+                    .saturating_add(timeout_ms.min(60_000) as i64)
+                    .min(parent_expires);
+                let child = match self.enqueue(NewJob {
+                    policy_scope,
+                    session_hash: session_hash.into(),
+                    direction: Direction::Response,
+                    tool: DISCLOSURE_TOOL.into(),
+                    call_id: scan_id.into(),
+                    payload,
+                    config_hash: config_hash.into(),
+                    deadline_ms: deadline,
+                }) {
+                    Ok(child) => child,
+                    Err(_) => {
+                        self.settle_grant(grant_id, "consumed")?;
+                        return self.disclosure_fallback(scan_id, session_hash, &types);
+                    }
+                };
+                // The copy of the original lives only as long as the disclosure attempt.
+                sql(self.db.execute(
+                    "UPDATE jobs SET expires_ms=?2 WHERE scan_id=?1",
+                    params![
+                        child,
+                        deadline
+                            .saturating_add(DISCLOSURE_GRANT_MS)
+                            .min(parent_expires)
+                    ],
+                ))?;
+                sql(self.db.execute(
+                    "UPDATE disclosure_grants SET child_id=?2 WHERE grant_id=?1",
+                    params![grant_id, child],
+                ))?;
+                Ok(json!({"scan_id":scan_id,"status":"pending"}))
+            }
+            "claimed" => {
+                let job: Option<(String, Option<String>)> = match &child {
+                    Some(child) => sql(self.db.query_row(
+                        "SELECT status,redacted_hash FROM jobs WHERE scan_id=?1 AND session_hash=?2 AND tool=?3",
+                        params![child, session_hash, DISCLOSURE_TOOL],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    ).optional())?,
+                    None => None,
+                };
+                if matches!(&job, Some((status, _)) if status == "queued" || status == "running") {
+                    return Ok(json!({"scan_id":scan_id,"status":"pending"}));
+                }
+                let view = match (&child, job) {
+                    (Some(child), Some((status, Some(hash)))) if status == "completed" => {
+                        self.read_payload(child, "redacted", &hash).ok()
+                    }
+                    _ => None,
+                };
+                self.settle_grant(grant_id, "consumed")?;
+                if let Some(child) = &child {
+                    self.remove_job(child)?;
+                }
+                match view {
+                    Some(view) => Ok(json!({"scan_id":scan_id,"status":"redacted","result":view,
+                        "disclosure":{"authorized_pii_types":types,"user_confirmed":true,"applied":true}})),
+                    None => self.disclosure_fallback(scan_id, session_hash, &types),
+                }
+            }
+            _ => Ok(json!({"scan_id":scan_id,"status":"disclosure_unavailable"})),
+        }
+    }
+
+    /// The standard mask, marked as an unapplied disclosure.
+    fn disclosure_fallback(
+        &mut self,
+        scan_id: &str,
+        session_hash: &str,
+        types: &BTreeSet<PiiType>,
+    ) -> RuntimeResult<Value> {
+        let mut result = self.read_redacted(scan_id, session_hash)?;
+        if result["status"] == "redacted" {
+            result["disclosure"] =
+                json!({"authorized_pii_types":types,"user_confirmed":true,"applied":false});
+        }
+        Ok(result)
+    }
+
+    /// A completed, dangerous response under the current policy, with its stored outcome.
+    fn disclosure_source(
+        &self,
+        scan_id: &str,
+        session_hash: &str,
+        config_hash: &str,
+    ) -> RuntimeResult<Option<(String, ScanOutcome)>> {
+        let Some(job) = self.lookup(scan_id, session_hash)? else {
+            return Ok(None);
+        };
+        let (job_config, tool): (String, String) = sql(self.db.query_row(
+            "SELECT config_hash,tool FROM jobs WHERE scan_id=?1",
+            [scan_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ))?;
+        let Some(outcome) = job.outcome.as_deref().map(decode_outcome).transpose()? else {
+            return Ok(None);
+        };
+        if job_config != config_hash
+            || tool == REDACTION_TOOL
+            || job.direction != "response"
+            || job.redacted_hash.is_none()
+            || external_status(&job.status, Some(&outcome)) != "dangerous"
+        {
+            return Ok(None);
+        }
+        Ok(Some((job.payload_hash, outcome)))
+    }
+
+    fn disclosure_original(
+        &self,
+        child: &str,
+    ) -> RuntimeResult<Option<(ScanOutcome, BTreeSet<PiiType>)>> {
+        let grant: Option<(String, String)> = sql(self
+            .db
+            .query_row(
+                "SELECT scan_id,pii_types FROM disclosure_grants WHERE child_id=?1 AND state='claimed'",
+                [child],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional())?;
+        let Some((parent, types)) = grant else {
+            return Ok(None);
+        };
+        let types =
+            serde_json::from_str(&types).map_err(|_| "stored grant is invalid".to_string())?;
+        let metadata: Option<String> = sql(self
+            .db
+            .query_row(
+                "SELECT outcome FROM jobs WHERE scan_id=?1 AND status='completed'",
+                [&parent],
+                |r| r.get(0),
+            )
+            .optional())?;
+        let outcome = match metadata {
+            Some(metadata) => decode_outcome(&metadata)?,
+            None => ScanOutcome::failed("disclosure source expired"),
+        };
+        Ok(Some((outcome, types)))
+    }
+
+    fn settle_grant(&self, grant_id: &str, state: &str) -> RuntimeResult<()> {
+        sql(self.db.execute(
+            "UPDATE disclosure_grants SET state=?2 WHERE grant_id=?1",
+            params![grant_id, state],
+        ))?;
+        Ok(())
+    }
+
+    fn remove_job(&mut self, id: &str) -> RuntimeResult<()> {
+        for kind in ["original", "redacted"] {
+            match fs::remove_file(self.payload_path(id, kind)?) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err("runtime cleanup failed".into()),
+            }
+        }
+        sql(self.db.execute("DELETE FROM jobs WHERE scan_id=?1", [id]))?;
+        sync_directory(&self.root)
     }
 
     pub fn cancel(&mut self, scan_id: &str, session_hash: &str) -> RuntimeResult<Value> {
@@ -667,6 +973,10 @@ impl Store {
     pub fn cleanup(&mut self) -> RuntimeResult<()> {
         let now = now();
         sql(self.db.execute(
+            "DELETE FROM disclosure_grants WHERE expires_ms<=?1 OR scan_id NOT IN (SELECT scan_id FROM jobs)",
+            [now - DISCLOSURE_TOMBSTONE_MS],
+        ))?;
+        sql(self.db.execute(
             "UPDATE jobs SET status='expired' WHERE (status='running' AND deadline_ms<=?1) OR (status='queued' AND deadline_ms<=created_ms)",
             [now],
         ))?;
@@ -714,8 +1024,8 @@ impl Store {
             return Ok(None);
         }
         sql(self.db.query_row(
-            "SELECT direction,status,payload_hash,redacted_hash,outcome,cached FROM jobs WHERE scan_id=?1 AND session_hash=?2",
-            params![id,owner], |r| Ok(StoredJob {direction:r.get(0)?,status:r.get(1)?,payload_hash:r.get(2)?,redacted_hash:r.get(3)?,outcome:r.get(4)?,cached:r.get::<_,i64>(5)? != 0}),
+            "SELECT direction,status,payload_hash,redacted_hash,outcome,cached FROM jobs WHERE scan_id=?1 AND session_hash=?2 AND tool<>?3",
+            params![id,owner,DISCLOSURE_TOOL], |r| Ok(StoredJob {direction:r.get(0)?,status:r.get(1)?,payload_hash:r.get(2)?,redacted_hash:r.get(3)?,outcome:r.get(4)?,cached:r.get::<_,i64>(5)? != 0}),
         ).optional())
     }
 
@@ -797,6 +1107,12 @@ fn valid_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+fn random_id() -> String {
+    rand::random::<[u8; 16]>()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -960,6 +1276,7 @@ mod tests {
             redacted: Some(json!("[redacted]")),
             reason: None,
             notice: None,
+            disclosure: vec![],
         };
         FAIL_DIRECTORY_SYNC.with(|fail| fail.set(true));
         assert!(store.complete(&id, &outcome).is_err());
