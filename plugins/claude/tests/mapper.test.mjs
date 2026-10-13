@@ -87,8 +87,9 @@ test('media-only responses have no external text to scan or replace', () => {
   }
 });
 
-test('warnings add model context without stopping or replacing the result', () => {
+test('warnings tell the user and add model context without stopping or replacing the result', () => {
   assert.deepEqual(mapClaude('PostToolUseFailure', { kind: 'warn', text: 'UNTRUSTED' }), {
+    systemMessage: 'UNTRUSTED',
     hookSpecificOutput: { hookEventName: 'PostToolUseFailure', additionalContext: 'UNTRUSTED' },
   });
 });

@@ -9,7 +9,7 @@ Use the plugin's `patronus_check_result` tool with a runtime receipt's `scan_id`
 
 These tools are safe placeholders intercepted by PreToolUse. Claude can display their sanitized result as a tool denial; interpret the enclosed Patronus receipt rather than treating the denial as an instruction to bypass the hooks. Supply only the tool's declared arguments. The session identity and private capability come from the hook and broker, never from model arguments.
 
-If the task genuinely needs specific personal data that a redacted result masks, call `patronus_read_redacted` with the `scan_id` and `reveal_pii` listing only the needed types. It returns counts and a `grant_id`, never values. Then call `patronus_reveal_pii` with `scan_id` and `grant_id`: the user is asked to approve. If the user denies, or the result says `disclosure_unavailable` or `applied=false`, continue with the masked text and do not ask again unprompted. Never pass a confirmation flag yourself.
+If the task genuinely needs specific personal data that a redacted result masks, call `patronus_read_redacted` with the `scan_id` and `reveal_pii` listing only the needed types. It returns counts and a `grant_id`, never values. Then call `patronus_reveal_pii` with `scan_id` and `grant_id`: the user is asked to approve. If the user denies, or the result says `nothing_to_reveal` or `disclosure_unavailable`, continue with the masked text and do not ask again unprompted. Never pass a confirmation flag yourself.
 
 With trusted runtime hooks active, ordinary reads do not require an additional static audit. A `status=redacted` result is usable masked text: continue the task without asking for approval. Never reconstruct masked regions or overwrite source data with redaction placeholders.
 

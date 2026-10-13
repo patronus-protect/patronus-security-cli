@@ -16,7 +16,6 @@ export interface LocalClientConfig {
 const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024
 const MAX_LINE_BYTES = MAX_PAYLOAD_BYTES + 1024 * 1024
 const RPC_TIMEOUT_MS = 90_000
-const DISCLOSURE_WAIT_MS = 150_000
 const STARTUP_TIMEOUT_MS = 320_000
 const statuses = new Set(['pending', 'approved', 'dangerous', 'failed', 'incomplete', 'cancelled', 'expired', 'unavailable'])
 const failure = () => new Error('Patronus local runtime unavailable or returned an invalid response.')
@@ -137,16 +136,7 @@ export class LocalClient implements RuntimeClient {
   }
 
   async readDisclosed(params: DisclosedParams, signal?: AbortSignal): Promise<DisclosedResult> {
-    // An approved grant cannot be retried, so wait out the runtime's own bound on the
-    // disclosure job (scan budget plus expiry grace) instead of the generic RPC timeout.
-    const deadline = Date.now() + DISCLOSURE_WAIT_MS
-    let value: unknown
-    for (;;) {
-      value = await this.rpc('read_disclosed', params, signal, Math.max(1, deadline - Date.now()))
-      if (!record(value) || value.scan_id !== params.scan_id || value.status !== 'pending') break
-      if (Object.hasOwn(value, 'result') || Date.now() >= deadline || signal?.aborted) throw failure()
-      await new Promise<void>(resolve => setTimeout(resolve, 50))
-    }
+    const value = await this.rpc('read_disclosed', params, signal)
     if (record(value) && value.status === 'unavailable' && value.scan_id === undefined) return { scan_id: params.scan_id, status: 'unavailable' }
     if (!record(value) || value.scan_id !== params.scan_id) throw failure()
     if (['disclosure_expired', 'disclosure_invalid', 'disclosure_unavailable'].includes(String(value.status)) && !Object.hasOwn(value, 'result')) {
@@ -154,10 +144,10 @@ export class LocalClient implements RuntimeClient {
     }
     const disclosure = value.disclosure
     if (value.status !== 'redacted' || !Object.hasOwn(value, 'result') || !record(disclosure) || disclosure.user_confirmed !== true ||
-        typeof disclosure.applied !== 'boolean' || !Array.isArray(disclosure.authorized_pii_types) ||
+        !Array.isArray(disclosure.authorized_pii_types) ||
         !disclosure.authorized_pii_types.every(type => (PII_TYPES as readonly string[]).includes(type))) throw failure()
     return { scan_id: params.scan_id, status: 'redacted', result: value.result as DisclosedResult['result'],
-      disclosure: { authorized_pii_types: disclosure.authorized_pii_types as PiiType[], user_confirmed: true, applied: disclosure.applied } }
+      disclosure: { authorized_pii_types: disclosure.authorized_pii_types as PiiType[], user_confirmed: true } }
   }
 
   close(): Promise<void> {

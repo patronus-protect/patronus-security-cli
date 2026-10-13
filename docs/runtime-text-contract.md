@@ -82,7 +82,7 @@ the masked view.
    counts: "Reveal 3 email addresses and 2 IP addresses from this result to the
    AI agent once? The values will be sent to its model."
 3. Only an approved call returns `status=redacted` with the confirmed PII
-   visible and `disclosure={authorized_pii_types, user_confirmed: true, applied}`.
+   visible and `disclosure={authorized_pii_types, user_confirmed: true}`.
 
 How each host asks the user:
 
@@ -100,23 +100,20 @@ releases nothing for an offer the hook did not arm, and a failing hook denies.
 A host configuration that auto-approves the tool cannot be detected; the host's
 approval prompt is the confirmation of record.
 
+Only results whose every finding is PII qualify. With any prompt-injection,
+DLP or threat finding, nothing becomes readable and the offer is
+`nothing_to_reveal`. Within such a result only exact L1 evidence spans with a
+type from the fixed list can be revealed. Other or unknown PII types and
+chunk-level verdicts without evidence spans stay masked and win on overlap.
+Card security codes and expiry dates are never revealable.
+
 A grant is bound to the session, scan ID, original payload hash, scanner policy
 fingerprint and the exact revealable locations shown for approval. It expires
 after five minutes, a newer offer for the same result supersedes it, and it is
-delivered once. Only exact L1 evidence spans with a type from the fixed list can
-be revealed. Every other finding stays masked and wins on overlap: other or
-unknown PII types, DLP, prompt injection, threat, and chunk-level verdicts
-without evidence spans. Card security codes and expiry dates are never
-revealable.
-
-The view is built in the Rust runtime from the hash-checked original and scanned
-again on this device. If any finding in it is not covered by the revealed PII, or
-the check cannot complete, the standard masked view is returned with
-`disclosure.applied=false`. The scan verdict, `check` and `read_redacted`
-results are unchanged. Grants and disclosed views never enter the shared result
-cache; the internal disclosure job and its copy of the original are deleted on
-delivery. The protocol journal records requested types, grant state and the
-hook decision, never values.
+delivered once. The runtime builds the view directly from the hash-checked
+original; the disclosed view is never stored or cached. The scan verdict,
+`check` and `read_redacted` results are unchanged. The protocol journal records
+requested types, grant state and the hook decision, never values.
 
 Pending responses expose their current `job_status`. A queued response also
 includes `wait_reason=scanner_queue` and `next_tool=patronus_check_result` with

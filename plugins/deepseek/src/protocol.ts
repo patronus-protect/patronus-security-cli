@@ -68,7 +68,7 @@ export interface DisclosedResult {
   scan_id: string
   status: 'redacted' | 'disclosure_expired' | 'disclosure_invalid' | 'disclosure_unavailable' | 'unavailable'
   result?: JsonValue
-  disclosure?: { authorized_pii_types: PiiType[]; user_confirmed: true; applied: boolean }
+  disclosure?: { authorized_pii_types: PiiType[]; user_confirmed: true }
 }
 
 /** Transport boundary; tests inject this interface, never a model-accessible backend. */

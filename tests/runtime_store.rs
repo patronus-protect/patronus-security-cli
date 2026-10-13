@@ -838,23 +838,6 @@ fn email() -> std::collections::BTreeSet<patronus_security_scanner::runtime::pro
     [patronus_security_scanner::runtime::protocol::PiiType::Email].into()
 }
 
-/// Plays the worker for one disclosure job.
-fn run_disclosure(store: &mut Store, verified: bool) {
-    use patronus_security_scanner::runtime::disclosure::{build_view, revealable};
-    let work = store.claim_next("config-a").unwrap().unwrap();
-    let (original, types) = work.disclosure.expect("disclosure job");
-    let outcome = if verified {
-        let open = revealable(&original, &types);
-        ScanOutcome {
-            redacted: Some(build_view(&work.payload, &original, &open).unwrap().0),
-            ..original
-        }
-    } else {
-        ScanOutcome::failed("disclosure_check_failed")
-    };
-    store.complete(&work.scan_id, &outcome).unwrap();
-}
-
 #[test]
 fn disclosure_reveals_confirmed_types_once_for_its_owner_and_never_through_the_cache() {
     let (temp, mut store) = setup();
@@ -877,30 +860,24 @@ fn disclosure_reveals_confirmed_types_once_for_its_owner_and_never_through_the_c
 
     assert_eq!(
         store
-            .read_disclosed(&id, "session-b", grant, "config-a", 60_000)
+            .read_disclosed(&id, "session-b", grant, "config-a")
             .unwrap()["status"],
         "unavailable"
     );
-    let pending = store
-        .read_disclosed(&id, "session-a", grant, "config-a", 60_000)
-        .unwrap();
-    assert_eq!(pending["status"], "pending");
-    assert!(!pending.to_string().contains("ada@"));
-    run_disclosure(&mut store, true);
     let view = store
-        .read_disclosed(&id, "session-a", grant, "config-a", 60_000)
+        .read_disclosed(&id, "session-a", grant, "config-a")
         .unwrap();
     assert_eq!(view["status"], "redacted");
     assert_eq!(view["result"], "Mail ada@example.com, Tel [REDACTED]");
     assert_eq!(
         view["disclosure"],
-        json!({"authorized_pii_types":["email"],"user_confirmed":true,"applied":true})
+        json!({"authorized_pii_types":["email"],"user_confirmed":true})
     );
 
     // Single delivery; the standard views and the scan verdict are unchanged.
     assert_eq!(
         store
-            .read_disclosed(&id, "session-a", grant, "config-a", 60_000)
+            .read_disclosed(&id, "session-a", grant, "config-a")
             .unwrap()["status"],
         "disclosure_unavailable"
     );
@@ -918,7 +895,7 @@ fn disclosure_reveals_confirmed_types_once_for_its_owner_and_never_through_the_c
         store.read_redacted(&replay, "session-a").unwrap()["result"],
         "Mail [REDACTED], Tel [REDACTED]"
     );
-    // The disclosure job and its copy of the original are gone.
+    // No disclosed view is ever written to disk: one original and one mask per job.
     let files = std::fs::read_dir(temp.path().join("store"))
         .unwrap()
         .filter(|e| {
@@ -933,7 +910,7 @@ fn disclosure_reveals_confirmed_types_once_for_its_owner_and_never_through_the_c
 }
 
 #[test]
-fn disclosure_grants_are_superseded_policy_bound_and_fall_back_when_unverified() {
+fn disclosure_grants_are_superseded_and_policy_bound() {
     let (_temp, mut store) = setup();
     let id = store.enqueue(job(json!(CONTACT))).unwrap();
     finish(&mut store, &id, &contact_outcome());
@@ -950,46 +927,55 @@ fn disclosure_grants_are_superseded_policy_bound_and_fall_back_when_unverified()
             .unwrap()["status"],
         "unavailable"
     );
-
-    let first = store
-        .prepare_disclosure(&id, "session-a", &email(), "config-a")
-        .unwrap()["grant_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let second = store
-        .prepare_disclosure(&id, "session-a", &email(), "config-a")
-        .unwrap()["grant_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let grant = |store: &mut Store| {
+        store
+            .prepare_disclosure(&id, "session-a", &email(), "config-a")
+            .unwrap()["grant_id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let first = grant(&mut store);
+    let second = grant(&mut store);
     assert_eq!(
         store
-            .read_disclosed(&id, "session-a", &first, "config-a", 60_000)
+            .read_disclosed(&id, "session-a", &first, "config-a")
             .unwrap()["status"],
         "disclosure_unavailable"
     );
     assert_eq!(
         store
-            .read_disclosed(&id, "session-a", &second, "config-b", 60_000)
+            .read_disclosed(&id, "session-a", &second, "config-b")
             .unwrap()["status"],
         "disclosure_invalid"
     );
+}
 
-    let grant = store
-        .prepare_disclosure(&id, "session-a", &email(), "config-a")
-        .unwrap()["grant_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    store
-        .read_disclosed(&id, "session-a", &grant, "config-a", 60_000)
-        .unwrap();
-    run_disclosure(&mut store, false);
-    let fallback = store
-        .read_disclosed(&id, "session-a", &grant, "config-a", 60_000)
-        .unwrap();
-    assert_eq!(fallback["status"], "redacted");
-    assert_eq!(fallback["result"], "Mail [REDACTED], Tel [REDACTED]");
-    assert_eq!(fallback["disclosure"]["applied"], false);
+#[test]
+fn results_with_any_non_pii_finding_offer_nothing() {
+    use patronus_security_scanner::runtime::protocol::RuntimeFinding;
+    let (_temp, mut store) = setup();
+    for category in ["prompt_injection", "dlp", "threat"] {
+        let id = store
+            .enqueue(job(json!(format!("{CONTACT} {category}"))))
+            .unwrap();
+        let mut outcome = contact_outcome();
+        outcome.findings.push(RuntimeFinding {
+            field_id: 0,
+            start_byte: 0,
+            end_byte: 4,
+            category: category.into(),
+            label: "x".into(),
+            level: Some("l1".into()),
+            confidence: 1.0,
+        });
+        finish(&mut store, &id, &outcome);
+        assert_eq!(
+            store
+                .prepare_disclosure(&id, "session-a", &email(), "config-a")
+                .unwrap()["status"],
+            "nothing_to_reveal",
+            "{category}"
+        );
+    }
 }

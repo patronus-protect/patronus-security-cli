@@ -22,7 +22,7 @@ class DisclosureClient extends FakeClient {
   async readDisclosed(params: DisclosedParams) {
     this.read.push(params)
     return { scan_id: params.scan_id, status: 'redacted' as const, result: `Contact: ${EMAIL}, phone [REDACTED].`,
-      disclosure: { authorized_pii_types: ['email' as const], user_confirmed: true as const, applied: true } }
+      disclosure: { authorized_pii_types: ['email' as const], user_confirmed: true as const } }
   }
 }
 

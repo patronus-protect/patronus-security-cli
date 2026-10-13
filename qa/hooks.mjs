@@ -252,10 +252,10 @@ async function disclosure() {
       const offered = Date.now()
       const view = offer.grant_id ? await settle('read_disclosed', { session, scan_id: submitted.scan_id, grant_id: offer.grant_id }) : undefined
       const text = typeof view?.result === 'string' ? view.result : JSON.stringify(view?.result ?? '')
-      const applied = view?.disclosure?.applied === true
+      const applied = view?.status === 'redacted' && view.disclosure?.user_confirmed === true
       rows.push({
         id: item.id, expect: item.expect, scan: scan.status, offer: offer.status, counts: offer.counts ?? null,
-        outcome: applied ? 'applied' : view ? (view.disclosure ? 'fallback' : view.status) : offer.status,
+        outcome: applied ? 'applied' : view ? view.status : offer.status,
         leaked: item.masked.filter(value => text.includes(value)),
         missing: applied ? item.visible.filter(value => !text.includes(value)) : [],
         reveal_ms: view ? Date.now() - offered : null, total_ms: Date.now() - started,
@@ -281,7 +281,7 @@ function evaluateDisclosure({ rows, metrics }) {
       findings.push(finding('hooks', 'high', `disclosure-offer:${row.id}`, `Disclosure case ${row.id} offered types that are not in the text`, { evidence: JSON.stringify(row) }))
     if (row.expect === 'applied' && (row.outcome !== 'applied' || row.missing.length))
       findings.push(finding('hooks', 'medium', `disclosure-miss:${row.id}:${arkLevel}`, `Disclosure case ${row.id} was not revealed at Ark ${arkLevel} (${row.outcome})`,
-        { evidence: JSON.stringify(row), suggestion: 'Only exact L1 spans are revealable; an L2/L3 or re-scan mismatch falls back to the mask. Check which level classified the case.' }))
+        { evidence: JSON.stringify(row), suggestion: 'Only pure-PII results with exact L1 spans are revealable. Check whether another category or a chunk-level verdict was reported.' }))
   }
 }
 
@@ -328,7 +328,10 @@ async function live() {
   }
   const since = Date.now()
   const env = { ...await sandboxEnv(qaData), PATRONUS_CLAUDE_LIVE: '1', PATRONUS_CLAUDE_BINARY: bin('claude') }
-  delete env.PATRONUS_CONFIG // the live run uses the QA account's hybrid configuration
+  // The QA account's data dir has no config of its own, so the CLI default (L1) would apply.
+  // Live runs use the QA Ark level in hybrid mode, so remote audits use the QA login.
+  env.PATRONUS_CONFIG = join(sandbox, 'live-scanner.toml')
+  await writeFile(env.PATRONUS_CONFIG, `[provider]\nmode="hybrid"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
   const result = await run(process.execPath, ['--test', '--test-reporter=tap', 'plugins/claude/tests/claude-live.test.mjs'], { env, timeout: 300_000 })
   return { ...tapCounts(result.stdout), code: result.code, ms: result.ms, events: await journal(qaData, since),
     tail: (result.stdout + result.stderr).split('\n').filter(line => /^not ok|inspect|Error/i.test(line)).slice(0, 20).join('\n') }

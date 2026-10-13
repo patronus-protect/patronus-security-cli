@@ -289,21 +289,14 @@ fn confirmed_pii_disclosure_reveals_only_selected_types_with_real_ark() {
     assert_eq!(offer["result"]["counts"]["email"], 1);
     assert!(!offer.to_string().contains("ada@"));
     let grant = offer["result"]["grant_id"].as_str().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(20);
-    let view = loop {
-        let response = call(
-            &runtime,
-            "read_disclosed",
-            json!({"session":OWNER,"scan_id":id,"grant_id":grant}),
-        );
-        if response["result"]["status"] != "pending" {
-            break response["result"].clone();
-        }
-        assert!(Instant::now() < deadline, "disclosure never completed");
-        thread::sleep(Duration::from_millis(10));
-    };
+    let view = call(
+        &runtime,
+        "read_disclosed",
+        json!({"session":OWNER,"scan_id":id,"grant_id":grant}),
+    )["result"]
+        .clone();
     assert_eq!(view["status"], "redacted", "{view}");
-    assert_eq!(view["disclosure"]["applied"], true, "{view}");
+    assert_eq!(view["disclosure"]["user_confirmed"], true, "{view}");
     let result = view["result"].as_str().unwrap();
     assert!(result.contains("ada@example.com"), "{result}");
     assert!(!result.contains("202-555-0100"), "{result}");

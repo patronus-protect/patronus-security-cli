@@ -112,22 +112,11 @@ impl Runtime {
                     return Err("invalid_params".into());
                 }
                 let owner = blake3::hash(params.session.as_bytes()).to_hex().to_string();
-                let result = self
-                    .store
+                self.store
                     .lock()
                     .map_err(|_| "store_unavailable")?
-                    .read_disclosed(
-                        &params.scan_id,
-                        &owner,
-                        &params.grant_id,
-                        &self.fingerprint,
-                        self.config.runtime.scan_timeout_ms,
-                    )
-                    .map_err(|_| "store_unavailable")?;
-                if result["status"] == "pending" {
-                    self.worker.notify().map_err(|_| "worker_unavailable")?;
-                }
-                Ok(result)
+                    .read_disclosed(&params.scan_id, &owner, &params.grant_id, &self.fingerprint)
+                    .map_err(|_| "store_unavailable".into())
             }
             "check" | "read_redacted" | "cancel" => {
                 let params: LookupParams =

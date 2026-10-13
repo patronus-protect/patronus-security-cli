@@ -80,7 +80,6 @@ var PII_TYPES = ["email", "ip_address", "phone", "mac_address", "iban", "credit_
 var MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 var MAX_LINE_BYTES = MAX_PAYLOAD_BYTES + 1024 * 1024;
 var RPC_TIMEOUT_MS = 9e4;
-var DISCLOSURE_WAIT_MS = 15e4;
 var STARTUP_TIMEOUT_MS = 32e4;
 var statuses = /* @__PURE__ */ new Set(["pending", "approved", "dangerous", "failed", "incomplete", "cancelled", "expired", "unavailable"]);
 var failure = () => new Error("Patronus local runtime unavailable or returned an invalid response.");
@@ -188,26 +187,19 @@ var LocalClient = class {
     return { scan_id: params.scan_id, status: "confirmation_required", grant_id: value.grant_id, counts, expires_in_seconds: value.expires_in_seconds };
   }
   async readDisclosed(params, signal) {
-    const deadline = Date.now() + DISCLOSURE_WAIT_MS;
-    let value;
-    for (; ; ) {
-      value = await this.rpc("read_disclosed", params, signal, Math.max(1, deadline - Date.now()));
-      if (!record(value) || value.scan_id !== params.scan_id || value.status !== "pending") break;
-      if (Object.hasOwn(value, "result") || Date.now() >= deadline || signal?.aborted) throw failure();
-      await new Promise((resolve5) => setTimeout(resolve5, 50));
-    }
+    const value = await this.rpc("read_disclosed", params, signal);
     if (record(value) && value.status === "unavailable" && value.scan_id === void 0) return { scan_id: params.scan_id, status: "unavailable" };
     if (!record(value) || value.scan_id !== params.scan_id) throw failure();
     if (["disclosure_expired", "disclosure_invalid", "disclosure_unavailable"].includes(String(value.status)) && !Object.hasOwn(value, "result")) {
       return { scan_id: params.scan_id, status: value.status };
     }
     const disclosure = value.disclosure;
-    if (value.status !== "redacted" || !Object.hasOwn(value, "result") || !record(disclosure) || disclosure.user_confirmed !== true || typeof disclosure.applied !== "boolean" || !Array.isArray(disclosure.authorized_pii_types) || !disclosure.authorized_pii_types.every((type) => PII_TYPES.includes(type))) throw failure();
+    if (value.status !== "redacted" || !Object.hasOwn(value, "result") || !record(disclosure) || disclosure.user_confirmed !== true || !Array.isArray(disclosure.authorized_pii_types) || !disclosure.authorized_pii_types.every((type) => PII_TYPES.includes(type))) throw failure();
     return {
       scan_id: params.scan_id,
       status: "redacted",
       result: value.result,
-      disclosure: { authorized_pii_types: disclosure.authorized_pii_types, user_confirmed: true, applied: disclosure.applied }
+      disclosure: { authorized_pii_types: disclosure.authorized_pii_types, user_confirmed: true }
     };
   }
   close() {

@@ -5,7 +5,6 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::disclosure::disclose;
 use super::redaction::refine_redaction;
 use super::{
     payload::analyze_payload,
@@ -143,28 +142,6 @@ impl Worker {
                             .as_ref()
                             .map(|a| a as &dyn ContentAnalyzer)
                             .unwrap_or(analyzer.as_ref());
-                        if let Some((original, types)) = work.disclosure.as_ref() {
-                            let local = LocalAnalyzer {
-                                inner: analyzer.as_ref(),
-                                scope: work.policy_scope.as_deref(),
-                            };
-                            // Without a verified view the job keeps no payload and
-                            // the reader falls back to the standard mask.
-                            return match disclose(
-                                &local,
-                                &work.payload,
-                                original,
-                                types,
-                                &config.chunking,
-                                Instant::now() + Duration::from_millis(remaining as u64),
-                            ) {
-                                Some(view) => ScanOutcome {
-                                    redacted: Some(view),
-                                    ..original.clone()
-                                },
-                                None => ScanOutcome::failed("disclosure_check_failed"),
-                            };
-                        }
                         if let Some(mut original) = work.refinement.clone() {
                             let local = LocalAnalyzer {
                                 inner: analyzer.as_ref(),

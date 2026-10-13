@@ -558,7 +558,7 @@ test('Claude PII disclosure offers counts, then asks the user through the host d
 
   const delivered = await claudeTool('patronus_reveal_pii', { scan_id: SCAN, grant_id: GRANT }, async (_c, request) => {
     assert.deepEqual(request, { method: 'reveal', scanId: SCAN, grantId: GRANT })
-    return { scan_id: SCAN, status: 'redacted', result: 'mail ada@example.com', disclosure: { authorized_pii_types: ['email'], user_confirmed: true, applied: true } }
+    return { scan_id: SCAN, status: 'redacted', result: 'mail ada@example.com', disclosure: { authorized_pii_types: ['email'], user_confirmed: true } }
   })
   assert.equal(delivered.isError, false)
   assert.equal(JSON.parse(delivered.content[0]!.text).disclosure.user_confirmed, true)
@@ -590,7 +590,7 @@ test('Codex arms a disclosure before its approval prompt and delivers it only fr
     requests.push(request)
     if (request.method === 'prepare_reveal') return { scan_id: SCAN, status: 'confirmation_required', grant_id: GRANT, counts: { email: 1 }, next_tool: 'patronus_reveal_pii' }
     if (request.method === 'arm_reveal') return { scan_id: SCAN, status: 'armed', counts: { email: 1 } }
-    return { scan_id: SCAN, status: 'redacted', result: 'mail ada@example.com', disclosure: { authorized_pii_types: ['email'], user_confirmed: true, applied: true } }
+    return { scan_id: SCAN, status: 'redacted', result: 'mail ada@example.com', disclosure: { authorized_pii_types: ['email'], user_confirmed: true } }
   }
   const offer: any = await handleHook('codex', 'PreToolUse', input('PreToolUse', { tool_name: 'mcp__patronus__patronus_read_redacted', tool_input: { scan_id: SCAN, reveal_pii: ['email'] } }), {}, rpc)
   assert.equal(offer.hookSpecificOutput.permissionDecision, 'deny')

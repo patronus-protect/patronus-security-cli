@@ -151,13 +151,12 @@
         "scan_id": { "$ref": "#/$defs/id" }, "status": { "const": "redacted" }, "result": { "$ref": "#/$defs/text_payload" },
         "disclosure": {
           "type": "object", "additionalProperties": false,
-          "required": ["authorized_pii_types", "user_confirmed", "applied"],
+          "required": ["authorized_pii_types", "user_confirmed"],
           "properties": {
             "authorized_pii_types": { "type": "array", "items": { "$ref": "#/$defs/pii_type" } },
-            "user_confirmed": { "const": true },
-            "applied": { "type": "boolean" }
+            "user_confirmed": { "const": true }
           },
-          "description": "Present only for read_disclosed. applied=false means the view failed its check and the standard mask was returned."
+          "description": "Present only for read_disclosed."
         }
       }
     },

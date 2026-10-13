@@ -90,11 +90,11 @@ test('disclosure offers carry only fixed types and counts', async () => {
   } finally { await smuggled.close() }
 })
 
-test('disclosed reads wait while pending and require the confirmation marker', async () => {
+test('disclosed reads require the confirmation marker', async () => {
   const scan_id = 'a'.repeat(32)
   const params = { session: 's'.repeat(32), scan_id, grant_id: 'b'.repeat(32) }
-  const disclosure = { authorized_pii_types: ['email'], user_confirmed: true, applied: true }
-  const f = await disclosureFixture([{ scan_id, status: 'pending' }, { scan_id, status: 'redacted', result: 'ada@example.com', disclosure }])
+  const disclosure = { authorized_pii_types: ['email'], user_confirmed: true }
+  const f = await disclosureFixture([{ scan_id, status: 'redacted', result: 'ada@example.com', disclosure }])
   try {
     assert.deepEqual(await f.client.readDisclosed(params), { scan_id, status: 'redacted', result: 'ada@example.com', disclosure })
   } finally { await f.close() }
