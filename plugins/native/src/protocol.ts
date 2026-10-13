@@ -11,12 +11,25 @@ type Event = {
   host: BrokerConfig['host']
   session_id: string
   event: string
-  direction: 'request' | 'response' | 'status' | 'static'
-  tool_name: string
+  direction?: 'request' | 'response' | 'status' | 'static'
+  tool_name?: string
   scan_id?: string
-  status: string
-  duration_ms: number
-  payload_hash: string
+  status?: string
+  duration_ms?: number
+  payload_hash?: string
+  hook_event?: string
+  decision?: HookTrace['decision']
+  outcome?: HookTrace['outcome']
+  error_code?: string
+  scan_count?: number
+}
+
+/** What one hook invocation decided; filled in by handleHook as it runs. */
+export type HookTrace = {
+  decision: 'allow' | 'deny' | 'replace' | 'stop' | 'warn'
+  outcome: 'ok' | 'degraded' | 'inactive' | 'error' | 'override' | 'disabled'
+  error_code?: string
+  scans: number
 }
 
 type Append = (event: Event, root: string, executable?: string) => Promise<void>
@@ -89,4 +102,23 @@ export async function recordProtocolScan(config: BrokerConfig, request: BrokerRe
       duration_ms: Math.max(0, completed - started) }, root, config.executable).catch(() => {})
     throw error
   }
+}
+
+/** Journals one hook invocation: `hook_started` runs alongside the hook and `hook_completed` follows it.
+ * A start without a completion means the host timed out or killed the hook. Never throws. */
+export async function recordHook(host: BrokerConfig['host'], event: string, sessionId: unknown, run: (trace: HookTrace) => Promise<object>,
+  executable?: string, append: Append = appendProtocolEvent): Promise<object> {
+  const trace: HookTrace = { decision: 'allow', outcome: 'ok', scans: 0 }
+  const valid = typeof sessionId === 'string' && /^[A-Za-z0-9_.:-]{1,256}$/.test(sessionId) && /^[A-Za-z]{1,64}$/.test(event)
+  if (!valid) return run(trace)
+  const root = patronusRoot()
+  const started = Date.now()
+  const base = { schema: 'patronus.protocol.event.v1' as const, host, session_id: hash([host, sessionId]), hook_event: event }
+  const start = append({ ...base, timestamp: new Date(started).toISOString(), event: 'hook_started' }, root, executable).catch(() => {})
+  const result = await run(trace)
+  const completed = Date.now()
+  await start
+  await append({ ...base, timestamp: new Date(completed).toISOString(), event: 'hook_completed', decision: trace.decision, outcome: trace.outcome,
+    duration_ms: Math.max(0, completed - started), scan_count: trace.scans, ...(trace.error_code ? { error_code: trace.error_code } : {}) }, root, executable).catch(() => {})
+  return result
 }

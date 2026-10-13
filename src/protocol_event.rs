@@ -5,7 +5,7 @@ use crate::error::{Result, ScannerError};
 
 const EVENT_SCHEMA: &str = "patronus.protocol.event.v1";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolEvent {
     pub schema: String,
@@ -25,6 +25,17 @@ pub struct ProtocolEvent {
     pub duration_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload_hash: Option<String>,
+    /// Hook lifecycle fields; only `hook_started` and `hook_completed` carry them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_event: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scan_count: Option<u32>,
 }
 
 impl ProtocolEvent {
@@ -41,7 +52,7 @@ impl ProtocolEvent {
         bounded_token("event", &self.event, 64)?;
         if !matches!(
             self.event.as_str(),
-            "scan_started" | "scan_completed" | "scan_failed"
+            "scan_started" | "scan_completed" | "scan_failed" | "hook_started" | "hook_completed"
         ) {
             return invalid("unsupported event");
         }
@@ -79,6 +90,50 @@ impl ProtocolEvent {
         optional_token("payload_hash", self.payload_hash.as_deref(), 128)?;
         if let Some(value) = &self.payload_hash {
             valid_hash("payload_hash", value)?;
+        }
+        self.validate_hook()
+    }
+
+    fn validate_hook(&self) -> Result<()> {
+        let hook = self.event.starts_with("hook_");
+        let fields = [
+            self.hook_event.is_some(),
+            self.decision.is_some(),
+            self.outcome.is_some(),
+            self.error_code.is_some(),
+            self.scan_count.is_some(),
+        ];
+        if !hook {
+            return if fields.iter().any(|set| *set) {
+                invalid("hook fields require a hook event")
+            } else {
+                Ok(())
+            };
+        }
+        let Some(hook_event) = self.hook_event.as_deref() else {
+            return invalid("hook events require hook_event");
+        };
+        bounded_token("hook_event", hook_event, 64)?;
+        optional_token("decision", self.decision.as_deref(), 16)?;
+        if self
+            .decision
+            .as_deref()
+            .is_some_and(|value| !matches!(value, "allow" | "deny" | "replace" | "stop" | "warn"))
+        {
+            return invalid("unsupported decision");
+        }
+        optional_token("outcome", self.outcome.as_deref(), 16)?;
+        if self.outcome.as_deref().is_some_and(|value| {
+            !matches!(
+                value,
+                "ok" | "degraded" | "inactive" | "error" | "override" | "disabled"
+            )
+        }) {
+            return invalid("unsupported outcome");
+        }
+        optional_token("error_code", self.error_code.as_deref(), 64)?;
+        if self.event == "hook_completed" && (self.decision.is_none() || self.outcome.is_none()) {
+            return invalid("hook_completed requires decision and outcome");
         }
         Ok(())
     }

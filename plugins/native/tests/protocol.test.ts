@@ -105,3 +105,28 @@ test('native adapter appends through the real Rust CLI', { skip: !process.env.PA
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('hook lifecycle events carry only the hashed session, hook name, decision and timing', async () => {
+  const { recordHook } = await import('../src/protocol.ts')
+  const events: any[] = []
+  const append = async (event: any) => { events.push(event) }
+  const output = await recordHook('claude', 'PostToolUse', 'PRIVATE-SESSION-917', async trace => {
+    trace.decision = 'replace'; trace.scans = 1
+    return { hookSpecificOutput: 'RAW-RESULT-917' }
+  }, undefined, append)
+  assert.deepEqual(output, { hookSpecificOutput: 'RAW-RESULT-917' })
+  assert.deepEqual(events.map(event => event.event), ['hook_started', 'hook_completed'])
+  assert.equal(events[1].decision, 'replace')
+  assert.equal(events[1].outcome, 'ok')
+  assert.equal(events[1].scan_count, 1)
+  assert.equal(events[1].hook_event, 'PostToolUse')
+  assert.match(events[1].session_id, /^sha256:[a-f0-9]{64}$/)
+  assert(!JSON.stringify(events).includes('PRIVATE-SESSION-917'))
+  assert(!JSON.stringify(events).includes('RAW-RESULT-917'))
+
+  const failing = async () => { throw Error('PRIVATE-APPEND-ERROR-917') }
+  assert.deepEqual(await recordHook('codex', 'Stop', 'session', async () => ({}), undefined, failing), {})
+  events.length = 0
+  assert.deepEqual(await recordHook('codex', 'Stop', '../foreign', async () => ({}), undefined, append), {})
+  assert.equal(events.length, 0)
+})

@@ -10,7 +10,7 @@ import { invalidScanReference } from '../../deepseek/src/references.ts'
 import { callBroker, type BrokerConfig } from './broker.ts'
 import { codexExternalTextPayload, mapCodex } from './hosts/codex.ts'
 import { claudeExternalTextPayload, mapClaude } from './hosts/claude.ts'
-import { recordProtocolScan, type ProtocolRecorder } from './protocol.ts'
+import { recordProtocolScan, type HookTrace, type ProtocolRecorder } from './protocol.ts'
 import type { HookDecision, HookInput, Host, JsonValue } from './types.ts'
 import { PROBE_TEXT } from './probe.ts'
 
@@ -131,17 +131,30 @@ export async function runOwnOperation(host: Host, operation: string, args: unkno
 
 type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'>
 
-/** Hooks supply session attribution. Model arguments never carry a capability. */
-export async function handleHook(host: Host, event: string, value: unknown, overrides: Overrides = {}, rpc: typeof callBroker = callBroker, protocol: ProtocolRecorder = recordProtocolScan, settings: () => PluginSettings = readPluginSettings, control: typeof controlChat = controlChat): Promise<object> {
-  const map = (decision: HookDecision) => host === 'codex' ? mapCodex(event, decision) : mapClaude(event, decision, value as HookInput)
+/** How a degraded scan is classified in the hook trace. */
+function traceFailure(trace: HookTrace, reason: unknown): void {
+  const code = publicReason(reason)
+  trace.outcome = !code ? 'inactive' : integrationReasons.has(code) ? 'error' : 'degraded'
+  if (code) trace.error_code = code
+}
+
+/** Hooks supply session attribution. Model arguments never carry a capability.
+ * `trace` receives the decision and outcome for the hook journal; it never changes them. */
+export async function handleHook(host: Host, event: string, value: unknown, overrides: Overrides = {}, rpc: typeof callBroker = callBroker, protocol: ProtocolRecorder = recordProtocolScan, settings: () => PluginSettings = readPluginSettings, control: typeof controlChat = controlChat, trace: HookTrace = { decision: 'allow', outcome: 'ok', scans: 0 }): Promise<object> {
+  const map = (decision: HookDecision) => { trace.decision = decision.kind; return host === 'codex' ? mapCodex(event, decision) : mapClaude(event, decision, value as HookInput) }
   const warn = (text = inactiveMessage(host)) => map({ kind: 'warn', text })
-  const fail = (reason: string) => warn(failureMessage(host, { reason }))
+  const fail = (reason: string) => { traceFailure(trace, reason); return warn(failureMessage(host, { reason })) }
+  const noted = (result: ScanResult) => {
+    if (degraded.has(result.status)) traceFailure(trace, result.reason)
+    const note = scanNote(result, host)
+    return note ? warn(note) : {}
+  }
   try {
     if (!record(value) || value.hook_event_name !== event || !id(value.session_id) ||
         typeof value.cwd !== 'string' || !isAbsolute(value.cwd)) return fail('hook_input_invalid')
     const input = value as unknown as HookInput
     const config: BrokerConfig = { ...overrides, host, sessionId: input.session_id, cwd: overrides.cwd ?? input.cwd }
-    const scan = (request: Parameters<typeof rpc>[1]) => protocol(config!, request, () => rpc(config!, request))
+    const scan = (request: Parameters<typeof rpc>[1]) => { trace.scans++; return protocol(config!, request, () => rpc(config!, request)) }
     if (event === 'SessionEnd' || event === 'Stop') { await rpc(config, { method: 'close' }).catch(() => ({ closed: false })); return {} }
     if (event === 'UserPromptSubmit') {
       const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
@@ -149,7 +162,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       if (action) return map({ kind: 'replace', text: await control(host, input.session_id, action, config.executable) })
     }
     const policy = settings()
-    if ((!policy.enabled || policy.disabled_chats[host].includes(input.session_id)) && !(event === 'PreToolUse' && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) return {}
+    if ((!policy.enabled || policy.disabled_chats[host].includes(input.session_id)) && !(event === 'PreToolUse' && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) { trace.outcome = 'disabled'; return {} }
     const enabled = (surface: 'user_input' | 'tool_result' | 'mcp_result') => hookEnabled(policy, host, input.session_id, surface)
     const responseEnabled = () => enabled(input.tool_name?.startsWith('mcp__') ? 'mcp_result' : 'tool_result')
     if (event === 'PostToolUseFailure') {
@@ -159,17 +172,17 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       const payload = claudeExternalTextPayload(event, input)
       if (payload === undefined) return {}
       const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
-      if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
+      if (result.status === 'approved' || degraded.has(result.status)) return noted(result)
       return map({ kind: 'stop', text: JSON.stringify(visibleResult(result, host, 'response', event, input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')) })
     }
     if (event === 'UserPromptSubmit') {
       if (!enabled('user_input')) return {}
       const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
       if (payload === undefined) return {}
-      if (consumeIgnoreOnce(host, input.session_id, payload)) return {}
+      if (consumeIgnoreOnce(host, input.session_id, payload)) { trace.outcome = 'override'; return {} }
       const callId = id(input.prompt_id) ? input.prompt_id : 'user-prompt'
       const result = await scan({ method: 'request', tool: 'UserPromptSubmit', callId, payload }) as unknown as ScanResult
-      if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
+      if (result.status === 'approved' || degraded.has(result.status)) return noted(result)
       if (promptDecision(result) === 'warn') return map({ kind: 'warn', text: PROMPT_WARNING_USER, context: PROMPT_WARNING_MODEL })
       const visible = visibleResult(result, host, 'request', event, 'user_input')
       if (sensitiveFinding(result) && record(visible)) {
@@ -217,7 +230,7 @@ export async function handleHook(host: Host, event: string, value: unknown, over
           : 'The live result hook ran, but complete scanning of the fixed probe output was not verified.' }
       return map({ kind: 'replace', text: JSON.stringify(diagnostic) })
     }
-    if (result.status === 'approved' || degraded.has(result.status)) { const note = scanNote(result, host); return note ? warn(note) : {} }
+    if (result.status === 'approved' || degraded.has(result.status)) return noted(result)
     return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host, 'response', event, input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')) })
   } catch {
     return fail('hook_error')
