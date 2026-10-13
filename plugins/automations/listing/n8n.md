@@ -31,8 +31,8 @@ trusted publishing (see [PUBLISHING.md](../PUBLISHING.md)); do not publish from 
 
 ## Owner approval checklist
 
-- [ ] npm package created under the official Patronus npm account; trusted publisher configured
+- [x] npm package created under the official Patronus npm account; trusted publisher configured
 - [x] License of `n8n-nodes-patronus` set to MIT (verification requirement)
-- [ ] Package built and linted with `@n8n/node-cli` and passes `npx @n8n/scan-community-package`
-- [ ] First version published from CI with provenance
+- [x] Package built and linted with `@n8n/node-cli` and passes `npx @n8n/scan-community-package`
+- [x] First version published from CI with provenance (`0.1.1`)
 - [ ] Submission entered in the Creator Portal with the reviewer account

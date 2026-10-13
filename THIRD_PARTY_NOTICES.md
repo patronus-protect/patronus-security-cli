@@ -22,11 +22,16 @@ every transitive dependency.
 
 ## Compatibility marks
 
-The documentation displays the Codex app, Claude and DeepSeek marks solely to
-identify compatible third-party hosts. OpenAI, Codex, ChatGPT, Anthropic,
-Claude, DeepSeek and DeepSeek Harness are marks of their respective owners.
-Patronus Security is an independent project and is not affiliated with,
-sponsored by or endorsed by OpenAI, Anthropic or DeepSeek.
+The documentation displays the Codex app, Claude, DeepSeek, n8n, Make, Zapier,
+Dify and Activepieces marks solely to identify compatible third-party hosts and
+automation platforms. OpenAI, Codex, ChatGPT, Anthropic, Claude, DeepSeek,
+DeepSeek Harness, n8n, Make, Zapier, Dify and Activepieces are marks of their
+respective owners. Patronus Security is an independent project and is not
+affiliated with, sponsored by or endorsed by any of them.
+
+The n8n, Make, Zapier and Dify icons in `docs/img/providers` come from Simple Icons
+16.35.0 (CC0-1.0), colored with each brand's published color; the Activepieces icon
+is the logo from the Activepieces repository (`packages/web/public/logo.svg`).
 
 The marks are not part of Patronus Security's Apache-2.0 license. They may not
 be reused under that license. Their owners' current brand and trademark terms

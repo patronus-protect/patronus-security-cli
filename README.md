@@ -8,7 +8,7 @@
   Local-first runtime protection and security scans for AI agents.
 </p>
 
-Patronus Security combines the Patronus Security CLI (the `patronus-security-scanner` executable) with optional Runtime Protection integrations for Codex, Claude Code and DeepSeek Harness. Patronus Ark powers detection. The integrations inspect external text before it reaches the model; completed findings keep dangerous content behind a verifiable receipt.
+Patronus Security combines the Patronus Security CLI (the `patronus-security-scanner` executable) with optional Runtime Protection integrations for Codex, Claude Code and DeepSeek Harness, and Guard Input steps for n8n, Make, Zapier, Dify and Activepieces. Patronus Ark powers detection. The integrations inspect external text before it reaches the model; completed findings keep dangerous content behind a verifiable receipt.
 
 ## Plugins
 
@@ -34,8 +34,46 @@ Patronus Security combines the Patronus Security CLI (the `patronus-security-sca
 Choose the hosts you use during onboarding. Each plugin page explains its hooks, protected flow and degraded behavior.
 
 Patronus Security is an independent project and is not endorsed by OpenAI,
-Anthropic or DeepSeek. Third-party names and logos identify compatibility only;
+Anthropic, DeepSeek, n8n, Make, Zapier, Dify or Activepieces. Third-party names and logos identify compatibility only;
 see [Third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Automation integrations
+
+Put **Patronus → Guard Input** between user input or retrieved RAG context and the LLM
+step of your workflow. It releases the exact text only after a complete, clean scan;
+otherwise the step stops and the LLM never runs. No CLI on the automation host: the step
+calls the Patronus API with your [API key](https://control.patronus.studio).
+
+<table>
+  <tr>
+    <td align="center" width="20%">
+      <a href="plugins/automations/n8n/README.md"><img src="docs/img/providers/n8n.svg" width="56" alt="n8n"><br><strong>n8n</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="plugins/automations/make/README.md"><img src="docs/img/providers/make.svg" width="56" alt="Make"><br><strong>Make</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="plugins/automations/zapier/README.md"><img src="docs/img/providers/zapier.svg" width="56" alt="Zapier"><br><strong>Zapier</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="plugins/automations/dify/README.md"><img src="docs/img/providers/dify.svg" width="56" alt="Dify"><br><strong>Dify</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="plugins/automations/activepieces/README.md"><img src="docs/img/providers/activepieces.svg" width="56" alt="Activepieces"><br><strong>Activepieces</strong></a>
+    </td>
+  </tr>
+  <tr>
+    <td>Community node <a href="https://www.npmjs.com/package/n8n-nodes-patronus"><code>n8n-nodes-patronus</code></a>: Settings → Community Nodes.</td>
+    <td>Patronus app via invite link; Make app review pending.</td>
+    <td>Patronus integration via invite link; Zapier listing pending.</td>
+    <td>Plugin package from the <a href="https://github.com/patronus-protect/patronus-security-cli/releases/tag/automation-v0.1.1">automation release</a>.</td>
+    <td>Piece <a href="https://www.npmjs.com/package/@patronus-protect/piece-patronus"><code>@patronus-protect/piece-patronus</code></a> or the release tarball.</td>
+  </tr>
+</table>
+
+Chatbot and RAG examples for n8n, Make and Zapier, verified end to end on each platform,
+are in [`plugins/automations/examples`](plugins/automations/examples/README.md). Setup,
+guarantees and maintainer notes: [automation integrations](plugins/automations/README.md).
 
 ## Install
 
@@ -72,11 +110,7 @@ includes registry installation, a quick start and error behavior. Each client
 directory also contains a dedicated `INSTALL.md` that a coding agent can follow
 without receiving your API key.
 
-Native [automation plugins for n8n, Make, Dify, Zapier and Activepieces](plugins/automations/README.md)
-use the account API directly with platform-managed API-key credentials. They
-provide a Guard Input step for RAG/LLM flows, plus scan submission and result
-actions, without a Patronus CLI or local scanner installation. Build, private installation and workflow enforcement
-instructions are included for each platform.
+The [automation integrations](#automation-integrations) use the same account API.
 
 ## Onboarding
 
