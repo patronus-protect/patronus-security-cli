@@ -19,6 +19,15 @@ const metrics = {}
 const check = (name, ok, detail = '') => { checks.push({ name, ok, detail }); return ok }
 const key = process.env.PATRONUS_QA_API_KEY
 
+/** First Python >= 3.10 (the SDK's requires-python); macOS ships 3.9 as python3. */
+async function modernPython() {
+  for (const name of ['python3.13', 'python3.12', 'python3.11', 'python3.10', '/opt/homebrew/bin/python3', 'python3']) {
+    const result = await run(name, ['-c', 'import sys; print(sys.version_info >= (3, 10))'], { timeout: 10_000 })
+    if (result.code === 0 && result.stdout.trim() === 'True') return name
+  }
+}
+const python = await modernPython()
+
 const sdks = [
   { id: 'typescript', registry: 'npm', name: '@patronus-protect/api-client', readme: 'sdk/typescript/README.md', fence: 'ts',
     version: async () => JSON.parse(await readFile(join(repository, 'sdk/typescript/package.json'), 'utf8')).version,
@@ -50,14 +59,14 @@ async function runQuickstart(sdk, code, directory, env) {
     await writeFile(join(directory, 'quickstart.mts'), code + '\nconsole.log(JSON.stringify({ status: result.status }))\n')
     steps.push([process.execPath, ['quickstart.mts']])
   } else if (sdk.id === 'python') {
-    steps.push(['python3', ['-m', 'venv', '.venv']], ['.venv/bin/python', ['-m', 'pip', 'install', '-q', sdk.name]])
+    steps.push([python, ['-m', 'venv', '.venv']], ['.venv/bin/python', ['-m', 'pip', 'install', '-q', sdk.name]])
     await writeFile(join(directory, 'quickstart.py'), code + '\nprint({"status": getattr(result, "status", None)})\n')
     steps.push(['.venv/bin/python', ['quickstart.py']])
   } else {
     steps.push(['cargo', ['init', '-q', '--name', 'quickstart']], ['cargo', ['add', '-q', sdk.name]])
     // Snippets with `?` need a fallible main; a reader has to add it, so it is noted below.
-    await writeFile(join(directory, 'src/main.rs.tmp'), `fn main() -> Result<(), Box<dyn std::error::Error>> {\n${code}\nprintln!("{{\\"status\\":\\"{}\\"}}", result.status);\nOk(())\n}\n`)
-    steps.push(['mv', ['src/main.rs.tmp', 'src/main.rs']], ['cargo', ['run', '-q']])
+    await writeFile(join(directory, 'main.rs.tmp'), `fn main() -> Result<(), Box<dyn std::error::Error>> {\n${code}\nprintln!("{{\\"status\\":\\"{}\\"}}", result.status);\nOk(())\n}\n`)
+    steps.push(['mv', ['main.rs.tmp', 'src/main.rs']], ['cargo', ['run', '-q']])
   }
   const started = Date.now()
   for (const [command, argv] of steps) {
@@ -84,6 +93,14 @@ for (const sdk of sdks) {
     continue
   }
   if (!key || !published) continue
+  if (sdk.id === 'python' && !python) {
+    check('python >= 3.10 available on the QA machine', false)
+    findings.push(finding('qa-env', 'low', 'python-missing', 'QA machine has no Python >= 3.10, so the Python quick start was not run',
+      { suggestion: 'Install one, e.g. brew install python@3.12.' }))
+    findings.push(finding('ux', 'low', 'python-39-pip-message', 'On Python 3.9 (macOS default python3) pip reports "No matching distribution found for patronus-api-client"',
+      { suggestion: 'Say "requires Python 3.10+" next to the pip install line in the README and docs, and mention that macOS python3 is 3.9.' }))
+    continue
+  }
   const directory = await mkdtemp(join(tmpdir(), `patronus-qa-sdk-${sdk.id}-`))
   try {
     const env = { ...process.env, PATRONUS_API_KEY: key }
