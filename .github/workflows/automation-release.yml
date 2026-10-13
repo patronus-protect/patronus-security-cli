@@ -8,7 +8,11 @@ on:
         type: string
         required: true
       publish_npm:
-        description: Publish n8n and Activepieces after publisher/environment setup
+        description: Publish n8n-nodes-patronus to npm after publisher/environment setup
+        type: boolean
+        default: false
+      publish_activepieces:
+        description: Also publish @patronus-protect/piece-patronus
         type: boolean
         default: false
 
@@ -39,10 +43,17 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          gh release create "automation-v$RELEASE_VERSION" release-assets/* \
-            --target "$RELEASE_COMMIT" --draft \
-            --title "Patronus automation integrations $RELEASE_VERSION" \
-            --notes-file plugins/automations/RELEASE_NOTES.md
+          tag="automation-v$RELEASE_VERSION"
+          title="Patronus automation integrations $RELEASE_VERSION"
+          # Re-running a release refreshes its existing draft instead of failing on it.
+          if [ "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null)" = "true" ]; then
+            gh release upload "$tag" release-assets/* --clobber
+            gh release edit "$tag" --target "$RELEASE_COMMIT" --title "$title" \
+              --notes-file plugins/automations/RELEASE_NOTES.md
+          else
+            gh release create "$tag" release-assets/* --target "$RELEASE_COMMIT" --draft \
+              --title "$title" --notes-file plugins/automations/RELEASE_NOTES.md
+          fi
 
   npm:
     if: inputs.publish_npm
@@ -66,6 +77,9 @@ jobs:
       - name: Publish built and verified public packages
         env:
           RELEASE_VERSION: ${{ inputs.version }}
+          PUBLISH_ACTIVEPIECES: ${{ inputs.publish_activepieces }}
         run: |
-          npm publish "release-assets/n8n-nodes-patronus-$RELEASE_VERSION.tgz" --access public --provenance
-          npm publish "release-assets/patronus-protect-piece-patronus-$RELEASE_VERSION.tgz" --access public --provenance
+          npm publish "./release-assets/n8n-nodes-patronus-$RELEASE_VERSION.tgz" --access public --provenance
+          if [ "$PUBLISH_ACTIVEPIECES" = "true" ]; then
+            npm publish "./release-assets/patronus-protect-piece-patronus-$RELEASE_VERSION.tgz" --access public --provenance
+          fi
