@@ -3,9 +3,9 @@
 //! Only regions the scanner already reported (evidence spans, or the chunk that
 //! carried the verdict) are refined, and only on this device. A region is split in
 //! two; each half that is still flagged is split again, until the smallest flagged
-//! parts remain. Smaller clean fragments alone never overturn a finding: every
-//! narrowed result must scan clean in context, otherwise that finding keeps its
-//! coarse region.
+//! parts remain. Restoring a sibling must scan clean in the masked field's context.
+//! Once restored, that sibling stays visible even if later scans fail or exhaust
+//! their budget. Fallback keeps the last verified mask, never an older, larger one.
 use std::{collections::HashMap, ops::Range, time::Instant};
 
 use serde_json::Value;
@@ -19,7 +19,7 @@ use super::{
 
 /// Scans one finding may spend. Bisection needs about two per level.
 const CHECKS_PER_FINDING: usize = 24;
-/// Scans one refinement may spend across all findings and verifications.
+/// Scans one refinement may spend across all findings.
 const MAX_CHECKS: usize = 96;
 /// Regions with at most this many words are not split further.
 const MIN_WORDS: usize = 8;
@@ -64,59 +64,67 @@ impl Refiner<'_> {
     }
 
     fn flagged(&mut self, text: &str) -> Option<bool> {
-        self.scan(text, true).map(|result| {
-            result
-                .findings
-                .iter()
-                .any(|f| f.category == "prompt_injection")
-        })
+        self.scan(text, true)
+            .and_then(|result| match result.verdict {
+                Some(Verdict::Approved) => Some(false),
+                Some(Verdict::Dangerous) => Some(true),
+                _ => None,
+            })
     }
 
-    /// The smallest flagged parts of `region`, or `region` itself when it cannot shrink.
-    fn bisect(&mut self, text: &str, region: Range<usize>) -> Vec<Range<usize>> {
+    /// Commit only verified smaller masks; a later failure never undoes that progress.
+    fn narrow(
+        &mut self,
+        text: &str,
+        region: Range<usize>,
+        regions: &mut Vec<Range<usize>>,
+        fixed: &[RuntimeFinding],
+    ) {
         let Some((left, right)) = split(text, region.clone()) else {
-            return vec![region];
+            return;
         };
         let left_flagged = self.flagged(&text[left.clone()]);
         let right_flagged = self.flagged(&text[right.clone()]);
-        match (left_flagged, right_flagged) {
-            (Some(true), Some(false)) => self.bisect(text, left),
-            (Some(false), Some(true)) => self.bisect(text, right),
-            (Some(true), Some(true)) => {
-                let mut spans = self.bisect(text, left);
-                spans.extend(self.bisect(text, right));
-                spans
-            }
+        let parts: Vec<(Range<usize>, bool)> = match (left_flagged, right_flagged) {
             // Neither half alone is flagged: the instruction may cross the cut, so try
             // the middle half once. If that loses the signal too, it needs its context.
             (Some(false), Some(false)) => match middle(text, region.clone()) {
                 Some(center) if self.flagged(&text[center.clone()]) == Some(true) => {
-                    self.bisect(text, center)
+                    vec![(center, true)]
                 }
-                _ => vec![region],
+                _ => return,
             },
-            // An unfinished scan never narrows.
-            _ => vec![region],
+            (None, None) => return,
+            _ => [(left, left_flagged), (right, right_flagged)]
+                .into_iter()
+                .filter(|(_, flagged)| *flagged != Some(false))
+                .map(|(part, flagged)| (part, flagged == Some(true)))
+                .collect(),
+        };
+        let index = regions.iter().position(|part| part == &region).unwrap();
+        let mut candidate = regions.clone();
+        candidate.splice(index..index + 1, parts.iter().map(|(part, _)| part.clone()));
+        let masked = masked_view(text, &candidate, fixed);
+        if masked != masked_view(text, regions, fixed)
+            && !self
+                .scan(&masked, false)
+                .is_some_and(|result| result.verdict == Some(Verdict::Approved))
+        {
+            return;
+        }
+        *regions = candidate;
+        for (part, flagged) in parts {
+            if flagged {
+                self.narrow(text, part, regions, fixed);
+            }
         }
     }
+}
 
-    /// Narrows one injection finding and verifies the result in its region's context.
-    fn narrow(&mut self, text: &str, region: Range<usize>) -> Vec<Range<usize>> {
-        self.finding_checks = 0;
-        let spans = self.bisect(text, region.clone());
-        if spans == [region.clone()] {
-            return spans;
-        }
-        let local: Vec<_> = spans
-            .iter()
-            .map(|span| finding(span.start - region.start, span.end - region.start))
-            .collect();
-        let masked = redact(&text[region.clone()], &local);
-        match self.scan(&masked, false) {
-            Some(result) if result.verdict == Some(Verdict::Approved) => spans,
-            _ => vec![region],
-        }
-    }
+fn masked_view(text: &str, regions: &[Range<usize>], fixed: &[RuntimeFinding]) -> String {
+    let mut spans = fixed.to_vec();
+    spans.extend(regions.iter().map(|part| finding(part.start, part.end)));
+    redact(text, &spans)
 }
 
 /// Byte offsets of word starts within `part`.
@@ -179,8 +187,8 @@ fn finding(start_byte: usize, end_byte: usize) -> RuntimeFinding {
     }
 }
 
-/// Original verdict/coverage/findings remain immutable. Each finding or field that
-/// cannot be narrowed and verified keeps its coarse redaction; the others still narrow.
+/// Original verdict/coverage/findings remain immutable. Each unresolved part keeps
+/// its redaction; approved siblings are never masked again by a later fallback.
 /// `analyzer` must scan on this device only.
 pub fn refine_redaction(
     analyzer: &dyn ContentAnalyzer,
@@ -217,31 +225,36 @@ pub fn refine_redaction(
             .cloned()
             .collect();
         let mut spans = Vec::new();
+        let mut regions = Vec::new();
         for finding_item in &old {
             let region = finding_item.start_byte..finding_item.end_byte;
             if region.is_empty() || text.get(region.clone()).is_none() {
                 return None;
             }
             if finding_item.category == "prompt_injection" {
-                // The durable same-policy finding already establishes danger.
-                spans.extend(
-                    refiner
-                        .narrow(text, region)
-                        .into_iter()
-                        .map(|r| finding(r.start, r.end)),
-                );
+                regions.push(region);
             } else {
                 spans.push(finding_item.clone());
             }
         }
-        let coarse = redact(text, &old);
-        let masked = redact(text, &spans);
-        // A narrowed field must also scan clean as a whole; otherwise keep its coarse view.
-        let verified = masked == coarse
-            || refiner
-                .scan(&masked, false)
-                .is_some_and(|result| result.verdict == Some(Verdict::Approved));
-        output.push(Value::String(if verified { masked } else { coarse }));
+        // Overlapping model-stage findings share one refinement. A later duplicate
+        // must not mask approved siblings again after the deadline or budget expires.
+        regions.sort_unstable_by_key(|r| r.start);
+        let mut merged: Vec<Range<usize>> = Vec::new();
+        for region in regions {
+            if let Some(last) = merged.last_mut().filter(|last| region.start < last.end) {
+                last.end = last.end.max(region.end);
+            } else {
+                merged.push(region);
+            }
+        }
+        let mut regions = merged.clone();
+        for region in merged {
+            refiner.finding_checks = 0;
+            // The durable same-policy finding already establishes danger.
+            refiner.narrow(text, region, &mut regions, &spans);
+        }
+        output.push(Value::String(masked_view(text, &regions, &spans)));
     }
     Some(if payload.is_string() {
         output.remove(0)
