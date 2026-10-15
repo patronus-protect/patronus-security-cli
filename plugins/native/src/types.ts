@@ -1,6 +1,6 @@
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
-export type Host = 'codex' | 'claude'
+export type Host = 'codex' | 'claude' | 'cursor'
 export interface HookInput {
   hook_event_name: string
   session_id: string

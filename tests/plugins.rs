@@ -81,6 +81,7 @@ fn release_archives_are_installable_marketplace_roots_without_test_artifacts() {
     for (host, marketplace) in [
         ("codex", ".agents/plugins/marketplace.json"),
         ("claude", ".claude-plugin/marketplace.json"),
+        ("cursor", ".cursor-plugin/marketplace.json"),
     ] {
         let archive = std::fs::File::open(output.join(format!(
             "patronus-security-{host}-{}.zip",
@@ -116,6 +117,15 @@ fn release_archives_are_installable_marketplace_roots_without_test_artifacts() {
                 "skills/patronus-setup/SKILL.md",
                 "skills/runtime/SKILL.md",
                 "skills/scan/SKILL.md",
+            ],
+            "cursor" => &[
+                ".cursor-plugin/plugin.json",
+                "mcp.json",
+                "README.md",
+                "INSTALL.md",
+                "assets/icon.png",
+                "hooks/hooks.json",
+                "scripts/patronus.mjs",
             ],
             _ => unreachable!(),
         };

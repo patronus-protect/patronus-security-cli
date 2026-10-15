@@ -21,7 +21,7 @@ async function loadSetup(){
  else $('setup-check-result').textContent='Run the injection check for your saved settings.';
  $('setup-restart').textContent=setupState.restart_required?'Plugin installation recorded. Start a new agent session and confirm the host reports its hooks active.':'';
  const hosts=$('setup-hosts');hosts.replaceChildren();
- if(!setupState.detected_hosts.length)hosts.append(node('p','No supported host CLI detected on PATH. Install Claude Code, Codex or DeepSeek Harness and refresh.'));
+ if(!setupState.detected_hosts.length)hosts.append(node('p','No supported host CLI detected on PATH. Install Claude Code, Codex, DeepSeek Harness or the Cursor CLI and refresh.'));
  for(const host of setupState.detected_hosts){const b=button(`Protect ${host}`,()=>startSetupJob('install',host));b.disabled=!setupState.configuration_verified;hosts.append(b);}
  showSetupJob(data.job);
 }

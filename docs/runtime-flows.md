@@ -65,6 +65,17 @@ flowchart LR
 | `SessionEnd` | yes | — | Closes the broker and runtime session. |
 | `Stop` | — | yes | Closes the broker and runtime session. |
 
+Cursor names its own events; the hook bundle maps them onto the flows above
+(protection level **partial**, see `plugins/cursor/README.md`):
+
+| Cursor event | Handled as | Purpose |
+| --- | --- | --- |
+| `beforeSubmitPrompt` | `UserPromptSubmit` | Prompt gate; `continue: false` blocks the prompt. |
+| `beforeReadFile` | `PostToolUse` (Read) | Result gate for file content; a finding denies the read and the agent receives the receipt or the masked file. |
+| `postToolUse` | `PostToolUse` | Result gate for shell output (warn only) and MCP text (replaced); answers Patronus' own MCP tools. |
+| `stop` | `Stop` | Closes the broker and runtime session. |
+| `sessionEnd` | `SessionEnd` | Closes the broker and runtime session. |
+
 ### Runtime RPC methods
 
 | Method | Caller | Effect |
@@ -124,6 +135,7 @@ How the replacement reaches the model:
 | Claude Code | `PostToolUse.updatedToolOutput` in the tool's own shape; `PostToolUseFailure` stops the turn with the receipt. | `systemMessage` for the user plus `additionalContext` for the model. |
 | Codex | `decision: "block"` with the receipt as `reason`. | `systemMessage` plus `additionalContext`. |
 | DeepSeek | `tools/post-execute` returns a `block` decision with the receipt as feedback. | Degraded-protection notice on the result. |
+| Cursor | MCP: `updated_mcp_tool_output`. File read: `beforeReadFile` `permission: "deny"` with the receipt as `user_message`. Shell output cannot be replaced; it gets a warning. | `additional_context` for the model. |
 
 The source tool already ran; receipts tell the model never to run it again to
 recover its result.
@@ -254,6 +266,7 @@ sequenceDiagram
 | Claude Code | PreToolUse returns `permissionDecision: "ask"` with the question; this forces the dialog even when Patronus tools are pre-allowed. | MCP server, only for an armed offer. |
 | Codex | `.mcp.json` sets `approval_mode = "prompt"` for `patronus_reveal_pii` (Codex fails open on a PreToolUse `ask`); the hook shows the question as a notice. | PostToolUse hook replaces the MCP placeholder; a denied call never reaches it. |
 | DeepSeek | The tool calls the Harness approval seam; only `allowed-once` releases. | The tool itself. |
+| Cursor | Nobody: a hook cannot request Cursor's approval dialog, so disclosure answers `disclosure_unavailable`. | Never released. |
 
 ```mermaid
 stateDiagram-v2

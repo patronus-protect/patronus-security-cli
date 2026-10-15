@@ -11,6 +11,7 @@ import { invalidScanReference } from '../../deepseek/src/references.ts'
 import { callBroker, type BrokerConfig } from './broker.ts'
 import { codexExternalTextPayload, mapCodex } from './hosts/codex.ts'
 import { claudeExternalTextPayload, knownClaudeResult, mapClaude } from './hosts/claude.ts'
+import { cursorExternalTextPayload, isCursorMcp, knownCursorResult, mapCursor, normalizeCursor } from './hosts/cursor.ts'
 import { recordProtocolScan, type HookTrace, type ProtocolRecorder } from './protocol.ts'
 import type { HookDecision, HookInput, Host, JsonValue } from './types.ts'
 import { PROBE_TEXT } from './probe.ts'
@@ -20,7 +21,13 @@ const id = (value: unknown): value is string => typeof value === 'string' && /^[
 const ownPrefixes: Record<Host, string[]> = {
   codex: ['mcp__patronus__'],
   claude: ['mcp__patronus__', 'mcp__plugin_patronus-security_patronus__'],
+  // Cursor names MCP tools `MCP:<tool>` without the server. A foreign server's tool with a
+  // Patronus name is harmless: the result hook always replaces it with the real answer.
+  cursor: ['MCP:'],
 }
+const mcpTool = (host: Host, name: unknown) => host === 'cursor' ? isCursorMcp(name) : typeof name === 'string' && name.startsWith('mcp__')
+const externalPayload = (host: Host, event: string, input: HookInput) =>
+  host === 'codex' ? codexExternalTextPayload(event, input) : host === 'cursor' ? cursorExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
 const operations = new Map([['patronus_check_result', 'check'], ['patronus_read_redacted', 'read_redacted'], ['patronus_reveal_pii', 'reveal'], ['patronus_scan', 'static']])
 
 /** Permission modes in which the host shows an approval dialog for an `ask` decision. */
@@ -187,6 +194,17 @@ async function deliverDisclosure(input: HookInput, scan: Scan): Promise<string> 
   return JSON.stringify(result)
 }
 
+/** Cursor's MCP server has no session and Cursor has no approval dialog a hook can request,
+ * so its result hook answers Patronus tools and PII disclosure stays unavailable. */
+async function cursorOwnOperation(operation: string, input: HookInput, scan: Scan): Promise<string> {
+  const args = input.tool_input
+  const scanId = record(args) && typeof args.scan_id === 'string' ? args.scan_id : ''
+  if (operation === 'reveal' || operation === 'read_redacted' && record(args) && Object.hasOwn(args, 'reveal_pii')) {
+    return JSON.stringify(disclosureUnavailable(scanId, 'Cursor has no approval dialog Patronus can request, so PII disclosure is unavailable here. Continue with the masked result.'))
+  }
+  return (await runOwnOperation('cursor', operation, args, input.cwd, scan)).text
+}
+
 type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'>
 
 /** How a degraded scan is classified in the hook trace. */
@@ -198,8 +216,16 @@ function traceFailure(trace: HookTrace, reason: unknown): void {
 
 /** Hooks supply session attribution. Model arguments never carry a capability.
  * `trace` receives the decision and outcome for the hook journal; it never changes them. */
-export async function handleHook(host: Host, event: string, value: unknown, overrides: Overrides = {}, rpc: typeof callBroker = callBroker, protocol: ProtocolRecorder = recordProtocolScan, settings: () => PluginSettings = readPluginSettings, control: typeof controlChat = controlChat, trace: HookTrace = { decision: 'allow', outcome: 'ok', scans: 0 }): Promise<object> {
-  const map = (decision: HookDecision) => { trace.decision = decision.kind; return host === 'codex' ? mapCodex(event, decision) : mapClaude(event, decision, value as HookInput) }
+export async function handleHook(host: Host, hostEvent: string, hostValue: unknown, overrides: Overrides = {}, rpc: typeof callBroker = callBroker, protocol: ProtocolRecorder = recordProtocolScan, settings: () => PluginSettings = readPluginSettings, control: typeof controlChat = controlChat, trace: HookTrace = { decision: 'allow', outcome: 'ok', scans: 0 }): Promise<object> {
+  // Cursor names its own events; they are handled as the matching shared event.
+  const normalized = host === 'cursor' ? normalizeCursor(hostEvent, hostValue) : undefined
+  if (host === 'cursor' && !normalized) return {}
+  const event = normalized?.event ?? hostEvent
+  const value = normalized ? normalized.input : hostValue
+  const map = (decision: HookDecision) => {
+    trace.decision = decision.kind
+    return host === 'codex' ? mapCodex(event, decision) : host === 'cursor' ? mapCursor(hostEvent, decision, value as HookInput) : mapClaude(event, decision, value as HookInput)
+  }
   const warn = (text = inactiveMessage(host)) => map({ kind: 'warn', text })
   const fail = (reason: string) => { traceFailure(trace, reason); return warn(failureMessage(host, { reason })) }
   const noted = (result: ScanResult) => {
@@ -215,14 +241,16 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     const scan = (request: Parameters<typeof rpc>[1]) => { trace.scans++; return protocol(config!, request, () => rpc(config!, request)) }
     if (event === 'SessionEnd' || event === 'Stop') { await rpc(config, { method: 'close' }).catch(() => ({ closed: false })); return {} }
     if (event === 'UserPromptSubmit') {
-      const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
+      const payload = externalPayload(host, event, input)
       const action = chatCommand(payload)
       if (action) return map({ kind: 'replace', text: await control(host, input.session_id, action, config.executable) })
     }
     const policy = settings()
-    if ((!policy.enabled || policy.disabled_chats[host].includes(input.session_id)) && !(event === 'PreToolUse' && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) { trace.outcome = 'disabled'; return {} }
+    // Patronus' own tools answer even in a paused chat (Cursor answers them in its result hook).
+    const ownEvent = host === 'cursor' ? 'PostToolUse' : 'PreToolUse'
+    if ((!policy.enabled || (policy.disabled_chats[host] ?? []).includes(input.session_id)) && !(event === ownEvent && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) { trace.outcome = 'disabled'; return {} }
     const enabled = (surface: 'user_input' | 'tool_result' | 'mcp_result') => hookEnabled(policy, host, input.session_id, surface)
-    const responseEnabled = () => enabled(input.tool_name?.startsWith('mcp__') ? 'mcp_result' : 'tool_result')
+    const responseEnabled = () => enabled(mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result')
     if (event === 'PostToolUseFailure') {
       if (!responseEnabled()) return {}
       if (host !== 'claude') return fail('hook_event_unsupported')
@@ -231,11 +259,11 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       if (payload === undefined) return {}
       const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
       if (result.status === 'approved' || degraded.has(result.status)) return noted(result)
-      return map({ kind: 'stop', text: JSON.stringify(visibleResult(result, host, 'response', event, input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')) })
+      return map({ kind: 'stop', text: JSON.stringify(visibleResult(result, host, 'response', event, mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result')) })
     }
     if (event === 'UserPromptSubmit') {
       if (!enabled('user_input')) return {}
-      const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
+      const payload = externalPayload(host, event, input)
       if (payload === undefined) return {}
       if (consumeIgnoreOnce(host, input.session_id, payload)) { trace.outcome = 'override'; return {} }
       const callId = id(input.prompt_id) ? input.prompt_id : 'user-prompt'
@@ -267,14 +295,16 @@ export async function handleHook(host: Host, event: string, value: unknown, over
       return {}
     }
     if (operation === 'reveal' && host === 'codex') return map({ kind: 'replace', text: await deliverDisclosure(input, scan) })
+    if (operation && host === 'cursor') return map({ kind: 'replace', text: await cursorOwnOperation(operation, input, scan) })
     // Patronus' own results are already scan receipts; rescanning them would loop.
     if (operation) return {}
     if (!responseEnabled()) return {}
-    const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
+    const payload = externalPayload(host, event, input)
     if (payload === undefined) {
       // A non-empty structured result in a shape the host mapper does not know stays unscanned;
       // journal it so QA notices new tool shapes instead of letting them pass silently.
       const known = host === 'codex' ? !record(input.tool_response) || Array.isArray(input.tool_response.content)
+        : host === 'cursor' ? knownCursorResult(input.tool_name, input.tool_response)
         : knownClaudeResult(input.tool_name, input.tool_response)
       if (!known) trace.error_code = 'unscanned_shape'
       return {}
@@ -291,14 +321,14 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     if (probe && (result.status === 'approved' || result.status === 'dangerous')) {
       const covered = probeCovered(result, payload as string)
       const diagnostic = { scan_id: result.scan_id, status: covered ? 'probe_scanned' : 'probe_unverified', scan_status: result.status, coverage: result.coverage ?? null,
-        host_context: { host, event, surface: input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result', delivery: 'hook_requested_unverified' },
+        host_context: { host, event, surface: mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result', delivery: 'hook_requested_unverified' },
         message: covered
           ? 'The live result hook scanned the fixed probe output and requested host replacement. If the raw PATRONUS_RUNTIME_PROBE_V1 text is also visible, host withholding failed.'
           : 'The live result hook ran, but complete scanning of the fixed probe output was not verified.' }
       return map({ kind: 'replace', text: JSON.stringify(diagnostic) })
     }
     if (result.status === 'approved' || degraded.has(result.status)) return noted(result)
-    return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host, 'response', event, input.tool_name.startsWith('mcp__') ? 'mcp_result' : 'tool_result')) })
+    return map({ kind: 'replace', text: JSON.stringify(visibleResult(result, host, 'response', event, mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result')) })
   } catch {
     // A failed hook must not let a disclosure call through without the approval dialog.
     if (event === 'PreToolUse' && record(value) && typeof value.tool_name === 'string' && ownOperation(host, value.tool_name) === 'reveal') {
