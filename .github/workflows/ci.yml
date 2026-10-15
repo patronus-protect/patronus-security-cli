@@ -55,7 +55,7 @@ jobs:
           fi
           git diff --check "$BASE_SHA"...HEAD
       - name: Validate repository JSON
-        run: jq empty schemas/*.json plugins/codex/.codex-plugin/plugin.json plugins/claude/.claude-plugin/plugin.json plugins/deepseek/package.json sdk/typescript/package.json
+        run: jq empty schemas/*.json plugins/codex/.codex-plugin/plugin.json plugins/claude/.claude-plugin/plugin.json plugins/cursor/.cursor-plugin/plugin.json plugins/cursor/hooks/hooks.json plugins/cursor/mcp.json .cursor-plugin/marketplace.json plugins/deepseek/package.json sdk/typescript/package.json
 
   licenses:
     needs: changes
@@ -127,7 +127,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
         working-directory: .harness
       - run: node plugins/native/scripts/build.mjs
-      - run: git diff --exit-code -- plugins/codex/scripts/patronus.mjs plugins/claude/scripts/patronus.mjs
+      - run: git diff --exit-code -- plugins/codex/scripts/patronus.mjs plugins/claude/scripts/patronus.mjs plugins/cursor/scripts/patronus.mjs
       - run: cargo build --locked
       - run: node plugins/native/scripts/typecheck.mjs
       - run: node plugins/native/scripts/test.mjs

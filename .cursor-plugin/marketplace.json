@@ -1,0 +1,15 @@
+{
+  "name": "patronus-local",
+  "owner": {
+    "name": "Patronus"
+  },
+  "description": "Patronus Security integrations for AI agents",
+  "plugins": [
+    {
+      "name": "patronus-security",
+      "source": "./plugins/cursor",
+      "description": "Patronus Runtime Protection for Cursor: scans prompts, file reads, shell output and MCP results before the agent acts on them.",
+      "version": "0.1.2"
+    }
+  ]
+}

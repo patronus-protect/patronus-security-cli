@@ -1,5 +1,6 @@
 mod claude;
 mod codex;
+mod cursor;
 mod deepseek;
 
 use std::path::{Path, PathBuf};
@@ -16,17 +17,23 @@ use crate::error::{Result, ScannerError};
 pub fn execute(mut args: IntegrationArgs) -> Result<()> {
     if args.source.is_none()
         && (args.action == IntegrationAction::Install
-            || (args.host == IntegrationHost::Deepseek && args.action == IntegrationAction::Update))
+            || (matches!(
+                args.host,
+                IntegrationHost::Deepseek | IntegrationHost::Cursor
+            ) && args.action == IntegrationAction::Update))
     {
         args.source = Some(crate::releases::plugin_source(args.host.as_str())?);
     }
 
     if args.source.is_some()
         && !matches!(args.action, IntegrationAction::Install)
-        && !(args.host == IntegrationHost::Deepseek && args.action == IntegrationAction::Update)
+        && !(matches!(
+            args.host,
+            IntegrationHost::Deepseek | IntegrationHost::Cursor
+        ) && args.action == IntegrationAction::Update)
     {
         return Err(ScannerError::Integration(
-            "--source is supported only during install or DeepSeek update".into(),
+            "--source is supported only during install or DeepSeek and Cursor update".into(),
         ));
     }
     if args.profile.is_some() && args.host != IntegrationHost::Deepseek {
@@ -50,6 +57,7 @@ pub fn execute(mut args: IntegrationArgs) -> Result<()> {
         IntegrationHost::Codex => codex::execute(args),
         IntegrationHost::Claude => claude::execute(args),
         IntegrationHost::Deepseek => deepseek::execute(args),
+        IntegrationHost::Cursor => cursor::execute(args),
     }?;
     if installed {
         crate::onboarding::record_install()?;
@@ -62,6 +70,7 @@ pub fn dashboard_statuses() -> Value {
         ("codex", codex::dashboard_status()),
         ("claude", claude::dashboard_status()),
         ("deepseek", deepseek::dashboard_status()),
+        ("cursor", cursor::dashboard_status()),
     ]
     .into_iter()
     .map(|(host, status)| {
@@ -77,6 +86,7 @@ pub fn installed_hosts() -> Vec<&'static str> {
         ("codex", codex::dashboard_status()),
         ("claude", claude::dashboard_status()),
         ("deepseek", deepseek::dashboard_status()),
+        ("cursor", cursor::dashboard_status()),
     ]
     .into_iter()
     .filter_map(|(host, status)| {
@@ -130,7 +140,7 @@ impl IntegrationStatus {
     ) -> Self {
         let host_name = host.as_str();
         let options = match host {
-            IntegrationHost::Codex => String::new(),
+            IntegrationHost::Codex | IntegrationHost::Cursor => String::new(),
             IntegrationHost::Claude => format!(" --scope {}", scope.as_str()),
             IntegrationHost::Deepseek => {
                 format!(" --profile {}", profile.unwrap_or("headless"))
@@ -199,6 +209,7 @@ impl IntegrationHost {
             Self::Codex => "codex",
             Self::Claude => "claude",
             Self::Deepseek => "deepseek",
+            Self::Cursor => "cursor",
         }
     }
 }
