@@ -271,7 +271,12 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     if (operation) return {}
     if (!responseEnabled()) return {}
     const payload = host === 'codex' ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
-    if (payload === undefined) return {}
+    if (payload === undefined) {
+      // A non-empty structured result in a shape the host mapper does not know stays unscanned;
+      // journal it so QA notices new tool shapes instead of letting them pass silently.
+      if (record(input.tool_response) && Object.keys(input.tool_response).length > 0) trace.error_code = 'unscanned_shape'
+      return {}
+    }
     const probe = payload === PROBE_TEXT || payload === PROBE_TEXT + '\n' || payload === PROBE_TEXT + '\r\n'
     let result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
     if (probe) {
