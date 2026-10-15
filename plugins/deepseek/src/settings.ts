@@ -8,12 +8,14 @@ export const patronusRoot = () => {
   return root
 }
 export type Surface = 'user_input' | 'tool_result' | 'mcp_result'
-export type PluginHost = 'codex' | 'claude' | 'deepseek'
+export type PluginHost = 'codex' | 'claude' | 'deepseek' | 'cursor'
 export interface PluginSettings {
   schema_version: 1
   enabled: boolean
   hooks: Record<Surface, boolean>
-  disabled_chats: Record<PluginHost, string[]>
+  /** `cursor` is optional so settings written before Cursor support stay valid, and the
+   * scanner omits it while empty so older plugin bundles keep reading new settings. */
+  disabled_chats: Record<Exclude<PluginHost, 'cursor'>, string[]> & { cursor?: string[] }
 }
 export const defaultSettings = (): PluginSettings => ({
   schema_version: 1, enabled: true,
@@ -38,8 +40,9 @@ export function readPluginSettings(path = process.env.PATRONUS_PLUGIN_SETTINGS ?
   if (!object(value) || Object.keys(value).some(key => !Object.hasOwn(defaults, key)) || value.schema_version !== 1 ||
       typeof value.enabled !== 'boolean' || !object(value.hooks) || !object(value.disabled_chats)) throw Error('Invalid Patronus settings.')
   if (Object.keys(value.hooks).length !== 3 || Object.keys(defaults.hooks).some(key => typeof (value.hooks as Record<string, unknown>)[key] !== 'boolean')) throw Error('Invalid Patronus hooks.')
-  if (Object.keys(value.disabled_chats).length !== 3) throw Error('Invalid Patronus chat settings.')
-  for (const host of Object.keys(defaults.disabled_chats)) {
+  const hosts = Object.keys(value.disabled_chats)
+  if (Object.keys(defaults.disabled_chats).some(host => !hosts.includes(host)) || hosts.some(host => !['codex', 'claude', 'deepseek', 'cursor'].includes(host))) throw Error('Invalid Patronus chat settings.')
+  for (const host of hosts) {
     const ids = value.disabled_chats[host]
     if (!Array.isArray(ids) || ids.length > 1000 || ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_.:-]{1,256}$/.test(id))) throw Error('Invalid Patronus chat ID.')
   }
@@ -47,5 +50,5 @@ export function readPluginSettings(path = process.env.PATRONUS_PLUGIN_SETTINGS ?
 }
 
 export function hookEnabled(settings: PluginSettings, host: PluginHost, chat: string, surface: Surface): boolean {
-  return settings.enabled && settings.hooks[surface] && !settings.disabled_chats[host].includes(chat)
+  return settings.enabled && settings.hooks[surface] && !(settings.disabled_chats[host] ?? []).includes(chat)
 }
