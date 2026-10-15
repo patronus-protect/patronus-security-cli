@@ -1,20 +1,38 @@
 {
-  "_comment": "Backlog for the weekly harness-build routine (.claude/skills/harness-build). Order = priority. The routine picks the first entry with status 'planned', researches the host's current hook/plugin API from official docs, builds the integration and opens a draft PR. It updates this file in that PR. Statuses: planned, in_progress, pr_open, merged, blocked.",
+  "_comment": "Backlog for the weekly harness-build routine (.claude/skills/harness-build). Order = priority. The routine picks the first entry with status 'planned', researches the host's current hook/plugin API from official docs, builds the integration and opens a draft PR. It updates this file in that PR. Statuses: planned, in_progress, pr_open, merged, blocked. Scope agreed with the maintainer: only Cursor, GitHub Copilot and optionally Antigravity. When no entry is 'planned' or 'in_progress', the routine reports that and opens no PR.",
   "harnesses": [
-    { "id": "claude", "name": "Claude Code", "status": "merged" },
-    { "id": "codex", "name": "OpenAI Codex CLI", "status": "merged" },
-    { "id": "deepseek", "name": "DeepSeek Harness", "status": "merged" },
-    { "id": "cursor", "name": "Cursor (IDE agent and cursor-agent CLI)", "status": "planned",
-      "notes": "Highest priority. Check the hooks system (shell, MCP, file read/edit events) and whether the headless cursor-agent CLI runs the same hooks so a real-binary test is possible." },
-    { "id": "copilot", "name": "GitHub Copilot (CLI and coding agent)", "status": "planned",
-      "notes": "Second priority. Cover the Copilot CLI first if it exposes hooks; document what the cloud coding agent allows." },
-    { "id": "gemini", "name": "Gemini CLI", "status": "planned" },
-    { "id": "opencode", "name": "OpenCode", "status": "planned" },
-    { "id": "cline", "name": "Cline / Roo Code", "status": "planned" },
-    { "id": "windsurf", "name": "Windsurf", "status": "planned" },
-    { "id": "kiro", "name": "Kiro", "status": "planned" },
-    { "id": "amp", "name": "Amp", "status": "planned" },
-    { "id": "factory", "name": "Factory Droid", "status": "planned" },
-    { "id": "goose", "name": "Goose", "status": "planned" }
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "status": "merged"
+    },
+    {
+      "id": "codex",
+      "name": "OpenAI Codex CLI",
+      "status": "merged"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek Harness",
+      "status": "merged"
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor (IDE agent and cursor-agent CLI)",
+      "status": "planned",
+      "notes": "Highest priority. Check the hooks system (shell, MCP, file read/edit events) and whether the headless cursor-agent CLI runs the same hooks so a real-binary test is possible."
+    },
+    {
+      "id": "copilot",
+      "name": "GitHub Copilot (CLI and coding agent)",
+      "status": "planned",
+      "notes": "Second priority. Cover the Copilot CLI first if it exposes hooks; document what the cloud coding agent allows."
+    },
+    {
+      "id": "antigravity",
+      "name": "Google Antigravity",
+      "status": "planned",
+      "notes": "Optional third host. Only build it after Cursor and Copilot are merged or blocked."
+    }
   ]
 }

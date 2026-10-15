@@ -10,7 +10,7 @@ You add one agent host per run. You produce a reviewable draft PR, never a merge
 
 ## 1. Pick the host
 
-- Use the argument if given. Otherwise take the first entry in `qa/harnesses.json` with status `planned`.
+- Use the argument if given. Otherwise take the first entry in `qa/harnesses.json` with status `planned`. The agreed scope is Cursor, GitHub Copilot and optionally Antigravity, nothing else. Never add hosts to the backlog on your own. If nothing is `planned` or `in_progress`, report that and stop without opening a PR.
 - Before starting, check that no open PR already covers it: `gh pr list --search "<name> in:title" --state open`. If an earlier run left the host `in_progress` or `pr_open`, continue that PR instead of starting over.
 
 ## 2. Research (official sources only)
