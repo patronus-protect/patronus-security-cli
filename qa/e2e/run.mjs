@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // End-to-end QA: realistic multi-step agent work sessions with the Patronus plugin active.
 //
-//   node qa/e2e/run.mjs [--hosts claude,codex] [--mode scripted|live] [--out DIR] [--keep]
+//   node qa/e2e/run.mjs [--hosts claude,codex,cursor] [--mode scripted|live] [--out DIR] [--keep]
+//
+// cursor (scripted only) emulates Cursor's agent loop around the real hook bundle, because the public
+// cursor-agent cannot run a scripted model without a Cursor login (see qa/e2e/cursor.mjs).
 //
 // scripted: real host CLIs with a scripted model that follows Patronus' receipt protocol, once with
 // and once without the plugin (baseline), plus a prompt-gate (ignore_once) chat. live: a real Claude
@@ -106,6 +109,46 @@ async function codexSessions(web, configs) {
   return out
 }
 
+/** Cursor surfaces that never reach a hook (documented in plugins/cursor/README.md). Their leaks are
+ * reported as known limitations, not as protection failures; PII disclosure has no dialog there. */
+const limitations = { cursor: { uncovered: new Set(['grep-customers']), noDisclosure: new Set(['consent-approve']),
+  // Cursor delivers shell output unchanged; Patronus can only attach a warning (additional_context).
+  warnOnly: new Set(steps('').filter(step => step.tool === 'shell').map(step => step.id)) } }
+const cursorWarning = 'Patronus flagged the preceding tool output as unsafe'
+
+async function cursorSessions(web, configs) {
+  const { cursorSession } = await import('./cursor.mjs')
+  const out = {}
+  for (const variant of ['baseline', 'protected']) {
+    const plan = steps(web.url)
+    const model = scriptedModel(plan, { protocol: variant === 'protected' })
+    const cwd = await workspace(join(sandbox, `uw-${variant}`))
+    const env = await patronusEnv(`u${variant[0]}`, configs.main)
+    const since = Date.now()
+    const session = cursorSession({ cwd, env, plugin: variant === 'protected' })
+    let turn
+    try { turn = await session.work(model, task) } finally { await session.close() }
+    const rows = evaluate(plan, model.records, session.requests, { protected: variant === 'protected' })
+    for (const [at, row] of rows.entries()) row.warned = session.requests.some(request => request.step === at && request.text.includes(cursorWarning))
+    out[variant] = { ...turn, stderr: '', requests: session.requests, rows, testsPass: await testsPass(cwd), events: await journal(env.PATRONUS_DATA_DIR, since), emulated: true }
+  }
+  const env = await patronusEnv('ug', configs.prompt)
+  const session = cursorSession({ cwd: await workspace(join(sandbox, 'uw-gate')), env, plugin: true })
+  const phases = []
+  try {
+    let token
+    for (const [name, text, expect] of [['first', gate.prompt, 'blocked'], ['resend', gate.prompt, 'sent'], ['reuse', gate.prompt, 'blocked'], ['other-text', gate.other, 'blocked']]) {
+      const started = Date.now()
+      const result = await session.prompt(name === 'first' ? text : `${text} ${token ?? ''}`.trim())
+      const challenge = freshChallenge(result.notes, token)
+      if (challenge) token = challenge
+      phases.push(gatePhase(name, expect, result.reached, challenge, Date.now() - started, result.notes))
+    }
+  } finally { await session.close() }
+  out.gate = { phases, ok: phases.every(phase => phase.outcome === phase.expect) && phases[0].challenge, events: await journal(env.PATRONUS_DATA_DIR) }
+  return out
+}
+
 /** Same chat: block with challenge, resend passes once, reuse is blocked, other text is not covered. */
 async function codexPromptGate(home, binary, appServer, configs) {
   home.state.model = undefined
@@ -180,8 +223,20 @@ function evaluateHost(host, session, metrics) {
   if (metrics.baseline.canaries_exposed < metrics.baseline.canaries_total || !metrics.baseline.task_success)
     add('medium', `${host}:baseline-broken`, `${host}: the e2e scenario does not work without Patronus (baseline)`,
       { evidence: JSON.stringify(metrics.baseline), suggestion: 'Without the plugin every canary must reach the model and the tests must pass; otherwise the protected run proves nothing.' })
+  const known = limitations[host] ?? { uncovered: new Set(), noDisclosure: new Set(), warnOnly: new Set() }
   for (const row of guarded.rows) {
     const evidence = JSON.stringify(row)
+    if (known.uncovered.has(row.id) && row.leaks?.length) {
+      add('medium', `${host}:${row.id}:uncovered-surface`, `${host}: ${row.id} reaches the model unscanned (known uncovered surface)`,
+        { evidence, suggestion: `${host} gives hooks no content for this tool. Re-check the host hook contract after each ${host} update.` })
+      continue
+    }
+    if (known.noDisclosure.has(row.id) && !row.ok && !row.visible?.emails && !row.visible?.ibans) continue
+    if (known.warnOnly.has(row.id) && row.leaks?.length && row.warned) {
+      add('medium', `${host}:${row.id}:warned-not-withheld`, `${host}: ${row.id} reached the model with a Patronus warning (the host cannot withhold this output)`,
+        { evidence, suggestion: `Known partial protection for ${host}. A preToolUse command rewrite could filter shell output before delivery; see plugins/${host}/README.md.` })
+      continue
+    }
     for (const value of row.leaks ?? [])
       add('critical', `${host}:${row.id}:leak:${value}`, `${host}: ${row.id} leaked ${secrets.find(secret => secret.value === value)?.kind} text to the model`,
         { evidence, suggestion: 'The original or an insufficiently masked view reached a model request. Inspect the receipt trail in the e2e report.' })
@@ -280,7 +335,7 @@ async function live(web) {
 // ---------------------------------------------------------------------------------------------
 
 const before = await snapshot()
-for (const host of ['claude', 'codex']) check(`${host} hooks globally off before run`, before.status[host] !== 'active', before.status[host])
+for (const host of ['claude', 'codex', 'cursor']) check(`${host} hooks globally off before run`, before.status[host] !== 'active', before.status[host])
 const metrics = { mode: options.mode, ark_level: arkLevel, hosts: {} }
 const started = Date.now()
 let web
@@ -296,13 +351,14 @@ try {
   } else {
     for (const host of options.hosts) {
       let session
-      try { session = host === 'claude' ? await claudeSessions(web, configs) : await codexSessions(web, configs) }
+      try { session = host === 'claude' ? await claudeSessions(web, configs) : host === 'cursor' ? await cursorSessions(web, configs) : await codexSessions(web, configs) }
       catch (error) { check(`${host}: e2e sessions ran`, false, String(error.stack ?? error).slice(0, 800)); add('high', `${host}:harness`, `${host}: the e2e harness failed`, { evidence: String(error.stack ?? error).slice(0, 2000) }); continue }
       const summary = hostMetrics(host, session)
       evaluateHost(host, session, summary)
       metrics.hosts[host] = { ...summary, matrix: Object.fromEntries(session.protected.rows.map(row => [row.id, row])),
         baseline_matrix: Object.fromEntries(session.baseline.rows.map(({ id, first, final, ms, expected_present }) => [id, { first, final, ms, expected_present }])),
-        prompt_gate_phases: session.gate?.phases }
+        prompt_gate_phases: session.gate?.phases, ...(session.protected.emulated ? { host_runtime: 'emulated cursor-agent 2026.10.14 hook contract' } : {}),
+        ...(limitations[host] ? { known_limitations: { uncovered_steps: [...limitations[host].uncovered], no_disclosure_steps: [...limitations[host].noDisclosure], warn_only_steps: [...limitations[host].warnOnly] } } : {}) }
     }
   }
 } finally {
@@ -314,7 +370,7 @@ const after = await snapshot()
 const changed = changedFiles(before, after)
 check('global host config unchanged', changed.length === 0, changed.join(', '))
 if (changed.length) add('critical', `global-changed:${changed.join(',')}`, 'Global host configuration changed during the e2e QA run', { evidence: changed.join('\n') })
-for (const host of ['claude', 'codex']) check(`${host} integration state unchanged`, before.status[host] === after.status[host], `${before.status[host]} -> ${after.status[host]}`)
+for (const host of ['claude', 'codex', 'cursor']) check(`${host} integration state unchanged`, before.status[host] === after.status[host], `${before.status[host]} -> ${after.status[host]}`)
 check('sandbox removed', options.keep || !existsSync(sandbox), sandbox)
 
 for (const [host, value] of Object.entries(metrics.hosts)) {
