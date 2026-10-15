@@ -1883,6 +1883,15 @@ function textBlocks(value) {
     (block) => record8(block) && block.type === "text" && typeof block.text === "string" && block.text.length > 0 ? [block.text] : []
   );
 }
+var grepEnvelope = (value) => typeof value.content === "string" && typeof value.mode === "string" && Array.isArray(value.filenames);
+var webFetchEnvelope = (value) => typeof value.result === "string" && typeof value.url === "string";
+var modelAuthoredTools = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit", "TodoWrite", "ExitPlanMode", "Glob"]);
+function knownClaudeResult(toolName, response) {
+  if (typeof toolName === "string" && modelAuthoredTools.has(toolName)) return true;
+  if (response === void 0 || typeof response === "string" || Array.isArray(response)) return true;
+  if (!record8(response)) return false;
+  return Array.isArray(response.content) || grepEnvelope(response) || webFetchEnvelope(response) || typeof response.stdout === "string" || typeof response.stderr === "string" || response.type === "text" || response.type === "image";
+}
 function claudeExternalText(event, input) {
   if (event === "UserPromptSubmit") {
     if (typeof input.prompt === "string") return input.prompt.length > 0 ? [input.prompt] : [];
@@ -1896,8 +1905,8 @@ function claudeExternalText(event, input) {
   if (Array.isArray(response)) return textBlocks(response);
   if (!record8(response)) return [];
   if (Array.isArray(response.content)) return textBlocks(response.content);
-  if (typeof response.content === "string") return response.content.length > 0 ? [response.content] : [];
-  if (typeof response.result === "string") return response.result.length > 0 ? [response.result] : [];
+  if (grepEnvelope(response)) return response.content.length > 0 ? [response.content] : [];
+  if (webFetchEnvelope(response)) return response.result.length > 0 ? [response.result] : [];
   if (typeof response.stdout === "string" || typeof response.stderr === "string") {
     return [response.stdout, response.stderr].filter((value) => typeof value === "string" && value.length > 0);
   }
@@ -1928,8 +1937,8 @@ function replaceClaudeResponse(response, text2) {
   if (Array.isArray(response)) return replaceBlocks(response, text2);
   if (!record8(response)) return void 0;
   if (Array.isArray(response.content)) return { ...response, content: replaceBlocks(response.content, text2) };
-  if (typeof response.content === "string") return { ...response, content: text2 };
-  if (typeof response.result === "string") return { ...response, result: text2 };
+  if (grepEnvelope(response)) return { ...response, content: text2 };
+  if (webFetchEnvelope(response)) return { ...response, result: text2 };
   if (typeof response.stdout === "string" || typeof response.stderr === "string") {
     return { stdout: text2, stderr: "", interrupted: response.interrupted === true, isImage: response.isImage === true };
   }
@@ -2329,7 +2338,8 @@ async function handleHook(host, event, value, overrides = {}, rpc = callBroker, 
     if (!responseEnabled()) return {};
     const payload = host === "codex" ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input);
     if (payload === void 0) {
-      if (record10(input.tool_response) && Object.keys(input.tool_response).length > 0) trace.error_code = "unscanned_shape";
+      const known = host === "codex" ? !record10(input.tool_response) || Array.isArray(input.tool_response.content) : knownClaudeResult(input.tool_name, input.tool_response);
+      if (!known) trace.error_code = "unscanned_shape";
       return {};
     }
     const probe = payload === PROBE_TEXT || payload === PROBE_TEXT + "\n" || payload === PROBE_TEXT + "\r\n";

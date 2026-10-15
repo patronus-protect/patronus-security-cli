@@ -641,6 +641,17 @@ test('Claude Grep results are scanned and unknown structured results are journal
   await runHook('claude', 'PostToolUse', input('PostToolUse', { tool_name: 'Grep', tool_response: { mode: 'content', filenames: ['a.csv'], content: 'GREP-CANARY-731' } }), {}, rpc, noProtocol, undefined, undefined, trace)
   assert.equal(requests.at(-1)?.payload, 'GREP-CANARY-731')
   assert.equal(trace.scans, 1)
+  for (const [tool_name, tool_response] of [
+    ['Write', { type: 'create', filePath: '/tmp/a.txt', content: 'MODEL-WRITTEN-731', structuredPatch: [] }],
+    ['ArbitraryExternalTool', { stdout: '', stderr: '' }],
+    ['ArbitraryExternalTool', { type: 'image', data: 'IMAGE-731' }],
+  ] as const) {
+    const known: any = { decision: 'allow', outcome: 'ok', scans: 0 }
+    const before = requests.length
+    assert.deepEqual(await runHook('claude', 'PostToolUse', input('PostToolUse', { tool_name, tool_response }), {}, rpc, noProtocol, undefined, undefined, known), {})
+    assert.equal(requests.length, before, tool_name)
+    assert.equal(known.error_code, undefined, tool_name)
+  }
   const unknown: any = { decision: 'allow', outcome: 'ok', scans: 0 }
   assert.deepEqual(await runHook('claude', 'PostToolUse', input('PostToolUse', { tool_name: 'Future', tool_response: { rows: [1, 2] } }), {}, rpc, noProtocol, undefined, undefined, unknown), {})
   assert.equal(unknown.error_code, 'unscanned_shape')

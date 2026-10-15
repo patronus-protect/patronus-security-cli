@@ -60,6 +60,23 @@ function textBlocks(value: unknown): string[] {
   )
 }
 
+/** Grep in content mode returns matching lines as one string next to the file list. */
+const grepEnvelope = (value: Record<string, unknown>) =>
+  typeof value.content === 'string' && typeof value.mode === 'string' && Array.isArray(value.filenames)
+/** WebFetch returns the fetched page, processed for the prompt, as `result`. */
+const webFetchEnvelope = (value: Record<string, unknown>) => typeof value.result === 'string' && typeof value.url === 'string'
+/** Tools whose results carry only what the model itself wrote or chose, never outside text. */
+const modelAuthoredTools = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'TodoWrite', 'ExitPlanMode', 'Glob'])
+
+/** Whether a result envelope is one this mapper understands, with or without outside text. */
+export function knownClaudeResult(toolName: unknown, response: unknown): boolean {
+  if (typeof toolName === 'string' && modelAuthoredTools.has(toolName)) return true
+  if (response === undefined || typeof response === 'string' || Array.isArray(response)) return true
+  if (!record(response)) return false
+  return Array.isArray(response.content) || grepEnvelope(response) || webFetchEnvelope(response) ||
+    typeof response.stdout === 'string' || typeof response.stderr === 'string' || response.type === 'text' || response.type === 'image'
+}
+
 /** Raw external text exposed by the pinned Claude hook contract. */
 export function claudeExternalText(event: string, input: HookInput): string[] {
   if (event === 'UserPromptSubmit') {
@@ -74,10 +91,8 @@ export function claudeExternalText(event: string, input: HookInput): string[] {
   if (Array.isArray(response)) return textBlocks(response)
   if (!record(response)) return []
   if (Array.isArray(response.content)) return textBlocks(response.content)
-  // Grep in content mode returns matching lines as one string.
-  if (typeof response.content === 'string') return response.content.length > 0 ? [response.content] : []
-  // WebFetch returns the fetched page, processed for the prompt, as `result`.
-  if (typeof response.result === 'string') return response.result.length > 0 ? [response.result] : []
+  if (grepEnvelope(response)) return (response.content as string).length > 0 ? [response.content as string] : []
+  if (webFetchEnvelope(response)) return (response.result as string).length > 0 ? [response.result as string] : []
   if (typeof response.stdout === 'string' || typeof response.stderr === 'string') {
     return [response.stdout, response.stderr].filter((value): value is string => typeof value === 'string' && value.length > 0)
   }
@@ -112,8 +127,8 @@ function replaceClaudeResponse(response: unknown, text: string): unknown {
   if (Array.isArray(response)) return replaceBlocks(response, text)
   if (!record(response)) return undefined
   if (Array.isArray(response.content)) return { ...response, content: replaceBlocks(response.content, text) }
-  if (typeof response.content === 'string') return { ...response, content: text }
-  if (typeof response.result === 'string') return { ...response, result: text }
+  if (grepEnvelope(response)) return { ...response, content: text }
+  if (webFetchEnvelope(response)) return { ...response, result: text }
   if (typeof response.stdout === 'string' || typeof response.stderr === 'string') {
     return { stdout: text, stderr: '', interrupted: response.interrupted === true, isImage: response.isImage === true }
   }

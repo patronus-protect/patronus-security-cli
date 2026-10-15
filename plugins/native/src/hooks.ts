@@ -10,7 +10,7 @@ import { disclosureQuestion } from '../../deepseek/src/disclosure.ts'
 import { invalidScanReference } from '../../deepseek/src/references.ts'
 import { callBroker, type BrokerConfig } from './broker.ts'
 import { codexExternalTextPayload, mapCodex } from './hosts/codex.ts'
-import { claudeExternalTextPayload, mapClaude } from './hosts/claude.ts'
+import { claudeExternalTextPayload, knownClaudeResult, mapClaude } from './hosts/claude.ts'
 import { recordProtocolScan, type HookTrace, type ProtocolRecorder } from './protocol.ts'
 import type { HookDecision, HookInput, Host, JsonValue } from './types.ts'
 import { PROBE_TEXT } from './probe.ts'
@@ -274,7 +274,9 @@ export async function handleHook(host: Host, event: string, value: unknown, over
     if (payload === undefined) {
       // A non-empty structured result in a shape the host mapper does not know stays unscanned;
       // journal it so QA notices new tool shapes instead of letting them pass silently.
-      if (record(input.tool_response) && Object.keys(input.tool_response).length > 0) trace.error_code = 'unscanned_shape'
+      const known = host === 'codex' ? !record(input.tool_response) || Array.isArray(input.tool_response.content)
+        : knownClaudeResult(input.tool_name, input.tool_response)
+      if (!known) trace.error_code = 'unscanned_shape'
       return {}
     }
     const probe = payload === PROBE_TEXT || payload === PROBE_TEXT + '\n' || payload === PROBE_TEXT + '\r\n'
