@@ -6,6 +6,10 @@
 //! parts remain. Restoring a sibling must scan clean in the masked field's context.
 //! Once restored, that sibling stays visible even if later scans fail or exhaust
 //! their budget. Fallback keeps the last verified mask, never an older, larger one.
+//! Line-structured text (env files, CSV, configs) is split by lines even when it has
+//! few words. A part of a hidden container (an HTML comment) that stays flagged
+//! masks the whole container: hidden text is not content for the user or the agent,
+//! and its harmless-looking lead-in can carry the instruction without its payload.
 use std::{collections::HashMap, ops::Range, time::Instant};
 
 use serde_json::Value;
@@ -154,13 +158,41 @@ fn middle(text: &str, region: Range<usize>) -> Option<Range<usize>> {
     Some(region.start + words[words.len() / 4]..end)
 }
 
+/// Byte offsets of the starts of non-blank lines within `part`.
+fn line_starts(part: &str) -> Vec<usize> {
+    std::iter::once(0)
+        .chain(part.match_indices('\n').map(|(i, _)| i + 1))
+        .filter(|&i| {
+            part[i..]
+                .lines()
+                .next()
+                .is_some_and(|line| !line.trim().is_empty())
+        })
+        .collect()
+}
+
 /// Splits a region into two word-aligned halves, preferring a sentence or line
-/// boundary near the middle. `None` when the region is too short to split.
+/// boundary near the middle. Regions with few words split between lines instead.
+/// `None` when the region is a single short line.
 fn split(text: &str, region: Range<usize>) -> Option<(Range<usize>, Range<usize>)> {
     let part = &text[region.clone()];
     let words = word_starts(part);
     if words.len() <= MIN_WORDS {
-        return None;
+        let lines = line_starts(part);
+        if lines.len() < 2 {
+            return None;
+        }
+        let cut = region.start + lines[lines.len() / 2];
+        return Some((region.start..cut, cut..region.end));
+    }
+    // Paragraphs are natural units: cut at the blank line nearest the middle first,
+    // however far from it, so a harmless paragraph is not fused to an attack.
+    if let Some(boundary) = (1..words.len())
+        .filter(|&i| part[words[i - 1]..words[i]].matches('\n').count() >= 2)
+        .min_by_key(|&i| i.abs_diff(words.len() / 2))
+    {
+        let cut = region.start + words[boundary];
+        return Some((region.start..cut, cut..region.end));
     }
     let ideal = words.len() / 2;
     let radius = (words.len() / 4).max(1);
@@ -173,6 +205,42 @@ fn split(text: &str, region: Range<usize>) -> Option<(Range<usize>, Range<usize>
         .unwrap_or(ideal);
     let cut = region.start + words[boundary];
     Some((region.start..cut, cut..region.end))
+}
+
+/// Byte ranges of HTML comments; an unterminated comment runs to the end.
+fn hidden_containers(text: &str) -> Vec<Range<usize>> {
+    let mut containers = Vec::new();
+    let mut from = 0;
+    while let Some(open) = text[from..].find("<!--").map(|i| from + i) {
+        let end = text[open + 4..]
+            .find("-->")
+            .map_or(text.len(), |i| open + 4 + i + 3);
+        containers.push(open..end);
+        from = end;
+    }
+    containers
+}
+
+/// Widens each masked region to every hidden container it touches, then merges overlaps.
+fn cover_hidden_containers(text: &str, regions: &mut Vec<Range<usize>>) {
+    let containers = hidden_containers(text);
+    for region in regions.iter_mut() {
+        for container in &containers {
+            if container.start < region.end && region.start < container.end {
+                region.start = region.start.min(container.start);
+                region.end = region.end.max(container.end);
+            }
+        }
+    }
+    regions.sort_unstable_by_key(|r| r.start);
+    let mut merged: Vec<Range<usize>> = Vec::new();
+    for region in regions.drain(..) {
+        match merged.last_mut().filter(|last| region.start <= last.end) {
+            Some(last) => last.end = last.end.max(region.end),
+            None => merged.push(region),
+        }
+    }
+    *regions = merged;
 }
 
 fn finding(start_byte: usize, end_byte: usize) -> RuntimeFinding {
@@ -254,6 +322,7 @@ pub fn refine_redaction(
             // The durable same-policy finding already establishes danger.
             refiner.narrow(text, region, &mut regions, &spans);
         }
+        cover_hidden_containers(text, &mut regions);
         output.push(Value::String(masked_view(text, &regions, &spans)));
     }
     Some(if payload.is_string() {
