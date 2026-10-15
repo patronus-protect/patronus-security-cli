@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "patronus": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs", "mcp"]
+    }
+  }
+}

@@ -47,7 +47,10 @@ impl ProtocolEvent {
             return invalid("unsupported protocol event schema");
         }
         bounded_token("host", &self.host, 32)?;
-        if !matches!(self.host.as_str(), "codex" | "claude" | "deepseek") {
+        if !matches!(
+            self.host.as_str(),
+            "codex" | "claude" | "deepseek" | "cursor"
+        ) {
             return invalid("unsupported host");
         }
         bounded_token("session_id", &self.session_id, 128)?;
