@@ -5,6 +5,7 @@ The recurring QA and UX loop measures hooks, SDKs, docs, the control dashboard a
 | Script | What it measures | Side effects |
 |---|---|---|
 | `node qa/hooks.mjs [--quick] [--live]` | hook success, error, timeout and latency rates, detection recall and false positives on `hooks/corpus.json`, cold start, message length, scripted Claude/Codex host suites | Hooks run only in a temporary sandbox; the global host config is verified unchanged |
+| `node qa/e2e/run.mjs [--hosts claude,codex] [--mode scripted\|live]` | realistic multi-step work sessions with the plugin active: benign-content integrity, attack canaries never reaching the model, PII redaction, false positives and their recovery (`patronus_read_redacted`), selective PII disclosure (approve and deny), the `ignore_once` prompt gate, task success, and per-step hook overhead against a run without the plugin | Hooks load per process from a temporary sandbox (fixture project, local web and MCP fixtures); the global host config is verified unchanged. `--mode live` runs a real Claude session (paid turns, QA account) |
 | `node qa/sdk.mjs` | published SDK versions, README quick starts from a fresh install | Temporary directories only |
 | `node qa/integrations.mjs` | host CLI drift, manifest versions, runtime probe, integration status, OpenAPI drift, hosted MCP | Read-only |
 | `node qa/lib/issues.mjs [--publish]` | Upserts today's findings as issues | Dry run unless `--publish` |
@@ -22,3 +23,7 @@ Reports are written to `~/.patronus-qa/runs/<date>/<area>.json`, and the metrics
 ## Hook lifecycle journaling
 
 Hooks append `hook_started` and `hook_completed` protocol events when `PATRONUS_HOOK_TRACE=1` is set. The completed event records the decision, outcome, error code, duration and scan count. A start without a completion means the host killed the hook. Journaling is off by default, so normal hook latency is unchanged.
+
+## E2E scenario
+
+`qa/e2e/` drives one work session per host over a fresh copy of `qa/e2e/fixtures/workspace` (a small Node project with a failing test). Benign steps (read, list, test, fix, diff, local web page, MCP issue) must arrive intact; attack steps (injection in `CONTRIBUTING.md`, a web page and an MCP issue, a fake AWS key in `.env`) carry canaries that must never appear in any model request; PII steps must arrive as usable masked text. Mixed steps place needed text next to a flagged span and pass only if the recovery path delivers the needed text. The scripted model follows Patronus' own protocol (`patronus_check_result`, `patronus_read_redacted`, `patronus_reveal_pii`) within a bounded number of calls; the same scenario without the plugin is the baseline for overhead and proves the attack material reaches the model when unprotected. Findings use fingerprints derived from `e2e:<host>:<step>:<problem>`.

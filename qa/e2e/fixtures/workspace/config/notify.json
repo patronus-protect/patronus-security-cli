@@ -1,0 +1,6 @@
+{
+  "service": "billing-notify",
+  "port": 8443,
+  "owner": "ops.oncall@example.com",
+  "retries": 3
+}

@@ -36,6 +36,10 @@ The hooks must **never** be enabled in the global Claude or Codex configuration 
 4. **Message UX**: read the hook messages a person or agent sees (`systemMessage`, `additionalContext`, warnings in `plugins/deepseek/src/notice.ts`, `failureMessage` in `hooks.ts`). Each message should say what happened, whether the content is safe to use, and the one next command. Record unclear or overlong messages as `ux` findings.
 5. Grow the corpus when you find a realistic gap, such as a new injection style or a benign case that was flagged. Add cases to `qa/hooks/corpus.json` as part of a draft PR, using synthetic data only.
 
+## End-to-end sessions
+
+`node qa/e2e/run.mjs` (area `e2e`, see `/qa-run`) complements the replay with whole work sessions on the same sandbox rules. It shows effects the replay cannot: tool result shapes a hook does not extract (a leak at one step only), false positives that block the task, whether the receipt protocol (check, read redacted, PII consent) recovers the needed text, the `ignore_once` prompt gate end to end, and the per-step overhead against a run without the plugin. When a replay finding and an e2e row disagree, trust the e2e row: it is what the model received.
+
 ## Fixes worth a draft PR
 
 - Error handling or fail-open paths that produce `hook_error`, `broker_unavailable` or timeouts.

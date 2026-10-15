@@ -209,4 +209,4 @@ export async function runHost({ permissionMode = 'dontAsk', approval, name, tool
   }
 }
 
-export { quote };
+export { quote, modelReply };
