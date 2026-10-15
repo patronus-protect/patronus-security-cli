@@ -74,6 +74,10 @@ export function claudeExternalText(event: string, input: HookInput): string[] {
   if (Array.isArray(response)) return textBlocks(response)
   if (!record(response)) return []
   if (Array.isArray(response.content)) return textBlocks(response.content)
+  // Grep in content mode returns matching lines as one string.
+  if (typeof response.content === 'string') return response.content.length > 0 ? [response.content] : []
+  // WebFetch returns the fetched page, processed for the prompt, as `result`.
+  if (typeof response.result === 'string') return response.result.length > 0 ? [response.result] : []
   if (typeof response.stdout === 'string' || typeof response.stderr === 'string') {
     return [response.stdout, response.stderr].filter((value): value is string => typeof value === 'string' && value.length > 0)
   }
@@ -108,6 +112,8 @@ function replaceClaudeResponse(response: unknown, text: string): unknown {
   if (Array.isArray(response)) return replaceBlocks(response, text)
   if (!record(response)) return undefined
   if (Array.isArray(response.content)) return { ...response, content: replaceBlocks(response.content, text) }
+  if (typeof response.content === 'string') return { ...response, content: text }
+  if (typeof response.result === 'string') return { ...response, result: text }
   if (typeof response.stdout === 'string' || typeof response.stderr === 'string') {
     return { stdout: text, stderr: '', interrupted: response.interrupted === true, isImage: response.isImage === true }
   }
@@ -139,6 +145,8 @@ export function mapClaude(event: string, decision: HookDecision, input?: HookInp
   if (event === 'PostToolUse' && decision.kind !== 'stop' && input && supportsClaudeResponse(input)) {
     const visible = visibleToolResult(decision.text)
     const updatedToolOutput = replaceClaudeResponse(input.tool_response, visible)
+    // A result that cannot be replaced in its own shape must not pass through unchanged.
+    if (updatedToolOutput === undefined) return { continue: false, stopReason: decision.text }
     const additionalContext = securityContext(decision.text)
     return { hookSpecificOutput: {
       hookEventName: 'PostToolUse', updatedToolOutput,

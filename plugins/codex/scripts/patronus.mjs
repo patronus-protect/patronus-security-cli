@@ -1896,6 +1896,8 @@ function claudeExternalText(event, input) {
   if (Array.isArray(response)) return textBlocks(response);
   if (!record8(response)) return [];
   if (Array.isArray(response.content)) return textBlocks(response.content);
+  if (typeof response.content === "string") return response.content.length > 0 ? [response.content] : [];
+  if (typeof response.result === "string") return response.result.length > 0 ? [response.result] : [];
   if (typeof response.stdout === "string" || typeof response.stderr === "string") {
     return [response.stdout, response.stderr].filter((value) => typeof value === "string" && value.length > 0);
   }
@@ -1926,6 +1928,8 @@ function replaceClaudeResponse(response, text2) {
   if (Array.isArray(response)) return replaceBlocks(response, text2);
   if (!record8(response)) return void 0;
   if (Array.isArray(response.content)) return { ...response, content: replaceBlocks(response.content, text2) };
+  if (typeof response.content === "string") return { ...response, content: text2 };
+  if (typeof response.result === "string") return { ...response, result: text2 };
   if (typeof response.stdout === "string" || typeof response.stderr === "string") {
     return { stdout: text2, stderr: "", interrupted: response.interrupted === true, isImage: response.isImage === true };
   }
@@ -1958,6 +1962,7 @@ function mapClaude(event, decision, input) {
   if (event === "PostToolUse" && decision.kind !== "stop" && input && supportsClaudeResponse(input)) {
     const visible = visibleToolResult(decision.text);
     const updatedToolOutput = replaceClaudeResponse(input.tool_response, visible);
+    if (updatedToolOutput === void 0) return { continue: false, stopReason: decision.text };
     const additionalContext = securityContext(decision.text);
     return { hookSpecificOutput: {
       hookEventName: "PostToolUse",
@@ -2323,7 +2328,10 @@ async function handleHook(host, event, value, overrides = {}, rpc = callBroker, 
     if (operation) return {};
     if (!responseEnabled()) return {};
     const payload = host === "codex" ? codexExternalTextPayload(event, input) : claudeExternalTextPayload(event, input);
-    if (payload === void 0) return {};
+    if (payload === void 0) {
+      if (record10(input.tool_response) && Object.keys(input.tool_response).length > 0) trace.error_code = "unscanned_shape";
+      return {};
+    }
     const probe = payload === PROBE_TEXT || payload === PROBE_TEXT + "\n" || payload === PROBE_TEXT + "\r\n";
     let result = await scan({ method: "response", tool: input.tool_name, callId: input.tool_use_id, payload });
     if (probe) {
