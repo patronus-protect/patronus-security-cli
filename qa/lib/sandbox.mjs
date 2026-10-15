@@ -45,6 +45,9 @@ export async function journal(dataDir, since = 0) {
 export const sessionHash = (host, session) => `sha256:${sha256(JSON.stringify([host, session]))}`
 
 /** Success, error, timeout and latency per host:hook_event from hook_started/hook_completed pairs. */
+/** Tool results in shapes the hook mapper does not know were passed on unscanned. */
+export const unscannedResults = stats => Object.values(stats).reduce((sum, stat) => sum + (stat.errors?.unscanned_shape ?? 0), 0)
+
 export function hookMetrics(events) {
   const groups = {}
   const group = event => (groups[`${event.host}:${event.hook_event}`] ??= { started: 0, completed: 0, outcomes: {}, decisions: {}, durations: [], errors: {} })

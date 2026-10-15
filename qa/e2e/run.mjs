@@ -11,7 +11,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { finding, loadEnv, percentile, qaData, qaHome, rate, report, run, scanner, thresholds } from '../lib/common.mjs'
-import { bin, changedFiles, hookMetrics, hostPath, journal, killStrays, snapshot } from '../lib/sandbox.mjs'
+import { bin, changedFiles, hookMetrics, hostPath, journal, killStrays, snapshot, unscannedResults } from '../lib/sandbox.mjs'
 import { approvals, evaluate, freshChallenge, gatePhase, pii, scriptedModel, secrets, steps, webServer, workspace } from './scenario.mjs'
 
 loadEnv()
@@ -164,6 +164,7 @@ function hostMetrics(host, session) {
     session_ms: { baseline: baseline.ms, protected: guarded.ms },
     hook_errors: Object.values(hooks).reduce((sum, stat) => sum + Math.round((stat.error_rate ?? 0) * stat.invocations), 0),
     hook_timeouts: Object.values(hooks).reduce((sum, stat) => sum + Math.round((stat.timeout_rate ?? 0) * stat.invocations), 0),
+    unscanned_results: unscannedResults(hooks),
     hooks,
     baseline: { task_success: baseline.testsPass, canaries_exposed: exposedInBaseline, canaries_total: secrets.filter(secret => secret.kind === 'canary').length },
     unexpected_approvals: guarded.approvals?.other?.length ?? 0,
@@ -214,6 +215,9 @@ function evaluateHost(host, session, metrics) {
       { metric: metrics.overhead_ms, suggestion: `Budget: median ${limits.max_overhead_median_ms} ms, p95 ${limits.max_overhead_p95_ms} ms.` })
   if (metrics.hook_errors || metrics.hook_timeouts)
     add('high', `${host}:hook-errors`, `${host}: hooks errored or timed out during the e2e session`, { evidence: JSON.stringify(metrics.hooks) })
+  if (metrics.unscanned_results)
+    add('high', `${host}:unscanned-shape`, `${host}: ${metrics.unscanned_results} tool result(s) in an unknown shape reached the model unscanned`,
+      { evidence: JSON.stringify(metrics.hooks), suggestion: 'Teach the host mapper (plugins/native/src/hosts/) this result shape.' })
   if (metrics.unexpected_approvals)
     add('low', `${host}:unexpected-approvals`, `${host}: the host asked for approval outside the disclosure dialog`, { evidence: JSON.stringify(guarded.approvals.other) })
 }
@@ -263,6 +267,8 @@ async function live(web) {
     add('critical', `live:claude:leak:${value}`, `claude live: ${secrets.find(secret => secret.value === value)?.kind} text reached the model via ${via[0]?.split(' ')[0] ?? 'the transcript'}`,
       { evidence: `${value} first delivered by: ${via.join('\n') || 'assistant text only'}`, suggestion: 'Find why this tool result was not scanned or masked (hook payload extraction in plugins/native/src/hosts/claude.ts).' })
   }
+  if (unscannedResults(metrics.hooks)) add('high', 'live:claude:unscanned-shape', 'claude live: tool results in an unknown shape reached the model unscanned',
+    { evidence: JSON.stringify(metrics.hooks), suggestion: 'Teach plugins/native/src/hosts/claude.ts this result shape.' })
   if (!metrics.task_success) add('high', 'live:claude:task-failed', 'claude live: the agent did not fix the failing test with Patronus active', { evidence: result.final?.result?.slice(0, 800) })
   if (!metrics.consent.reveal_requested) add('medium', 'live:claude:no-consent', 'claude live: the model did not request a PII disclosure although the task needed the email',
     { evidence: JSON.stringify(metrics.protocol), suggestion: 'Check whether the redacted receipt and runtime skill make patronus_read_redacted with reveal_pii discoverable.' })

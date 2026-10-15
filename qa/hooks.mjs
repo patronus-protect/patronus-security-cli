@@ -18,7 +18,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { args, finding, loadEnv, percentile, previousMetrics, qaData, qaHome, rate, report, repository, run, scanner, thresholds } from './lib/common.mjs'
-import { bin, changedFiles, hookMetrics, hostPath, hosts, journal, sessionHash, snapshot } from './lib/sandbox.mjs'
+import { bin, changedFiles, hookMetrics, hostPath, hosts, journal, sessionHash, snapshot, unscannedResults } from './lib/sandbox.mjs'
 
 loadEnv()
 const options = { ...args(), keep: process.argv.includes('--keep'), quick: process.argv.includes('--quick') }
@@ -295,6 +295,9 @@ function evaluate({ detection, hookStats, suites, liveRun, previous }) {
   }
   for (const [key, stat] of Object.entries(hookStats)) {
     const event = key.split(':')[1]
+    if (unscannedResults({ [key]: stat }))
+      findings.push(finding('hooks', 'high', `unscanned:${key}`, `${key}: tool results in an unknown shape reached the model unscanned`,
+        { metric: { unscanned: stat.errors.unscanned_shape }, suggestion: 'Teach the host mapper (plugins/native/src/hosts/) this result shape; the hook journals it as unscanned_shape.' }))
     if (stat.error_rate > limits.max_error_rate)
       findings.push(finding('hooks', 'high', `errors:${key}`, `${key}: hook error rate ${stat.error_rate}`, { metric: stat, evidence: JSON.stringify(stat.errors) }))
     if (stat.timeout_rate > limits.max_timeout_rate)
