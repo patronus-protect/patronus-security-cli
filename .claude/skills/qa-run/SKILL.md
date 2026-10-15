@@ -1,7 +1,7 @@
 ---
 name: qa-run
 description: Run the Patronus QA and UX routine (hooks, SDKs, docs, control dashboard, integrations), file findings as GitHub issues labelled qa and open up to three draft PRs with fixes. Use for the scheduled QA runs or when asked to "run QA".
-argument-hint: "[--areas hooks,integrations,sdk,dx,dashboard | all] [--live]"
+argument-hint: "[--areas hooks,e2e,integrations,sdk,dx,dashboard | all] [--live]"
 ---
 
 # Patronus QA run
@@ -10,17 +10,28 @@ You orchestrate one QA run. Measure first, then improve. Never merge anything.
 
 ## Areas
 
-Parse `--areas` from the arguments (default `all` = hooks, integrations, sdk, dx, dashboard).
+Parse `--areas` from the arguments (default `all` = hooks, e2e, integrations, sdk, dx, dashboard).
 
 | Area | How |
 |---|---|
 | hooks | Follow `.claude/skills/qa-hooks/SKILL.md` |
+| e2e | `node qa/e2e/run.mjs` (scripted, Claude and Codex, daily); with `--live` also `node qa/e2e/run.mjs --hosts claude --mode live` (weekly, paid turns). Then review its findings, see below |
 | integrations | Follow `.claude/skills/qa-integrations/SKILL.md` |
 | sdk | `node qa/sdk.mjs` (deterministic), then review its findings |
 | dx | Follow `.claude/skills/qa-dx/SKILL.md` (docs, examples, SDK readability) |
 | dashboard | Follow `.claude/skills/qa-dashboard/SKILL.md` (control.patronus.studio in Chrome) |
 
 Run the areas in the order above. One failing area must not stop the others.
+
+### e2e review
+
+Read `~/.patronus-qa/runs/<date>/e2e.json`. `metrics.hosts.<host>.matrix` has one row per step (first receipt, protocol trail, final status, latency, leaks); the live run is under `metrics.live`.
+- **Leaks** (critical): a canary, secret or PII value reached a model request. The row names the step whose output first carried it; check which tool result shape the hook did not scan.
+- **False positives and recovery**: `false_positives` counts benign and mixed steps that were withheld first, how many the protocol recovered, the extra calls and the extra latency. An unrecovered one is high; a recovery that leaks is critical.
+- **Consent**: `consent-deny` must keep every value masked; `consent-approve` must reveal exactly the requested type (emails) while IBANs stay masked.
+- **Prompt gate**: `prompt_gate_phases` must read first:blocked, resend:sent, reuse:blocked, other-text:blocked (`ignore_once` is single-use and bound to the text). The gate session enables `analysis.user_prompt_pii`.
+- **Live**: whether the real model followed the receipt protocol on its own (`protocol`, `consent.reveal_requested`), task success, turns and cost.
+- If the baseline check fails, the scenario itself is broken; fix the fixture before trusting the protected numbers.
 
 ## Setup
 

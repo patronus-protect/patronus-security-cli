@@ -14,41 +14,20 @@
 // ~/.patronus-qa/data. Replay and scripted host suites need no network login.
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { args, finding, loadEnv, percentile, previousMetrics, qaData, qaHome, rate, report, repository, run, scanner, sha256, thresholds } from './lib/common.mjs'
+import { args, finding, loadEnv, percentile, previousMetrics, qaData, qaHome, rate, report, repository, run, scanner, thresholds } from './lib/common.mjs'
+import { bin, changedFiles, hookMetrics, hostPath, hosts, journal, sessionHash, snapshot } from './lib/sandbox.mjs'
 
 loadEnv()
 const options = { ...args(), keep: process.argv.includes('--keep'), quick: process.argv.includes('--quick') }
 const limits = thresholds.hooks
 const arkLevel = process.env.PATRONUS_QA_ARK_LEVEL ?? 'l3'
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
-const hosts = ['claude', 'codex']
 const findings = []
 const checks = []
 const check = (name, ok, detail = '') => { checks.push({ name, ok, detail }); return ok }
-const bin = name => [join(homedir(), '.local/bin', name), `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find(existsSync) ?? name
-
-// ---------------------------------------------------------------------------------------------
-// Global state guard
-
-const globalFiles = [
-  '.claude/settings.json', '.claude/plugins/installed_plugins.json', '.claude/plugins/known_marketplaces.json',
-  '.codex/config.toml', '.codex/hooks.json',
-].map(path => join(homedir(), path))
-
-async function snapshot() {
-  const files = {}
-  for (const path of globalFiles) files[path] = existsSync(path) ? sha256(await readFile(path)) : null
-  const status = {}
-  for (const host of hosts) {
-    const result = await run(scanner, ['integration', host, 'status', '--format', 'json'], { timeout: 60_000, env: { ...process.env, PATH: `${join(homedir(), '.local/bin')}:${process.env.PATH}` } })
-    try { status[host] = JSON.parse(result.stdout).state ?? 'unknown' } catch { status[host] = 'unreadable' }
-  }
-  return { files, status }
-}
 
 // ---------------------------------------------------------------------------------------------
 // Sandbox
@@ -68,7 +47,7 @@ async function sandboxEnv(dataDir) {
   if (!existsSync(config)) await writeFile(config, `[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
   return {
     ...process.env,
-    PATH: `${join(homedir(), '.local/bin')}:${process.env.PATH}`,
+    PATH: hostPath(),
     PATRONUS_HOOK_TRACE: '1',
     PATRONUS_DATA_DIR: dataDir,
     PATRONUS_SCANNER_BIN: scanner,
@@ -94,57 +73,6 @@ async function teardown() {
 }
 
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(signal, () => { teardown().finally(() => process.exit(130)) })
-
-// ---------------------------------------------------------------------------------------------
-// Journal reading
-
-async function journal(dataDir, since = 0) {
-  const events = []
-  const directory = join(dataDir, 'protocol')
-  if (!existsSync(directory)) return events
-  for (const name of (await readdir(directory)).filter(name => name.endsWith('.jsonl'))) {
-    for (const line of (await readFile(join(directory, name), 'utf8')).split('\n')) {
-      if (!line.trim()) continue
-      try { const event = JSON.parse(line).event; if (Date.parse(event.timestamp) >= since) events.push(event) } catch {}
-    }
-  }
-  return events
-}
-
-const sessionHash = (host, session) => `sha256:${sha256(JSON.stringify([host, session]))}`
-
-/** Success, error, timeout and latency per host:hook_event from hook_started/hook_completed pairs. */
-function hookMetrics(events) {
-  const groups = {}
-  const group = event => (groups[`${event.host}:${event.hook_event}`] ??= { started: 0, completed: 0, outcomes: {}, decisions: {}, durations: [], errors: {} })
-  for (const event of events) {
-    if (event.event === 'hook_started') group(event).started++
-    if (event.event !== 'hook_completed') continue
-    const entry = group(event)
-    entry.completed++
-    entry.outcomes[event.outcome] = (entry.outcomes[event.outcome] ?? 0) + 1
-    entry.decisions[event.decision] = (entry.decisions[event.decision] ?? 0) + 1
-    if (typeof event.duration_ms === 'number') entry.durations.push(event.duration_ms)
-    if (event.error_code) entry.errors[event.error_code] = (entry.errors[event.error_code] ?? 0) + 1
-  }
-  const result = {}
-  for (const [key, entry] of Object.entries(groups)) {
-    const bad = (entry.outcomes.error ?? 0) + (entry.outcomes.inactive ?? 0)
-    result[key] = {
-      invocations: entry.started,
-      success_rate: rate(entry.completed - bad - (entry.outcomes.degraded ?? 0), entry.started),
-      error_rate: rate(bad, entry.started),
-      degraded_rate: rate(entry.outcomes.degraded ?? 0, entry.started),
-      timeout_rate: rate(Math.max(0, entry.started - entry.completed), entry.started),
-      override_rate: rate(entry.outcomes.override ?? 0, entry.completed),
-      p50_ms: percentile(entry.durations, 50),
-      p95_ms: percentile(entry.durations, 95),
-      decisions: entry.decisions,
-      errors: entry.errors,
-    }
-  }
-  return result
-}
 
 // ---------------------------------------------------------------------------------------------
 // Layer 1: deterministic replay of the corpus through the built hook bundles
@@ -419,7 +347,7 @@ try {
   await teardown()
 }
 const after = await snapshot()
-const changed = Object.keys(before.files).filter(path => before.files[path] !== after.files[path])
+const changed = changedFiles(before, after)
 check('global host config unchanged', changed.length === 0, changed.join(', '))
 if (changed.length)
   findings.push(finding('hooks', 'critical', `global-changed:${changed.join(',')}`, 'Global host configuration changed during the hook QA run',

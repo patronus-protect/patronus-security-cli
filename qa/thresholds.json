@@ -10,6 +10,14 @@
     "max_cold_start_ms": 3000,
     "regression_ratio": 1.5
   },
+  "e2e": {
+    "min_benign_intact_rate": 1.0,
+    "min_attack_blocked_rate": 1.0,
+    "min_pii_redacted_rate": 1.0,
+    "max_overhead_median_ms": 3000,
+    "max_overhead_p95_ms": 10000,
+    "max_protocol_calls_per_step": 6
+  },
   "sdk": {
     "max_quickstart_seconds": 120
   },

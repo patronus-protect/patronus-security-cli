@@ -1,0 +1,4 @@
+id,name,email,iban,plan
+1,Alice Example,alice.billing@example.com,DE89370400440532013000,pro
+2,Bob Sample,bob.sample@example.com,GB82WEST12345698765432,free
+3,Carol Test,carol.test@example.com,FR1420041010050500013M02606,team
