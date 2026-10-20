@@ -103,6 +103,17 @@ class ClientTests(unittest.TestCase):
             self.client.get_job("https://foreign.invalid")
         self.assertEqual(raised.exception.kind, "protocol")
 
+    def test_polls_every_job_up_to_the_contract_limit(self):
+        ids = ["job_" + format(n, "032x") for n in range(33)]
+        Handler.responses = [{"status": "accepted", "jobs": [{"job_id": job_id} for job_id in ids]}]
+        Handler.responses += [{**FIXTURE["jobs"][0], "job_id": job_id} for job_id in ids]
+        self.assertEqual([job["job_id"] for job in self.client.scan_url("https://example.com")["jobs"]], ids)
+        self.assertEqual(len(Handler.requests), 34)
+        Handler.responses = [{"status": "accepted", "jobs": [{"job_id": "job_" + format(n, "032x")} for n in range(101)]}]
+        with self.assertRaises(PatronusError) as raised:
+            self.client.scan_url("https://example.com")
+        self.assertEqual(raised.exception.kind, "protocol")
+
     def test_uploads_document_bytes_as_multipart(self):
         Handler.responses = [FIXTURE]
         self.client.scan_files([FileUpload("note.md", b"# hello", "text/markdown")])
