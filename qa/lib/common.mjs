@@ -81,11 +81,11 @@ export async function report(area, { findings, metrics = {}, checks = [] }, opti
   return value
 }
 
-/** Last recorded metrics for an area, for regression deltas. */
-export async function previousMetrics(area) {
+/** Last recorded metrics for an area that `comparable` accepts, for regression deltas. */
+export async function previousMetrics(area, comparable = () => true) {
   try {
     const lines = (await readFile(join(qaHome, 'history.jsonl'), 'utf8')).trim().split('\n').reverse()
-    for (const line of lines) { const entry = JSON.parse(line); if (entry.area === area) return entry.metrics }
+    for (const line of lines) { const entry = JSON.parse(line); if (entry.area === area && comparable(entry.metrics)) return entry.metrics }
   } catch {}
   return undefined
 }
