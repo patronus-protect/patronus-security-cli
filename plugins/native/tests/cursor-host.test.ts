@@ -36,6 +36,11 @@ test('Cursor payloads normalize to the shared events with conversation identity 
   assert.equal(normalizeCursor('afterAgentResponse', common('afterAgentResponse')), undefined)
 })
 
+test('real Cursor tool IDs with a line break become valid call IDs', () => {
+  const normalized = normalizeCursor('beforeReadFile', { ...read('x'), tool_use_id: 'call-2b59167c-0\nfc_3b8c6b2b_0' })!.input as HookInput
+  assert.equal(normalized.tool_use_id, 'call-2b59167c-0_fc_3b8c6b2b_0')
+})
+
 test('Cursor extracts shell output, MCP text blocks and file content but never request or metadata fields', () => {
   const post = (value: unknown) => normalizeCursor('postToolUse', value)!.input as HookInput
   assert.deepEqual(cursorExternalText('PostToolUse', post(shell('line one\nline two'))), ['line one\nline two'])
@@ -63,6 +68,17 @@ test('a dangerous file read is withheld and the agent receives the receipt inste
   assert.equal(output.permission, 'deny')
   assert.doesNotMatch(output.user_message, /IGNORE ALL PREVIOUS/)
   assert.match(output.user_message, /Patronus withheld this file \(prompt injection detected\)/)
+})
+
+test('Patronus\' own plugin files are trusted, never scanned', async () => {
+  const calls: unknown[] = []
+  const output = await runHook('cursor', 'beforeReadFile', { ...read('describes attacks'), file_path: '/opt/patronus/plugin/skills/runtime/SKILL.md' },
+    { pluginRoot: '/opt/patronus/plugin' } as never, async (_c, r) => { calls.push(r); return dangerous() }, noProtocol, enabled) as any
+  assert.deepEqual(output, { permission: 'allow' })
+  assert.deepEqual(calls, [])
+  const outside = await runHook('cursor', 'beforeReadFile', { ...read(injection), file_path: '/opt/patronus/plugin-evil/x.md' },
+    { pluginRoot: '/opt/patronus/plugin' } as never, dangerous, noProtocol, enabled) as any
+  assert.equal(outside.permission, 'deny')
 })
 
 test('a prompt with sensitive data is blocked before it is sent; injection in it only warns', async () => {

@@ -1,6 +1,6 @@
 import { chatCommand, controlChat } from '../../deepseek/src/chat-control.ts'
 import { readPluginSettings, hookEnabled, type PluginSettings } from '../../deepseek/src/settings.ts'
-import { isAbsolute, resolve } from 'node:path'
+import { isAbsolute, resolve, sep } from 'node:path'
 import { receipt, redactedMessage } from '../../deepseek/src/receipts.ts'
 import { degradedText, noticeText, publicReason, scanNotice } from '../../deepseek/src/notice.ts'
 import { consumeIgnoreOnce, issueIgnoreOnce } from '../../deepseek/src/ignore-once.ts'
@@ -225,7 +225,8 @@ const shellAsk = (result: CommandResult) =>
 const shellConfirm = (result: CommandResult, token: string) =>
   `Patronus held this shell command before it ran (medium shell-command risk${score(result)}). Codex cannot ask for approval from a hook, so the user decides: tell the user exactly which command you want to run and why, and that they can approve it once by sending ${token} in their next message. After that message, run the identical command again. Do not run a variant of it.`
 
-type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'>
+/** `pluginRoot` is the installed plugin's own directory: its files are trusted, never scanned. */
+type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'> & { pluginRoot?: string }
 
 /** How a degraded scan is classified in the hook trace. */
 function traceFailure(trace: HookTrace, reason: unknown): void {
@@ -260,7 +261,11 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
     if (!record(value) || value.hook_event_name !== event || !id(value.session_id) ||
         typeof value.cwd !== 'string' || !isAbsolute(value.cwd)) return fail('hook_input_invalid')
     const input = value as unknown as HookInput
-    const config: BrokerConfig = { ...overrides, host, sessionId: input.session_id, cwd: overrides.cwd ?? input.cwd }
+    const { pluginRoot, ...brokerOverrides } = overrides
+    const config: BrokerConfig = { ...brokerOverrides, host, sessionId: input.session_id, cwd: overrides.cwd ?? input.cwd }
+    // Cursor's agent reads Patronus' own skills with the Read tool; they describe attacks by design.
+    if (host === 'cursor' && hostEvent === 'beforeReadFile' && pluginRoot && typeof input.file_path === 'string' &&
+        resolve(input.file_path).startsWith(resolve(pluginRoot) + sep)) return { permission: 'allow' }
     const scan = (request: Parameters<typeof rpc>[1]) => { trace.scans++; return protocol(config!, request, () => rpc(config!, request)) }
     if (event === 'SessionEnd' || event === 'Stop') { await rpc(config, { method: 'close' }).catch(() => ({ closed: false })); return {} }
     if (event === 'UserPromptSubmit') {

@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs'
-import { resolve, isAbsolute } from 'node:path'
+import { dirname, resolve, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { callBroker } from './broker.ts'
 import { serveBroker } from './daemon.ts'
@@ -99,7 +99,8 @@ async function main(args: string[]): Promise<void> {
     // Static audits can scan a whole repository; their broker budget is five minutes.
     const signal = AbortSignal.timeout(event === 'PreToolUse' ? 320_000 : 75_000)
     const projectDir = host === 'claude' ? claudeSession()?.cwd : undefined
-    const settings = { ...configuration(), ...(projectDir ? { cwd: projectDir } : {}) }
+    const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+    const settings = { ...configuration(), ...(projectDir ? { cwd: projectDir } : {}), ...(host === 'cursor' ? { pluginRoot } : {}) }
     const respond = async (trace?: HookTrace) => {
       const output = await handleHook(host, event, input, settings, (config, request) => callBroker(config, request, signal), undefined, undefined, undefined, trace)
       await new Promise<void>((done, reject) => process.stdout.write(JSON.stringify(output) + '\n', error => error ? reject(error) : done()))

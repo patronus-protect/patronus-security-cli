@@ -1,6 +1,6 @@
 // plugins/native/src/cli.ts
 import { realpathSync as realpathSync2 } from "node:fs";
-import { resolve as resolve4, isAbsolute as isAbsolute7 } from "node:path";
+import { dirname as dirname4, resolve as resolve4, isAbsolute as isAbsolute7 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // plugins/deepseek/src/settings.ts
@@ -1637,7 +1637,7 @@ async function controlChat(host, session, action, executable) {
 }
 
 // plugins/native/src/hooks.ts
-import { isAbsolute as isAbsolute6, resolve as resolve3 } from "node:path";
+import { isAbsolute as isAbsolute6, resolve as resolve3, sep as sep4 } from "node:path";
 
 // plugins/deepseek/src/receipts.ts
 var redactedMessage = "The content was read with redaction. Use the available text in result to continue the task. Masked regions remain withheld. Do not rerun the source tool.";
@@ -2027,6 +2027,7 @@ function normalizeCursor(event, value) {
   const sessionId = typeof value.session_id === "string" && value.session_id ? value.session_id : value.conversation_id;
   const cwd = typeof value.cwd === "string" && value.cwd ? value.cwd : roots[0];
   const input = { ...value, hook_event_name: shared, session_id: sessionId, cwd };
+  if (typeof value.tool_use_id === "string") input.tool_use_id = value.tool_use_id.replace(/[^A-Za-z0-9_.:-]+/g, "_").slice(0, 256);
   if (event === "beforeShellExecution") {
     input.tool_name = "Shell";
     input.tool_input = { command: value.command, ...typeof value.cwd === "string" ? { cwd: value.cwd } : {} };
@@ -2543,7 +2544,9 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
   try {
     if (!record11(value) || value.hook_event_name !== event || !id(value.session_id) || typeof value.cwd !== "string" || !isAbsolute6(value.cwd)) return fail("hook_input_invalid");
     const input = value;
-    const config = { ...overrides, host, sessionId: input.session_id, cwd: overrides.cwd ?? input.cwd };
+    const { pluginRoot, ...brokerOverrides } = overrides;
+    const config = { ...brokerOverrides, host, sessionId: input.session_id, cwd: overrides.cwd ?? input.cwd };
+    if (host === "cursor" && hostEvent === "beforeReadFile" && pluginRoot && typeof input.file_path === "string" && resolve3(input.file_path).startsWith(resolve3(pluginRoot) + sep4)) return { permission: "allow" };
     const scan = (request) => {
       trace.scans++;
       return protocol(config, request, () => rpc(config, request));
@@ -2822,7 +2825,8 @@ async function main(args) {
     input = await readHook();
     const signal = AbortSignal.timeout(event === "PreToolUse" ? 32e4 : 75e3);
     const projectDir = host === "claude" ? claudeSession()?.cwd : void 0;
-    const settings = { ...configuration(), ...projectDir ? { cwd: projectDir } : {} };
+    const pluginRoot = resolve4(dirname4(fileURLToPath2(import.meta.url)), "..");
+    const settings = { ...configuration(), ...projectDir ? { cwd: projectDir } : {}, ...host === "cursor" ? { pluginRoot } : {} };
     const respond = async (trace) => {
       const output = await handleHook(host, event, input, settings, (config, request) => callBroker(config, request, signal), void 0, void 0, void 0, trace);
       await new Promise((done, reject) => process.stdout.write(JSON.stringify(output) + "\n", (error) => error ? reject(error) : done()));

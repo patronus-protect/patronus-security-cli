@@ -41,6 +41,9 @@ export function normalizeCursor(event: string, value: unknown): { event: string;
   const sessionId = typeof value.session_id === 'string' && value.session_id ? value.session_id : value.conversation_id
   const cwd = typeof value.cwd === 'string' && value.cwd ? value.cwd : roots[0]
   const input: Record<string, unknown> = { ...value, hook_event_name: shared, session_id: sessionId, cwd }
+  // Real Cursor tool IDs join two IDs with a line break (`call-…\nfc_…`); keep them stable but in the
+  // character set every Patronus call ID uses.
+  if (typeof value.tool_use_id === 'string') input.tool_use_id = value.tool_use_id.replace(/[^A-Za-z0-9_.:-]+/g, '_').slice(0, 256)
   if (event === 'beforeShellExecution') {
     input.tool_name = 'Shell'
     input.tool_input = { command: value.command, ...(typeof value.cwd === 'string' ? { cwd: value.cwd } : {}) }
