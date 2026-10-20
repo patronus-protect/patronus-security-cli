@@ -177,13 +177,19 @@ fn runtime_path(root: &Path) -> Result<String> {
     let path = path
         .to_str()
         .ok_or_else(|| integration("the Patronus data directory is not valid UTF-8"))?;
+    // Windows separators become `/`, which Node accepts there too, so the command quotes the same
+    // way on every platform. A backslash left elsewhere would be an escape inside the quotes.
+    #[cfg(windows)]
+    let path = path.replace('\\', "/");
+    #[cfg(not(windows))]
+    let path = path.to_owned();
     // Cursor runs hook commands through a shell; refuse paths that quoting cannot carry safely.
     if path.contains(['"', '$', '`', '\\', '\n']) {
         return Err(integration(
             "the Patronus data directory contains characters Cursor hooks cannot quote",
         ));
     }
-    Ok(path.to_owned())
+    Ok(path)
 }
 
 fn hook_command(runtime: &str, event: &str) -> String {
@@ -480,6 +486,13 @@ mod tests {
         assert!(runtime_path(Path::new("/tmp/a\"b")).is_err());
         assert!(runtime_path(Path::new("/tmp/$HOME")).is_err());
         assert!(runtime_path(Path::new("/tmp/ok")).is_ok());
+        #[cfg(windows)]
+        assert_eq!(
+            runtime_path(Path::new(r"C:\Users\dev\data")).unwrap(),
+            "C:/Users/dev/data/scripts/patronus.mjs"
+        );
+        #[cfg(not(windows))]
+        assert!(runtime_path(Path::new("/tmp/a\\b")).is_err());
     }
 
     #[test]
