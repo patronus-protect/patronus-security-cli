@@ -15,6 +15,8 @@ import { cursorExternalTextPayload, isCursorMcp, knownCursorResult, mapCursor, n
 import { recordProtocolScan, type HookTrace, type ProtocolRecorder } from './protocol.ts'
 import type { HookDecision, HookInput, Host, JsonValue } from './types.ts'
 import { PROBE_TEXT } from './probe.ts'
+import { approveFromPrompt, consumeCommandApproval, requestCommandApproval } from './command-approval.ts'
+import type { CommandResult } from '../../deepseek/src/protocol.ts'
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,256}$/.test(value)
@@ -205,6 +207,24 @@ async function cursorOwnOperation(operation: string, input: HookInput, scan: Sca
   return (await runOwnOperation('cursor', operation, args, input.cwd, scan)).text
 }
 
+/** The command line of a shell tool call, per host. Cursor's beforeShellExecution arrives as `Shell`. */
+function shellCommand(host: Host, input: HookInput): string | undefined {
+  const args = input.tool_input
+  const command = record(args) && typeof args.command === 'string' ? args.command : undefined
+  if (command === undefined) return undefined
+  if (host === 'cursor') return input.tool_name === 'Shell' ? command : undefined
+  // Claude's PowerShell tool and Codex's unified exec both report a string `command`.
+  return input.tool_name === 'Bash' || host === 'claude' && input.tool_name === 'PowerShell' ? command : undefined
+}
+
+const score = (result: CommandResult) => typeof result.decision_score === 'number' ? `, score ${result.decision_score.toFixed(1)}` : ''
+const shellBlocked = (result: CommandResult) =>
+  `Patronus blocked this shell command before it ran (high shell-command risk${score(result)}). Do not rephrase, split or encode it to get past the check. If the user really needs it, explain what it does and let them run it themselves, or they can pause Patronus for this chat with "patronus off".`
+const shellAsk = (result: CommandResult) =>
+  `Patronus flagged this shell command as risky (shell-command risk${score(result)}). Allow it only if you expect this command.`
+const shellConfirm = (result: CommandResult, token: string) =>
+  `Patronus held this shell command before it ran (medium shell-command risk${score(result)}). Codex cannot ask for approval from a hook, so the user decides: tell the user exactly which command you want to run and why, and that they can approve it once by sending ${token} in their next message. After that message, run the identical command again. Do not run a variant of it.`
+
 type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'>
 
 /** How a degraded scan is classified in the hook trace. */
@@ -217,6 +237,9 @@ function traceFailure(trace: HookTrace, reason: unknown): void {
 /** Hooks supply session attribution. Model arguments never carry a capability.
  * `trace` receives the decision and outcome for the hook journal; it never changes them. */
 export async function handleHook(host: Host, hostEvent: string, hostValue: unknown, overrides: Overrides = {}, rpc: typeof callBroker = callBroker, protocol: ProtocolRecorder = recordProtocolScan, settings: () => PluginSettings = readPluginSettings, control: typeof controlChat = controlChat, trace: HookTrace = { decision: 'allow', outcome: 'ok', scans: 0 }): Promise<object> {
+  // Cursor also runs Claude Code plugin hooks ("third-party hooks"), with Cursor payloads. The
+  // Cursor integration protects those chats; the Claude hook stays out of the way.
+  if (host === 'claude' && record(hostValue) && typeof hostValue.cursor_version === 'string') { trace.outcome = 'disabled'; trace.error_code = 'cursor_payload'; return {} }
   // Cursor names its own events; they are handled as the matching shared event.
   const normalized = host === 'cursor' ? normalizeCursor(hostEvent, hostValue) : undefined
   if (host === 'cursor' && !normalized) return {}
@@ -243,13 +266,15 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
     if (event === 'UserPromptSubmit') {
       const payload = externalPayload(host, event, input)
       const action = chatCommand(payload)
+      // The user's own message is the only place a held Codex command can be approved.
+      if (host === 'codex' && typeof payload === 'string') approveFromPrompt(host, input.session_id, payload)
       if (action) return map({ kind: 'replace', text: await control(host, input.session_id, action, config.executable) })
     }
     const policy = settings()
     // Patronus' own tools answer even in a paused chat (Cursor answers them in its result hook).
     const ownEvent = host === 'cursor' ? 'PostToolUse' : 'PreToolUse'
     if ((!policy.enabled || (policy.disabled_chats[host] ?? []).includes(input.session_id)) && !(event === ownEvent && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) { trace.outcome = 'disabled'; return {} }
-    const enabled = (surface: 'user_input' | 'tool_result' | 'mcp_result') => hookEnabled(policy, host, input.session_id, surface)
+    const enabled = (surface: 'user_input' | 'tool_result' | 'mcp_result' | 'shell_command') => hookEnabled(policy, host, input.session_id, surface)
     const responseEnabled = () => enabled(mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result')
     if (event === 'PostToolUseFailure') {
       if (!responseEnabled()) return {}
@@ -290,6 +315,21 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
       if (host === 'claude') return {}
       const outcome = await runOwnOperation(host, operation, input.tool_input, input.cwd, scan)
       return map({ kind: outcome.kind === 'static_failed' ? 'warn' : 'deny', text: outcome.text })
+    }
+    const command = event === 'PreToolUse' ? shellCommand(host, input) : undefined
+    if (command !== undefined) {
+      if (!enabled('shell_command') || !command.trim()) return {}
+      if (host === 'codex' && consumeCommandApproval(host, input.session_id, command)) { trace.outcome = 'override'; return {} }
+      const result = await scan({ method: 'command', tool: input.tool_name, callId: input.tool_use_id, command }) as unknown as CommandResult
+      // Fail-open: an unavailable check never stops the user's command; the journal records why.
+      if (!record(result) || result.status === 'unavailable') { traceFailure(trace, record(result) ? result.reason : 'invalid_scanner_response'); return {} }
+      if (result.status !== 'dangerous') return {}
+      if (result.risk === 'high') return map({ kind: 'deny', text: shellBlocked(result) })
+      if (host === 'codex') {
+        const token = requestCommandApproval(host, input.session_id, command)
+        return map({ kind: 'deny', text: token ? shellConfirm(result, token) : shellBlocked(result) })
+      }
+      return map({ kind: 'ask', text: shellAsk(result) })
     }
     if (event === 'PreToolUse') {
       return {}

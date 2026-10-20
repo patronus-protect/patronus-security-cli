@@ -23,6 +23,18 @@ pub struct Hooks {
     pub user_input: bool,
     pub tool_result: bool,
     pub mcp_result: bool,
+    /// Pre-execution shell command check. Optional and omitted while on, so plugin bundles
+    /// released before it keep accepting settings this version writes.
+    #[serde(default = "enabled", skip_serializing_if = "is_enabled")]
+    pub shell_command: bool,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_enabled(value: &bool) -> bool {
+    *value
 }
 
 impl Default for PluginSettings {
@@ -34,6 +46,7 @@ impl Default for PluginSettings {
                 user_input: true,
                 tool_result: true,
                 mcp_result: true,
+                shell_command: true,
             },
             disabled_chats: ["codex", "claude", "deepseek"]
                 .into_iter()
@@ -178,6 +191,7 @@ pub fn execute(command: crate::cli::PluginCommand) -> Result<()> {
             "user_input" => settings.hooks.user_input = enabled,
             "tool_result" => settings.hooks.tool_result = enabled,
             "mcp_result" => settings.hooks.mcp_result = enabled,
+            "shell_command" => settings.hooks.shell_command = enabled,
             _ => return Err(invalid("unknown hook")),
         },
         PluginCommand::Pause { host, chat } => {

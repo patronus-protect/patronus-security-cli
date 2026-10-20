@@ -38,7 +38,8 @@ function readPluginSettings(path = process.env.PATRONUS_PLUGIN_SETTINGS ?? join(
   }
   const defaults = defaultSettings();
   if (!object(value) || Object.keys(value).some((key) => !Object.hasOwn(defaults, key)) || value.schema_version !== 1 || typeof value.enabled !== "boolean" || !object(value.hooks) || !object(value.disabled_chats)) throw Error("Invalid Patronus settings.");
-  if (Object.keys(value.hooks).length !== 3 || Object.keys(defaults.hooks).some((key) => typeof value.hooks[key] !== "boolean")) throw Error("Invalid Patronus hooks.");
+  const hooks = value.hooks;
+  if (Object.keys(hooks).some((key) => ![...Object.keys(defaults.hooks), "shell_command"].includes(key)) || Object.keys(defaults.hooks).some((key) => typeof hooks[key] !== "boolean") || hooks.shell_command !== void 0 && typeof hooks.shell_command !== "boolean") throw Error("Invalid Patronus hooks.");
   const hosts = Object.keys(value.disabled_chats);
   if (Object.keys(defaults.disabled_chats).some((host) => !hosts.includes(host)) || hosts.some((host) => !["codex", "claude", "deepseek", "cursor"].includes(host))) throw Error("Invalid Patronus chat settings.");
   for (const host of hosts) {
@@ -48,7 +49,7 @@ function readPluginSettings(path = process.env.PATRONUS_PLUGIN_SETTINGS ?? join(
   return value;
 }
 function hookEnabled(settings, host, chat, surface) {
-  return settings.enabled && settings.hooks[surface] && !(settings.disabled_chats[host] ?? []).includes(chat);
+  return settings.enabled && (settings.hooks[surface] ?? true) && !(settings.disabled_chats[host] ?? []).includes(chat);
 }
 
 // plugins/native/src/broker.ts
@@ -149,6 +150,11 @@ var LocalClient = class {
     const value = await this.rpc("submit", params, signal);
     if (!record(value) || typeof value.scan_id !== "string" || value.scan_id.length > 256 || value.status !== "pending") throw failure();
     return { scan_id: value.scan_id, status: "pending" };
+  }
+  async checkCommand(params, signal) {
+    const value = await this.rpc("check_command", params, signal);
+    if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "high" && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
+    return value;
   }
   async check(params, signal) {
     const value = await this.rpc("check", params, signal);
@@ -499,6 +505,10 @@ function validRequest(value) {
       keys = ["method", "kind", "path", "server"];
       if (value.server !== void 0 && (value.kind !== "mcp" || !text(value.server, 256))) return false;
       if (typeof value.kind !== "string" || !["repo", "directory", "file", "url", "mcp"].includes(value.kind) || !text(value.path, 8192) || !(value.kind === "url" || value.kind === "mcp" && value.path.startsWith("https://")) && !isAbsolute3(value.path)) return false;
+      break;
+    case "command":
+      keys = ["method", "tool", "callId", "command"];
+      if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== "string" || Buffer.byteLength(value.command) > 64 * 1024) return false;
       break;
     case "close":
       keys = ["method"];
@@ -1377,7 +1387,7 @@ async function serveBroker(input) {
   } catch {
     return;
   }
-  const { config, id: id2, directory: directory2, capability, socketPath, socketRoot, key, digest: digest2, sessions } = prepared;
+  const { config, id: id2, directory: directory2, capability, socketPath, socketRoot, key, digest: digest3, sessions } = prepared;
   const lockPath = join6(socketRoot, `${key}.lock`);
   try {
     if (!await acquire(lockPath, socketPath)) return;
@@ -1401,7 +1411,7 @@ async function serveBroker(input) {
       await privateDirectory(join6(directory2, "scanner"));
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir });
       const connected = await runtimeSessions.runtime(id2, shutdown.signal);
-      if (connected.hello.ark_version !== "0.1.8") {
+      if (connected.hello.ark_version !== "0.1.10") {
         await runtimeSessions.close();
         throw brokerFailure("runtime_version_mismatch");
       }
@@ -1476,6 +1486,11 @@ async function serveBroker(input) {
       if (value.status === "unavailable") return unavailableScanReference();
       return value.status === "redacted" && value.result !== void 0 && value.disclosure ? { scan_id: request.scanId, status: "redacted", result: value.result, disclosure: value.disclosure } : { scan_id: request.scanId, status: value.status };
     }
+    if (request.method === "command") {
+      const budget2 = AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs ?? hello.runtime.request_timeout_ms)]);
+      if (!client.checkCommand) return { status: "unavailable", category: "shell_command", reason: "runtime_version_mismatch" };
+      return await client.checkCommand({ session, tool: request.tool, call_id: request.callId, command: request.command }, budget2);
+    }
     if (request.method !== "request" && request.method !== "response") throw brokerFailure();
     if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable("payload_too_large");
     const wait = request.method === "request" ? config.requestTimeoutMs ?? hello.runtime.request_timeout_ms : config.responseWaitMs ?? hello.runtime.response_wait_ms;
@@ -1521,7 +1536,7 @@ async function serveBroker(input) {
         const request = frame.request;
         let value;
         try {
-          if (frame.digest !== digest2 && request.method !== "close") throw brokerFailure();
+          if (frame.digest !== digest3 && request.method !== "close") throw brokerFailure();
           value = await dispatch(request, signal);
           if (request.method !== "close") sessions.assertUsable(id2);
         } catch (error) {
@@ -1615,7 +1630,7 @@ async function controlChat(host, session, action, executable) {
   }
   const settings = readPluginSettings();
   const paused = !settings.enabled || (settings.disabled_chats[host] ?? []).includes(session);
-  const enabled = Object.entries(settings.hooks).filter(([, active]) => active).map(([name]) => name);
+  const enabled = Object.entries({ shell_command: true, ...settings.hooks }).filter(([, active]) => active).map(([name]) => name);
   if (paused) return 'Patronus is OFF for this chat. Future input and results will not be scanned. Send "patronus on" to resume.';
   if (enabled.length === 0) return "Patronus has no active hooks. Enable hooks in the shared plugin settings.";
   return `Patronus is ON for future text in this chat. Active hooks: ${enabled.join(", ")}. Earlier result history is not scanned retroactively. Send "patronus off" to pause.`;
@@ -1987,6 +2002,7 @@ function mapClaude(event, decision, input) {
 var cursorEvents = {
   beforeSubmitPrompt: "UserPromptSubmit",
   beforeReadFile: "PostToolUse",
+  beforeShellExecution: "PreToolUse",
   postToolUse: "PostToolUse",
   stop: "Stop",
   sessionEnd: "SessionEnd"
@@ -2011,7 +2027,10 @@ function normalizeCursor(event, value) {
   const sessionId = typeof value.session_id === "string" && value.session_id ? value.session_id : value.conversation_id;
   const cwd = typeof value.cwd === "string" && value.cwd ? value.cwd : roots[0];
   const input = { ...value, hook_event_name: shared, session_id: sessionId, cwd };
-  if (event === "beforeReadFile") {
+  if (event === "beforeShellExecution") {
+    input.tool_name = "Shell";
+    input.tool_input = { command: value.command, ...typeof value.cwd === "string" ? { cwd: value.cwd } : {} };
+  } else if (event === "beforeReadFile") {
     input.tool_name = "Read";
     input.tool_response = typeof value.content === "string" ? value.content : "";
   } else if (event === "postToolUse") {
@@ -2097,6 +2116,11 @@ function mapCursor(cursorEvent, decision, input) {
   if (cursorEvent === "beforeSubmitPrompt") {
     if (decision.kind === "warn") return { continue: true, user_message: decision.text, additional_context: decision.context ?? decision.text };
     return { continue: false, user_message: readable(decision.text, "message") };
+  }
+  if (cursorEvent === "beforeShellExecution") {
+    if (decision.kind === "deny") return { permission: "deny", user_message: decision.text, agent_message: decision.text };
+    if (decision.kind === "ask") return { permission: "ask", user_message: decision.text, agent_message: decision.text };
+    return { permission: "allow" };
   }
   if (cursorEvent === "beforeReadFile") {
     if (decision.kind === "warn") return { permission: "allow" };
@@ -2241,6 +2265,89 @@ async function recordHook(host, event, sessionId, run4, executable, append = app
 
 // plugins/native/src/probe.ts
 var PROBE_TEXT = "PATRONUS_RUNTIME_PROBE_V1: ordinary tool-result text";
+
+// plugins/native/src/command-approval.ts
+import { createHash as createHash6, randomBytes as randomBytes2 } from "node:crypto";
+import { closeSync as closeSync4, constants as constants8, fstatSync as fstatSync4, mkdirSync as mkdirSync3, openSync as openSync4, readFileSync as readFileSync4, renameSync as renameSync2, rmSync as rmSync2, writeFileSync as writeFileSync3 } from "node:fs";
+import { join as join8 } from "node:path";
+var token = /\bpatronus_allow ([a-f0-9]{32})\b/g;
+var PENDING_MS = 15 * 6e4;
+var APPROVED_MS = 5 * 6e4;
+var digest2 = (command2) => createHash6("sha256").update(command2.trim()).digest("hex");
+var pathFor2 = (host, chat) => join8(patronusRoot(), "command-approval", createHash6("sha256").update(`${host}:${chat}`).digest("hex"));
+function write(file, state) {
+  mkdirSync3(join8(patronusRoot(), "command-approval"), { recursive: true, mode: 448 });
+  const temp = `${file}.${randomBytes2(8).toString("hex")}`;
+  const fd = openSync4(temp, constants8.O_CREAT | constants8.O_EXCL | constants8.O_WRONLY | constants8.O_NOFOLLOW, 384);
+  try {
+    writeFileSync3(fd, JSON.stringify(state));
+  } finally {
+    closeSync4(fd);
+  }
+  renameSync2(temp, file);
+}
+function claim(file) {
+  const claimed = `${file}.${randomBytes2(8).toString("hex")}`;
+  try {
+    renameSync2(file, claimed);
+  } catch {
+    return void 0;
+  }
+  try {
+    const fd = openSync4(claimed, constants8.O_RDONLY | constants8.O_NOFOLLOW);
+    try {
+      const stat2 = fstatSync4(fd);
+      if (!stat2.isFile() || stat2.size > 1024 || (stat2.mode & 63) !== 0 || stat2.uid !== process.getuid?.()) return void 0;
+      return JSON.parse(readFileSync4(fd, "utf8"));
+    } finally {
+      closeSync4(fd);
+    }
+  } catch {
+    return void 0;
+  } finally {
+    rmSync2(claimed, { force: true });
+  }
+}
+function requestCommandApproval(host, chat, command2) {
+  try {
+    const nonce = randomBytes2(16).toString("hex");
+    write(pathFor2(host, chat), { nonce, digest: digest2(command2), expires: Date.now() + PENDING_MS, approved: false });
+    return `patronus_allow ${nonce}`;
+  } catch {
+    return void 0;
+  }
+}
+function approveFromPrompt(host, chat, prompt) {
+  const matches = [...prompt.matchAll(token)];
+  if (matches.length !== 1) return false;
+  const file = pathFor2(host, chat);
+  const state = claim(file);
+  if (!state) return false;
+  if (state.approved || state.expires <= Date.now() || state.nonce !== matches[0][1]) {
+    if (state.expires > Date.now()) try {
+      write(file, state);
+    } catch {
+    }
+    return false;
+  }
+  try {
+    write(file, { ...state, approved: true, expires: Date.now() + APPROVED_MS });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function consumeCommandApproval(host, chat, command2) {
+  const file = pathFor2(host, chat);
+  const state = claim(file);
+  if (!state) return false;
+  if (state.approved && state.expires > Date.now() && state.digest === digest2(command2)) return true;
+  if (state.expires > Date.now()) try {
+    write(file, state);
+  } catch {
+  }
+  return false;
+}
 
 // plugins/native/src/hooks.ts
 var record11 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -2393,12 +2500,28 @@ async function cursorOwnOperation(operation, input, scan) {
   }
   return (await runOwnOperation("cursor", operation, args, input.cwd, scan)).text;
 }
+function shellCommand(host, input) {
+  const args = input.tool_input;
+  const command2 = record11(args) && typeof args.command === "string" ? args.command : void 0;
+  if (command2 === void 0) return void 0;
+  if (host === "cursor") return input.tool_name === "Shell" ? command2 : void 0;
+  return input.tool_name === "Bash" || host === "claude" && input.tool_name === "PowerShell" ? command2 : void 0;
+}
+var score = (result) => typeof result.decision_score === "number" ? `, score ${result.decision_score.toFixed(1)}` : "";
+var shellBlocked = (result) => `Patronus blocked this shell command before it ran (high shell-command risk${score(result)}). Do not rephrase, split or encode it to get past the check. If the user really needs it, explain what it does and let them run it themselves, or they can pause Patronus for this chat with "patronus off".`;
+var shellAsk = (result) => `Patronus flagged this shell command as risky (shell-command risk${score(result)}). Allow it only if you expect this command.`;
+var shellConfirm = (result, token2) => `Patronus held this shell command before it ran (medium shell-command risk${score(result)}). Codex cannot ask for approval from a hook, so the user decides: tell the user exactly which command you want to run and why, and that they can approve it once by sending ${token2} in their next message. After that message, run the identical command again. Do not run a variant of it.`;
 function traceFailure(trace, reason) {
   const code = publicReason(reason);
   trace.outcome = !code ? "inactive" : integrationReasons.has(code) ? "error" : "degraded";
   if (code) trace.error_code = code;
 }
 async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = callBroker, protocol = recordProtocolScan, settings = readPluginSettings, control = controlChat, trace = { decision: "allow", outcome: "ok", scans: 0 }) {
+  if (host === "claude" && record11(hostValue) && typeof hostValue.cursor_version === "string") {
+    trace.outcome = "disabled";
+    trace.error_code = "cursor_payload";
+    return {};
+  }
   const normalized = host === "cursor" ? normalizeCursor(hostEvent, hostValue) : void 0;
   if (host === "cursor" && !normalized) return {};
   const event = normalized?.event ?? hostEvent;
@@ -2432,6 +2555,7 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
     if (event === "UserPromptSubmit") {
       const payload2 = externalPayload(host, event, input);
       const action = chatCommand(payload2);
+      if (host === "codex" && typeof payload2 === "string") approveFromPrompt(host, input.session_id, payload2);
       if (action) return map({ kind: "replace", text: await control(host, input.session_id, action, config.executable) });
     }
     const policy = settings();
@@ -2466,9 +2590,9 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
       if (promptDecision(result2) === "warn") return map({ kind: "warn", text: PROMPT_WARNING_USER, context: PROMPT_WARNING_MODEL });
       const visible = visibleResult(result2, host, "request", event, "user_input");
       if (sensitiveFinding(result2) && record11(visible)) {
-        const command2 = issueIgnoreOnce(host, input.session_id, payload2);
-        if (command2) {
-          visible.ignore_once = command2;
+        const command3 = issueIgnoreOnce(host, input.session_id, payload2);
+        if (command3) {
+          visible.ignore_once = command3;
           visible.message = SENSITIVE_PROMPT_MESSAGE;
         }
       }
@@ -2482,6 +2606,26 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
       if (host === "claude") return {};
       const outcome = await runOwnOperation(host, operation, input.tool_input, input.cwd, scan);
       return map({ kind: outcome.kind === "static_failed" ? "warn" : "deny", text: outcome.text });
+    }
+    const command2 = event === "PreToolUse" ? shellCommand(host, input) : void 0;
+    if (command2 !== void 0) {
+      if (!enabled("shell_command") || !command2.trim()) return {};
+      if (host === "codex" && consumeCommandApproval(host, input.session_id, command2)) {
+        trace.outcome = "override";
+        return {};
+      }
+      const result2 = await scan({ method: "command", tool: input.tool_name, callId: input.tool_use_id, command: command2 });
+      if (!record11(result2) || result2.status === "unavailable") {
+        traceFailure(trace, record11(result2) ? result2.reason : "invalid_scanner_response");
+        return {};
+      }
+      if (result2.status !== "dangerous") return {};
+      if (result2.risk === "high") return map({ kind: "deny", text: shellBlocked(result2) });
+      if (host === "codex") {
+        const token2 = requestCommandApproval(host, input.session_id, command2);
+        return map({ kind: "deny", text: token2 ? shellConfirm(result2, token2) : shellBlocked(result2) });
+      }
+      return map({ kind: "ask", text: shellAsk(result2) });
     }
     if (event === "PreToolUse") {
       return {};

@@ -3,7 +3,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { accessSync, constants, realpathSync, existsSync } from 'node:fs'
 import { delimiter, isAbsolute, join, relative } from 'node:path'
-import { PII_TYPES, type DisclosedParams, type DisclosedResult, type DisclosureOffer, type DisclosureParams, type JobParams, type PiiType, type RedactedResult, type RuntimeClient, type RuntimeHello, type ScanResult, type SubmitParams } from './protocol.ts'
+import { PII_TYPES, type CommandParams, type CommandResult, type DisclosedParams, type DisclosedResult, type DisclosureOffer, type DisclosureParams, type JobParams, type PiiType, type RedactedResult, type RuntimeClient, type RuntimeHello, type ScanResult, type SubmitParams } from './protocol.ts'
 
 export type { JobParams, RedactedResult, RuntimeClient, RuntimeHello, ScanResult, SubmitParams } from './protocol.ts'
 export interface LocalClientConfig {
@@ -92,6 +92,14 @@ export class LocalClient implements RuntimeClient {
     const value = await this.rpc('submit', params, signal)
     if (!record(value) || typeof value.scan_id !== 'string' || value.scan_id.length > 256 || value.status !== 'pending') throw failure()
     return { scan_id: value.scan_id, status: 'pending' }
+  }
+
+  async checkCommand(params: CommandParams, signal?: AbortSignal): Promise<CommandResult> {
+    const value = await this.rpc('check_command', params, signal)
+    if (!record(value) || value.category !== 'shell_command' || !['approved', 'dangerous', 'unavailable'].includes(String(value.status)) ||
+        (value.risk !== undefined && value.risk !== 'high' && value.risk !== 'medium') ||
+        (value.decision_score !== undefined && typeof value.decision_score !== 'number')) throw failure()
+    return value as unknown as CommandResult
   }
 
   async check(params: JobParams, signal?: AbortSignal): Promise<ScanResult> {

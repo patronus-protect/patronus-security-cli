@@ -14,6 +14,7 @@ import type { TextPayload } from '../../../deepseek/src/protocol.ts'
 export const cursorEvents: Record<string, string> = {
   beforeSubmitPrompt: 'UserPromptSubmit',
   beforeReadFile: 'PostToolUse',
+  beforeShellExecution: 'PreToolUse',
   postToolUse: 'PostToolUse',
   stop: 'Stop',
   sessionEnd: 'SessionEnd',
@@ -40,7 +41,10 @@ export function normalizeCursor(event: string, value: unknown): { event: string;
   const sessionId = typeof value.session_id === 'string' && value.session_id ? value.session_id : value.conversation_id
   const cwd = typeof value.cwd === 'string' && value.cwd ? value.cwd : roots[0]
   const input: Record<string, unknown> = { ...value, hook_event_name: shared, session_id: sessionId, cwd }
-  if (event === 'beforeReadFile') {
+  if (event === 'beforeShellExecution') {
+    input.tool_name = 'Shell'
+    input.tool_input = { command: value.command, ...(typeof value.cwd === 'string' ? { cwd: value.cwd } : {}) }
+  } else if (event === 'beforeReadFile') {
     input.tool_name = 'Read'
     input.tool_response = typeof value.content === 'string' ? value.content : ''
   } else if (event === 'postToolUse') {
@@ -134,6 +138,12 @@ export function mapCursor(cursorEvent: string, decision: HookDecision, input?: H
   if (cursorEvent === 'beforeSubmitPrompt') {
     if (decision.kind === 'warn') return { continue: true, user_message: decision.text, additional_context: decision.context ?? decision.text }
     return { continue: false, user_message: readable(decision.text, 'message') }
+  }
+  if (cursorEvent === 'beforeShellExecution') {
+    // Cursor shows user_message in its block or approval prompt and returns it to the agent on deny.
+    if (decision.kind === 'deny') return { permission: 'deny', user_message: decision.text, agent_message: decision.text }
+    if (decision.kind === 'ask') return { permission: 'ask', user_message: decision.text, agent_message: decision.text }
+    return { permission: 'allow' }
   }
   if (cursorEvent === 'beforeReadFile') {
     if (decision.kind === 'warn') return { permission: 'allow' }

@@ -3,8 +3,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use super::protocol::{
-    Direction, LookupParams, PrepareDisclosureParams, ReadDisclosedParams, RpcRequest,
-    SubmitParams, PROTOCOL_VERSION,
+    CheckCommandParams, Direction, LookupParams, PrepareDisclosureParams, ReadDisclosedParams,
+    RpcRequest, SubmitParams, PROTOCOL_VERSION,
 };
 use super::store::{NewJob, Store, StoreLimits};
 use super::worker::Worker;
@@ -21,6 +21,7 @@ pub struct Runtime {
     worker: Worker,
     config: Config,
     fingerprint: String,
+    shell: crate::shell_check::ShellCheck,
 }
 
 impl Runtime {
@@ -52,11 +53,13 @@ impl Runtime {
         store.recover(&fingerprint)?;
         let store = Arc::new(Mutex::new(store));
         let worker = Worker::start(store.clone(), config.clone(), fingerprint.clone())?;
+        let shell = crate::shell_check::ShellCheck::new(config.ark.model_dir.clone());
         Ok(Self {
             store,
             worker,
             config,
             fingerprint,
+            shell,
         })
     }
 
@@ -85,6 +88,20 @@ impl Runtime {
                 )
             }
             "submit" => self.submit(params),
+            "check_command" => {
+                let params: CheckCommandParams =
+                    serde_json::from_value(params).map_err(|_| "invalid_params")?;
+                if !valid_session(&params.session)
+                    || params.tool.is_empty()
+                    || params.tool.len() > 512
+                    || params.call_id.is_empty()
+                    || params.call_id.len() > 512
+                {
+                    return Err("invalid_params".into());
+                }
+                serde_json::to_value(self.shell.check(&params.command))
+                    .map_err(|_| "invalid_result".into())
+            }
             "prepare_disclosure" => {
                 let params: PrepareDisclosureParams =
                     serde_json::from_value(params).map_err(|_| "invalid_params")?;

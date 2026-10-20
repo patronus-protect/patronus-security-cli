@@ -59,7 +59,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `SessionStart` | yes | yes | Registers the session; the broker starts lazily on first use. |
 | `UserPromptSubmit` | yes | yes | Prompt gate (section 3) and the `patronus on/off/status` chat controls. |
-| `PreToolUse` | yes | yes | Only Patronus' own tools (section 4) and disclosure arming (section 5). Ordinary tool requests are not scanned. |
+| `PreToolUse` | yes | yes | Shell gate for `Bash` command lines (section 7), Patronus' own tools (section 4) and disclosure arming (section 5). Other tool requests are not scanned. |
 | `PostToolUse` | yes | yes | Result gate (section 2). Codex also delivers approved disclosures here. |
 | `PostToolUseFailure` | yes | — | Result gate for the error text of a failed tool. |
 | `SessionEnd` | yes | — | Closes the broker and runtime session. |
@@ -71,6 +71,7 @@ Cursor names its own events; the hook bundle maps them onto the flows above
 | Cursor event | Handled as | Purpose |
 | --- | --- | --- |
 | `beforeSubmitPrompt` | `UserPromptSubmit` | Prompt gate; `continue: false` blocks the prompt. |
+| `beforeShellExecution` | `PreToolUse` (Shell) | Shell gate (section 7): `deny` or `ask` with the hint as `user_message`. |
 | `beforeReadFile` | `PostToolUse` (Read) | Result gate for file content; a finding denies the read and the agent receives the receipt or the masked file. |
 | `postToolUse` | `PostToolUse` | Result gate for shell output (warn only) and MCP text (replaced); answers Patronus' own MCP tools. |
 | `stop` | `Stop` | Closes the broker and runtime session. |
@@ -82,6 +83,7 @@ Cursor names its own events; the hook bundle maps them onto the flows above
 | --- | --- | --- |
 | `hello` | broker | Versions, provider and runtime limits. |
 | `submit` | broker | Enqueues a `request` (prompt) or `response` (result) job; returns `pending` and a `scan_id`. |
+| `check_command` | broker | Classifies one shell command line before it runs (section 7); synchronous, nothing stored. |
 | `check` | broker | Job status; the original only for an approved response. |
 | `read_redacted` | broker | The masked view of a dangerous response; may queue one local injection refinement (`pending`). |
 | `cancel` | broker | Cancels an unfinished job (used for prompts that did not complete in time). |
@@ -304,6 +306,34 @@ flowchart TD
   disclosure needs a prompting permission mode.
 - Every hook writes `hook_started` and `hook_completed` to the protocol journal
   (`src/protocol_event.rs`) with decision, outcome and duration, never content.
+
+## 7. Shell gate (before a command runs)
+
+Every host checks a shell command line before it runs. The scanner classifies only the command
+string with Ark's `cat-shell-risk-commander` (L1, ~2.5 MB, prepared by `assets prepare`); it never
+executes, parses or expands it. Prompts and results never go through this model.
+
+```mermaid
+flowchart LR
+  C[Agent wants to run a command] --> K[Shell hook]
+  K -->|check_command| R[Runtime]
+  R -->|approved| RUN[Command runs]
+  R -->|unavailable| RUN
+  R -->|dangerous, risk high| BLOCK[Blocked with a hint]
+  R -->|dangerous, risk medium| ASK[User decides]
+```
+
+| Score | Risk | Decision |
+| --- | --- | --- |
+| below the model threshold (1.15) | none | Runs. |
+| threshold to 4.0 | `medium` | The user decides: Claude `permissionDecision: "ask"`, Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
+| 4.0 and above | `high` | Blocked (`deny`) with a hint; the agent is told not to rephrase the command. |
+
+Measured scores (QA corpus `qa/hooks/shell.json`): ordinary commands score below the threshold;
+`npm install` 2.5, `rm -rf node_modules` 2.0 and `git reset --hard` 3.7 are medium; exfiltration,
+reverse shells, `curl … | sh` and `sudo rm -rf /` score 6.4 to 11.5. A missing model or runtime
+fails open. The `shell_command` hook setting (`plugins hook shell_command false`) and a paused
+chat turn the gate off.
 
 ## Receipt and disclosure statuses
 

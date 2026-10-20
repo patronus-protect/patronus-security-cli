@@ -180,6 +180,16 @@ pub struct SubmitParams {
     pub payload: Value,
 }
 
+/// A shell command a host is about to run. Checked synchronously; nothing is stored.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckCommandParams {
+    pub session: String,
+    pub tool: String,
+    pub call_id: String,
+    pub command: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LookupParams {

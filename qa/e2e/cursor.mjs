@@ -6,7 +6,9 @@
 // read from its bundle (190.index.js, hook executor and tool executors):
 //   - Read:  read the file, run `beforeReadFile` with {content, file_path}; `permission: deny` turns
 //            the read into the error "File read was blocked by a hook: <user_message>".
-//   - Shell: run the command, then `postToolUse` with tool_output {output, exitCode} (JSON string);
+//   - Shell: `beforeShellExecution` with {command, cwd, sandbox}; `deny` blocks ("Command execution was
+//            blocked by a hook: <user_message>"), `ask` goes to the user (the scripted user approves);
+//            then run the command and `postToolUse` with tool_output {output, exitCode} (JSON string);
 //            only `additional_context` is honoured, appended after the output.
 //   - MCP:   call the server, then `postToolUse` with tool_name `MCP:<tool>` and tool_output
 //            {content, isError}; `updated_mcp_tool_output` replaces what the model sees.
@@ -54,6 +56,7 @@ export function cursorSession({ cwd, env, plugin }) {
   const conversation = randomUUID()
   const requests = []
   const hookLog = []
+  const approvals = []
   const hookEnv = { ...env, CURSOR_PLUGIN_ROOT: pluginRoot, CURSOR_PROJECT_DIR: cwd, CURSOR_VERSION: 'emulated-2026.10.14' }
   const tracker = mcpClient(process.execPath, [trackerServer], env)
   const patronus = mcpClient(process.execPath, [join(pluginRoot, 'scripts/patronus.mjs'), 'mcp'], hookEnv)
@@ -87,6 +90,9 @@ export function cursorSession({ cwd, env, plugin }) {
       return decision.permission === 'deny' ? `File read was blocked by a hook: ${decision.user_message ?? ''}` : content
     }
     if (step.tool === 'shell') {
+      const gate = await hook('beforeShellExecution', { command: step.cmd, cwd, sandbox: false, tool_use_id })
+      if (gate.permission === 'deny') return `Command execution was blocked by a hook: ${gate.user_message ?? ''}`
+      if (gate.permission === 'ask') approvals.push({ step: step.id, message: gate.user_message ?? '' })
       const result = await run('/bin/sh', ['-c', step.cmd], { cwd, env: { PATH: env.PATH, HOME: cwd }, timeout: 120_000 })
       const output = result.stdout + result.stderr
       const decision = await hook('postToolUse', { tool_name: 'Shell', tool_input: { command: step.cmd, cwd }, tool_output: JSON.stringify({ output, exitCode: result.code }), duration: result.ms, tool_use_id, cwd })
@@ -112,7 +118,7 @@ export function cursorSession({ cwd, env, plugin }) {
   }
 
   return {
-    requests, hookLog,
+    requests, hookLog, approvals,
     /** Drives the scripted model through the plan; each model request carries the latest tool output. */
     async work(model, task) {
       const started = Date.now()

@@ -33,6 +33,7 @@ export type BrokerRequest =
   /** Reaches the broker only after the host allowed the tool call. */
   | { method: 'reveal'; scanId: string; grantId: string }
   | { method: 'static'; kind: 'repo' | 'directory' | 'file' | 'url' | 'mcp'; path: string; server?: string }
+  | { method: 'command'; tool: string; callId: string; command: string }
   | { method: 'close' }
 
 export const MAX_PAYLOAD = 10 * 1024 * 1024
@@ -90,6 +91,10 @@ export function validRequest(value: unknown): value is BrokerRequest {
       keys = ['method', 'kind', 'path', 'server']
       if (value.server !== undefined && (value.kind !== 'mcp' || !text(value.server, 256))) return false
       if (typeof value.kind !== 'string' || !['repo', 'directory', 'file', 'url', 'mcp'].includes(value.kind) || !text(value.path, 8192) || (!(value.kind === 'url' || value.kind === 'mcp' && value.path.startsWith('https://')) && !isAbsolute(value.path))) return false
+      break
+    case 'command':
+      keys = ['method', 'tool', 'callId', 'command']
+      if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== 'string' || Buffer.byteLength(value.command) > 64 * 1024) return false
       break
     case 'close': keys = ['method']; break
     default: return false

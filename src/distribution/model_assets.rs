@@ -46,6 +46,12 @@ pub fn prepare(config: &mut Config) -> Result<()> {
         "Checking local Ark models in {}…",
         config.ark.model_dir.as_ref().unwrap().display()
     );
+    // The pre-execution shell command check (Ark cat-shell-risk-commander, ~2.5 MB).
+    let model_dir = config.ark.model_dir.clone().unwrap();
+    if !crate::shell_check::assets_present(&model_dir) {
+        eprintln!("Downloading the shell command model…");
+        crate::shell_check::download_assets(&model_dir).map_err(ScannerError::Ark)?;
+    }
     if ArkAnalyzer::policy_assets_ready(&config.ark, &config.analysis)? {
         eprintln!("Required models are present. No download needed.");
         return Ok(());

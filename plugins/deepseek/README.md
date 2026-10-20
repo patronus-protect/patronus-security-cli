@@ -40,7 +40,7 @@ Restart the Harness after installation. Try:
 | --- | --- |
 | `agent/pre-step` | Scans new user-authored text before an agent step begins. |
 | `llm/stream` | Enforces the same prompt gate immediately before a model stream as a second native boundary. |
-| `tools/pre-execute` | Marks Patronus-owned tools before dispatch so their trusted receipts are not rescanned as external content. |
+| `tools/pre-execute` | Checks `bash` and `pwsh` command lines before they run: high risk is denied with a hint, medium risk goes to the Harness approval service. Also marks Patronus-owned tools before dispatch so their trusted receipts are not rescanned as external content. |
 | `tools/post-execute` | Scans tool-result text and MCP `content[].text` before the next model turn. |
 | `tools/result` | Detects a host projection that changed after the gate and adds degraded context to the next turn. |
 | `agent/disposed` | Closes the agent's scanner process and private session handles. |

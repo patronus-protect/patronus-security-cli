@@ -7,12 +7,14 @@ export const patronusRoot = () => {
   if (!isAbsolute(root)) throw Error('Patronus data directory must be absolute.')
   return root
 }
-export type Surface = 'user_input' | 'tool_result' | 'mcp_result'
+export type Surface = 'user_input' | 'tool_result' | 'mcp_result' | 'shell_command'
 export type PluginHost = 'codex' | 'claude' | 'deepseek' | 'cursor'
 export interface PluginSettings {
   schema_version: 1
   enabled: boolean
-  hooks: Record<Surface, boolean>
+  /** `shell_command` (pre-execution check) is optional and defaults to on, so settings files and
+   * bundles from before it stay compatible. */
+  hooks: Record<Exclude<Surface, 'shell_command'>, boolean> & { shell_command?: boolean }
   /** `cursor` is optional so settings written before Cursor support stay valid, and the
    * scanner omits it while empty so older plugin bundles keep reading new settings. */
   disabled_chats: Record<Exclude<PluginHost, 'cursor'>, string[]> & { cursor?: string[] }
@@ -39,7 +41,9 @@ export function readPluginSettings(path = process.env.PATRONUS_PLUGIN_SETTINGS ?
   const defaults = defaultSettings()
   if (!object(value) || Object.keys(value).some(key => !Object.hasOwn(defaults, key)) || value.schema_version !== 1 ||
       typeof value.enabled !== 'boolean' || !object(value.hooks) || !object(value.disabled_chats)) throw Error('Invalid Patronus settings.')
-  if (Object.keys(value.hooks).length !== 3 || Object.keys(defaults.hooks).some(key => typeof (value.hooks as Record<string, unknown>)[key] !== 'boolean')) throw Error('Invalid Patronus hooks.')
+  const hooks = value.hooks as Record<string, unknown>
+  if (Object.keys(hooks).some(key => ![...Object.keys(defaults.hooks), 'shell_command'].includes(key)) || Object.keys(defaults.hooks).some(key => typeof hooks[key] !== 'boolean') ||
+      (hooks.shell_command !== undefined && typeof hooks.shell_command !== 'boolean')) throw Error('Invalid Patronus hooks.')
   const hosts = Object.keys(value.disabled_chats)
   if (Object.keys(defaults.disabled_chats).some(host => !hosts.includes(host)) || hosts.some(host => !['codex', 'claude', 'deepseek', 'cursor'].includes(host))) throw Error('Invalid Patronus chat settings.')
   for (const host of hosts) {
@@ -50,5 +54,5 @@ export function readPluginSettings(path = process.env.PATRONUS_PLUGIN_SETTINGS ?
 }
 
 export function hookEnabled(settings: PluginSettings, host: PluginHost, chat: string, surface: Surface): boolean {
-  return settings.enabled && settings.hooks[surface] && !(settings.disabled_chats[host] ?? []).includes(chat)
+  return settings.enabled && (settings.hooks[surface] ?? true) && !(settings.disabled_chats[host] ?? []).includes(chat)
 }

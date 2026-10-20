@@ -7,6 +7,12 @@
         "timeout": 90
       }
     ],
+    "beforeShellExecution": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor beforeShellExecution",
+        "timeout": 30
+      }
+    ],
     "beforeReadFile": [
       {
         "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor beforeReadFile",

@@ -26,6 +26,9 @@ export interface SubmitParams {
   payload: TextPayload
 }
 export interface JobParams { session: string; scan_id: string }
+export interface CommandParams { session: string; tool: string; call_id: string; command: string }
+/** Pre-execution shell command check; `risk` is set for a dangerous command. */
+export interface CommandResult { status: 'approved' | 'dangerous' | 'unavailable'; category: 'shell_command'; risk?: 'high' | 'medium'; decision_score?: number; threshold?: number; reason?: string }
 export interface ScanResult {
   scan_id: string
   status: ScanStatus
@@ -78,6 +81,8 @@ export interface RuntimeClient {
   check(params: JobParams, signal?: AbortSignal): Promise<ScanResult>
   readRedacted(params: JobParams, signal?: AbortSignal): Promise<RedactedResult>
   cancel(params: JobParams, signal?: AbortSignal): Promise<unknown>
+  /** Scanners before 0.1.10 do not offer it; callers then let the command run. */
+  checkCommand?(params: CommandParams, signal?: AbortSignal): Promise<CommandResult>
   /** Only a trusted adapter calls these, after the host's own approval dialog. */
   prepareDisclosure?(params: DisclosureParams, signal?: AbortSignal): Promise<DisclosureOffer>
   readDisclosed?(params: DisclosedParams, signal?: AbortSignal): Promise<DisclosedResult>

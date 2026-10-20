@@ -21,7 +21,7 @@
       "required": ["id", "method", "params"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "method": { "enum": ["hello", "submit", "check", "read_redacted", "cancel", "prepare_disclosure", "read_disclosed"] },
+        "method": { "enum": ["hello", "submit", "check_command", "check", "read_redacted", "cancel", "prepare_disclosure", "read_disclosed"] },
         "params": { "type": "object" }
       },
       "allOf": [
@@ -32,6 +32,10 @@
         {
           "if": { "properties": { "method": { "const": "submit" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/submit" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "check_command" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/check_command" } } }
         },
         {
           "if": { "properties": { "method": { "enum": ["check", "read_redacted", "cancel"] } } },
@@ -51,6 +55,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["session", "direction", "tool", "call_id", "payload"],
       "properties": {
+        "policy_scope": { "type": "string", "pattern": "^(claude|codex|deepseek|cursor)\\.(user_input|tool_result|mcp_result)$" },
         "session": { "$ref": "#/$defs/session" },
         "direction": { "enum": ["request", "response"] },
         "tool": { "type": "string", "minLength": 1, "maxLength": 512 },
@@ -58,6 +63,17 @@
         "payload": { "$ref": "#/$defs/text_payload" }
       },
       "description": "The service additionally enforces byte limits on UTF-8 tool/call IDs and serialized payloads."
+    },
+    "check_command": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session", "tool", "call_id", "command"],
+      "properties": {
+        "session": { "$ref": "#/$defs/session" },
+        "tool": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "call_id": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "command": { "type": "string", "maxLength": 65536 }
+      },
+      "description": "Synchronous pre-execution shell command check (Ark cat-shell-risk-commander, L1). Nothing is stored; the reply is {status: approved|dangerous|unavailable, category: shell_command, risk?: high|medium, decision_score?, threshold?, reason?}."
     },
     "lookup": {
       "type": "object", "additionalProperties": false,

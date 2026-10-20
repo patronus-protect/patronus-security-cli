@@ -144,6 +144,55 @@ async function replay() {
   return { rows, events, coldStart, uncovered }
 }
 
+/** Pre-execution shell gate per host: the decision a host shows for each command (nothing runs). */
+async function shellReplay() {
+  const corpus = JSON.parse(await readFile(join(repository, 'qa/hooks/shell.json'), 'utf8')).cases
+  const env = await sandboxEnv(replayData)
+  const rows = []
+  for (const host of hosts) {
+    const session = `qa-${runId}-${host}`
+    for (const item of corpus) {
+      const event = host === 'cursor' ? 'beforeShellExecution' : 'PreToolUse'
+      const input = host === 'cursor'
+        ? { ...cursorCommon(event, session), command: item.command, cwd: work, sandbox: false, tool_use_id: `shell-${item.id}` }
+        : { hook_event_name: event, session_id: session, cwd: work, tool_name: 'Bash', tool_use_id: `shell-${item.id}`, tool_input: { command: item.command }, permission_mode: 'default' }
+      const result = await hook(host, event, input, env)
+      let output = {}
+      try { output = JSON.parse(result.stdout.trim() || '{}') } catch {}
+      const permission = output.hookSpecificOutput?.permissionDecision ?? output.permission
+      const reason = output.hookSpecificOutput?.permissionDecisionReason ?? output.user_message ?? ''
+      const decision = permission === 'ask' || /patronus_allow [a-f0-9]{32}/.test(reason) ? 'confirm' : permission === 'deny' ? 'block' : 'allow'
+      rows.push({ host, id: item.id, expect: item.expect, decision, ms: result.ms, score: Number(/score ([\d.]+)/.exec(reason)?.[1] ?? NaN) || null })
+    }
+  }
+  const metrics = {}
+  for (const host of hosts) {
+    const own = rows.filter(row => row.host === host)
+    const of = expect => own.filter(row => row.expect === expect)
+    metrics[host] = {
+      benign_allowed_rate: rate(of('allow').filter(row => row.decision === 'allow').length, of('allow').length),
+      attacks_blocked_rate: rate(of('block').filter(row => row.decision === 'block').length, of('block').length),
+      risky_confirmed_rate: rate(of('confirm').filter(row => row.decision === 'confirm').length, of('confirm').length),
+      p95_ms: percentile(own.map(row => row.ms), 95),
+    }
+  }
+  return { rows, metrics }
+}
+
+function evaluateShell({ rows, metrics }) {
+  for (const [host, metric] of Object.entries(metrics)) {
+    check(`${host} shell gate blocks every attack`, metric.attacks_blocked_rate === 1, String(metric.attacks_blocked_rate))
+    check(`${host} shell gate never stops benign commands`, metric.benign_allowed_rate === 1, String(metric.benign_allowed_rate))
+  }
+  for (const row of rows) {
+    if (row.expect === 'block' && row.decision !== 'block')
+      findings.push(finding('hooks', row.decision === 'allow' ? 'high' : 'medium', `shell-miss:${row.host}:${row.id}`, `${row.host}: dangerous shell command ${row.id} was not blocked (${row.decision})`, { evidence: JSON.stringify(row) }))
+    if (row.expect === 'allow' && row.decision !== 'allow')
+      findings.push(finding('hooks', 'high', `shell-false-positive:${row.host}:${row.id}`, `${row.host}: benign shell command ${row.id} was stopped (${row.decision})`,
+        { evidence: JSON.stringify(row), suggestion: 'A false positive interrupts ordinary work; check the score against HIGH_RISK_SCORE in src/scanning/shell_check.rs.' }))
+  }
+}
+
 function detectionMetrics(rows, coldStart) {
   const metrics = {}
   for (const host of hosts) {
@@ -361,6 +410,8 @@ try {
   const { rows, events: replayEvents, coldStart, uncovered } = await replay()
   const detection = detectionMetrics(rows, coldStart)
   for (const [host, ids] of Object.entries(uncovered)) detection[host].uncovered_cases = ids
+  const shell = await shellReplay()
+  evaluateShell(shell)
   const disclosed = await disclosure()
   evaluateDisclosure(disclosed)
   const { suites } = options.quick ? { suites: {} } : await hostSuites()
@@ -368,7 +419,7 @@ try {
   const hookStats = hookMetrics([...replayEvents, ...(liveRun?.events ?? [])])
   const previous = await previousMetrics('hooks')
   evaluate({ detection, hookStats, suites, liveRun, previous: previous?.ark_level === arkLevel ? previous : undefined })
-  metrics = { ark_level: arkLevel, detection, disclosure: { ...disclosed.metrics, rows: disclosed.rows }, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
+  metrics = { ark_level: arkLevel, detection, shell: { ...shell.metrics, rows: shell.rows }, disclosure: { ...disclosed.metrics, rows: disclosed.rows }, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
     ...(liveRun ? { live: { pass: liveRun.pass, fail: liveRun.fail, ms: liveRun.ms } } : {}), replay: rows.map(({ messages, ...row }) => row) }
 } finally {
   await teardown()
