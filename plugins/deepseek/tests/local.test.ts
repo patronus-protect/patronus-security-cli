@@ -135,7 +135,7 @@ it.each([
   let fetches = 0
   try {
     const hello = await client.hello()
-    expect(hello).toMatchObject({ provider: 'local', ark_version: '0.1.8', ready: true })
+    expect(hello).toMatchObject({ provider: 'local', ark_version: '0.1.10', ready: true })
     expect(await promptVerdict(ctx, document)).toBeUndefined()
     const request = await scanUserPrompt(client, document)
     console.log('Full-document prompt evidence:', { filename, documentBytes, requestTimeoutMs: hello.runtime.request_timeout_ms, ...request })

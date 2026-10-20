@@ -48,6 +48,14 @@ impl Profile {
         }
         Ok(())
     }
+    /// Profiles saved before an Ark update lack rules the new catalog added. They get the rule's
+    /// default instead of failing validation; unknown rule IDs still fail.
+    pub fn add_missing_rules(&mut self) {
+        for rule in rules() {
+            self.l1_rules.entry(rule.id).or_insert(rule.default_enabled);
+        }
+    }
+
     /// Seed previously unconfigured scopes from the user's current settings.
     pub fn current(config: &Config, surface: &str) -> Self {
         let category_enabled = |category: &str| {

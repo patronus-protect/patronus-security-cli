@@ -146,6 +146,9 @@ impl Config {
         ) {
             config.output.root = user_root()?.join("output");
         }
+        for profile in config.plugin_policies.values_mut() {
+            profile.add_missing_rules();
+        }
         config.validate()?;
         Ok(config)
     }
