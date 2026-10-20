@@ -15,7 +15,7 @@ const signal = () => new AbortController().signal
 
 it('scans clean file/directory/repo and the known dangerous document with installed Ark 0.1.8, without file bytes in model requests', async () => {
   const version = await promisify(execFile)(executable, ['version'])
-  expect(version.stdout).toContain('patronus-ark 0.1.8')
+  expect(version.stdout).toContain('patronus-ark 0.1.10')
   const root = await mkdtemp(join(tmpdir(), 'patronus-static-local-'))
   const target = join(root, 'project')
   await mkdir(target)
