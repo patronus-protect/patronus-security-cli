@@ -15,7 +15,7 @@ Parse `--areas` from the arguments (default `all` = hooks, e2e, integrations, sd
 | Area | How |
 |---|---|
 | hooks | Follow `.claude/skills/qa-hooks/SKILL.md` |
-| e2e | `node qa/e2e/run.mjs` (scripted, Claude and Codex, daily); with `--live` also `node qa/e2e/run.mjs --hosts claude --mode live` (weekly, paid turns). Then review its findings, see below |
+| e2e | `node qa/e2e/run.mjs` (scripted, Claude, Codex and emulated Cursor, daily); with `--live` also `node qa/e2e/run.mjs --hosts claude --mode live` (weekly, paid turns). Then review its findings, see below |
 | integrations | Follow `.claude/skills/qa-integrations/SKILL.md` |
 | sdk | `node qa/sdk.mjs` (deterministic), then review its findings |
 | dx | Follow `.claude/skills/qa-dx/SKILL.md` (docs, examples, SDK readability) |

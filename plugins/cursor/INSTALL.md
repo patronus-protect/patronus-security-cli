@@ -23,4 +23,4 @@ and MCP resource results are not scanned (see [`README.md`](README.md)).
 
 The user must complete browser authentication personally. Never request or
 expose API keys, login tokens or anonymous identity cookies. If the CLI is not
-installed, follow the repository's root [`INSTALL.md`](../../INSTALL.md) first.
+installed, follow the repository's root [`INSTALL.md`](https://github.com/patronus-protect/patronus-security-cli/blob/main/INSTALL.md) first.

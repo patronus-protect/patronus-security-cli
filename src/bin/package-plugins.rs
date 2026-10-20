@@ -120,6 +120,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "assets/icon.png",
                     "hooks/hooks.json",
                     "scripts/patronus.mjs",
+                    "skills/patronus-setup/SKILL.md",
+                    "skills/runtime/SKILL.md",
+                    "skills/scan/SKILL.md",
                 ],
                 _ => unreachable!(),
             };

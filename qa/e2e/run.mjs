@@ -20,7 +20,7 @@ import { approvals, evaluate, freshChallenge, gatePhase, pii, scriptedModel, sec
 loadEnv()
 const argv = process.argv.slice(2)
 const option = (name, fallback) => { const at = argv.indexOf(name); return at >= 0 ? argv[at + 1] : fallback }
-const options = { hosts: option('--hosts', 'claude,codex').split(','), mode: option('--mode', 'scripted'), out: option('--out'), keep: argv.includes('--keep') }
+const options = { hosts: option('--hosts', 'claude,codex,cursor').split(','), mode: option('--mode', 'scripted'), out: option('--out'), keep: argv.includes('--keep') }
 const limits = thresholds.e2e
 const arkLevel = process.env.PATRONUS_QA_ARK_LEVEL ?? 'l3'
 const findings = [], checks = []
@@ -130,7 +130,8 @@ async function cursorSessions(web, configs) {
     try { turn = await session.work(model, task) } finally { await session.close() }
     const rows = evaluate(plan, model.records, session.requests, { protected: variant === 'protected' })
     for (const [at, row] of rows.entries()) row.warned = session.requests.some(request => request.step === at && request.text.includes(cursorWarning))
-    out[variant] = { ...turn, stderr: '', requests: session.requests, rows, testsPass: await testsPass(cwd), events: await journal(env.PATRONUS_DATA_DIR, since), emulated: true }
+    out[variant] = { ...turn, stderr: '', requests: session.requests, rows, testsPass: await testsPass(cwd), events: await journal(env.PATRONUS_DATA_DIR, since), emulated: true,
+      approvals: { reveal: [], other: [], shell: session.approvals } }
   }
   const env = await patronusEnv('ug', configs.prompt)
   const session = cursorSession({ cwd: await workspace(join(sandbox, 'uw-gate')), env, plugin: true })
@@ -211,6 +212,7 @@ function hostMetrics(host, session) {
     hooks,
     baseline: { task_success: baseline.testsPass, canaries_exposed: exposedInBaseline, canaries_total: secrets.filter(secret => secret.kind === 'canary').length },
     unexpected_approvals: guarded.approvals?.other?.length ?? 0,
+    shell_confirmations: guarded.approvals?.shell?.length ?? null,
   }
 }
 

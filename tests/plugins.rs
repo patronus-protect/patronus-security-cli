@@ -126,6 +126,9 @@ fn release_archives_are_installable_marketplace_roots_without_test_artifacts() {
                 "assets/icon.png",
                 "hooks/hooks.json",
                 "scripts/patronus.mjs",
+                "skills/patronus-setup/SKILL.md",
+                "skills/runtime/SKILL.md",
+                "skills/scan/SKILL.md",
             ],
             _ => unreachable!(),
         };
