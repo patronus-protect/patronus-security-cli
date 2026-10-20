@@ -321,4 +321,5 @@ for (const [host, value] of Object.entries(metrics.hosts)) {
   process.stdout.write(`\n${host}: task ${value.task_success ? 'ok' : 'FAILED'}, benign intact ${value.benign_intact_rate}, attacks blocked ${value.attack_blocked_rate}, pii redacted ${value.pii_redacted_rate}, overhead median ${value.overhead_ms.median} ms p95 ${value.overhead_ms.p95} ms\n`)
   for (const row of Object.values(value.matrix)) process.stdout.write(`  ${row.id.padEnd(22)} ${row.kind.padEnd(8)} ${String(row.first).padEnd(10)} ${row.trail.join('>').padEnd(40)} ${String(row.ms).padStart(6)} ms ${row.leaks.length ? 'LEAK ' + row.leaks.join(',') : ''}\n`)
 }
-await report('e2e', { findings, metrics, checks }, { out: options.out })
+// The weekly live run follows the scripted one on the same day; a file of its own keeps the scripted findings.
+await report('e2e', { findings, metrics, checks }, { out: options.out, name: metrics.mode === 'live' ? 'e2e-live' : 'e2e' })
