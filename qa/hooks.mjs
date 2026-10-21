@@ -342,8 +342,9 @@ try {
   const { suites } = options.quick ? { suites: {} } : await hostSuites()
   const liveRun = options.live ? await live() : undefined
   const hookStats = hookMetrics([...replayEvents, ...(liveRun?.events ?? [])])
-  const previous = await previousMetrics('hooks')
-  evaluate({ detection, hookStats, suites, liveRun, previous: previous?.ark_level === arkLevel ? previous : undefined })
+  // Live runs add real prompts with remote audits, so only compare against a run of the same kind.
+  const previous = await previousMetrics('hooks', before => before.ark_level === arkLevel && Boolean(before.live) === Boolean(liveRun))
+  evaluate({ detection, hookStats, suites, liveRun, previous })
   metrics = { ark_level: arkLevel, detection, disclosure: { ...disclosed.metrics, rows: disclosed.rows }, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
     ...(liveRun ? { live: { pass: liveRun.pass, fail: liveRun.fail, ms: liveRun.ms } } : {}), replay: rows.map(({ messages, ...row }) => row) }
 } finally {
