@@ -11,6 +11,8 @@ use std::{
 const DEFAULT_BASE_URL: &str = "https://control.patronus.studio/api/v1";
 const MAX_RESPONSE_BYTES: u64 = 1_048_576;
 const MAX_IDEMPOTENCY_KEY_LENGTH: usize = 128;
+/// Accepted.jobs and CompletedSubmission.jobs maxItems in the pinned OpenAPI contract.
+const MAX_JOBS: usize = 100;
 const DEFAULT_POLL_INTERVAL: Duration = Duration::from_millis(1000);
 const ENVELOPE_FIELDS: [&str; 6] = [
     "ark_version",
@@ -493,7 +495,7 @@ impl Client {
     fn wait(&self, mut submission: ScanResponse, deadline: Instant) -> Result<ScanResponse> {
         if submission.status == "completed" {
             if submission.jobs.is_empty()
-                || submission.jobs.len() > 32
+                || submission.jobs.len() > MAX_JOBS
                 || submission.jobs.iter().any(|job| {
                     job.get("job_id")
                         .and_then(Value::as_str)
@@ -513,7 +515,7 @@ impl Client {
         }
         if submission.status != "accepted"
             || submission.jobs.is_empty()
-            || submission.jobs.len() > 32
+            || submission.jobs.len() > MAX_JOBS
         {
             return Err(Error::new(ErrorKind::Protocol, "Invalid API jobs"));
         }

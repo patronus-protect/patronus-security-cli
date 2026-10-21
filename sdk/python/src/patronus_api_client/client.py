@@ -16,6 +16,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 DEFAULT_BASE_URL = "https://control.patronus.studio/api/v1"
 MAX_RESPONSE_BYTES = 1_048_576
 MAX_IDEMPOTENCY_KEY_LENGTH = 128
+# Accepted.jobs and CompletedSubmission.jobs maxItems in the pinned OpenAPI contract.
+MAX_JOBS = 100
 _ENVELOPE_FIELDS = ("ark_version", "input", "extraction", "coverage", "usage", "request_id")
 
 
@@ -143,11 +145,11 @@ class Patronus:
     def _wait(self, submission: dict[str, Any], deadline: float):
         if submission.get("status") == "completed":
             jobs = submission.get("jobs")
-            if not isinstance(jobs, list) or not 0 < len(jobs) <= 32 or any(not isinstance(job, dict) or job.get("status") not in {"completed", "failed"} or self._invalid_job_id(job.get("job_id")) for job in jobs):
+            if not isinstance(jobs, list) or not 0 < len(jobs) <= MAX_JOBS or any(not isinstance(job, dict) or job.get("status") not in {"completed", "failed"} or self._invalid_job_id(job.get("job_id")) for job in jobs):
                 raise PatronusError("Invalid completed API response", "protocol")
             return submission
         accepted = submission.get("jobs")
-        if submission.get("status") != "accepted" or not isinstance(accepted, list) or not 0 < len(accepted) <= 32:
+        if submission.get("status") != "accepted" or not isinstance(accepted, list) or not 0 < len(accepted) <= MAX_JOBS:
             raise PatronusError("Invalid API jobs", "protocol")
         jobs = []
         for item in accepted:
