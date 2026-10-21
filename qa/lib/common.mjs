@@ -66,17 +66,19 @@ export function finding(area, severity, key, title, { evidence = '', suggestion 
 
 export const severities = ['critical', 'high', 'medium', 'low']
 
-/** Writes the area report next to the run and appends metrics to the local history. */
+/** Writes the area report next to the run and appends metrics to the local history.
+ * `options.name` names the file when one area writes more than one report per day (e2e-live). */
 export async function report(area, { findings, metrics = {}, checks = [] }, options = {}) {
+  const name = options.name ?? area
   const day = new Date().toISOString().slice(0, 10)
   const directory = options.out ?? join(qaHome, 'runs', day)
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const value = { schema: 'patronus.qa.report.v1', area, at: new Date().toISOString(), metrics, checks, findings }
-  await writeFile(join(directory, `${area}.json`), JSON.stringify(value, null, 2) + '\n')
+  await writeFile(join(directory, `${name}.json`), JSON.stringify(value, null, 2) + '\n')
   await mkdir(qaHome, { recursive: true, mode: 0o700 })
   await appendFile(join(qaHome, 'history.jsonl'), JSON.stringify({ area, at: value.at, metrics }) + '\n')
   const failed = checks.filter(check => !check.ok).length
-  process.stdout.write(`${area}: ${checks.length - failed}/${checks.length} checks ok, ${findings.length} findings -> ${join(directory, area + '.json')}\n`)
+  process.stdout.write(`${area}: ${checks.length - failed}/${checks.length} checks ok, ${findings.length} findings -> ${join(directory, name + '.json')}\n`)
   for (const item of findings) process.stdout.write(`  [${item.severity}] ${item.title}\n`)
   return value
 }
