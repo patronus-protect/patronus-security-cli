@@ -87,10 +87,10 @@ The installer detects the platform, verifies the matching CLI artifact, installs
 `patronus-security-scanner` to `~/.local/bin`, and opens onboarding. It does not
 require an account for local protection.
 
-To install the first release explicitly:
+To pin a specific release, replace the version in this URL:
 
 ```sh
-curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.0/install.sh | sh
+curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.2/install.sh | sh
 ```
 
 Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.
