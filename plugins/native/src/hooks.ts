@@ -218,12 +218,12 @@ function shellCommand(host: Host, input: HookInput): string | undefined {
 }
 
 const score = (result: CommandResult) => typeof result.decision_score === 'number' ? `, score ${result.decision_score.toFixed(1)}` : ''
-const shellBlocked = (result: CommandResult) =>
-  `Patronus blocked this shell command before it ran (high shell-command risk${score(result)}). Do not rephrase, split or encode it to get past the check. If the user really needs it, explain what it does and let them run it themselves, or they can pause Patronus for this chat with "patronus off".`
+const shellHeld = (result: CommandResult) =>
+  `Patronus held this shell command before it ran (shell-command risk${score(result)}). Codex cannot ask for approval from a hook. Do not rephrase, split or encode it to get past the check. If the user really needs it, explain what it does and let them run it themselves, or they can pause Patronus for this chat with "patronus off".`
 const shellAsk = (result: CommandResult) =>
   `Patronus flagged this shell command as risky (shell-command risk${score(result)}). Allow it only if you expect this command.`
 const shellConfirm = (result: CommandResult, token: string) =>
-  `Patronus held this shell command before it ran (medium shell-command risk${score(result)}). Codex cannot ask for approval from a hook, so the user decides: tell the user exactly which command you want to run and why, and that they can approve it once by sending ${token} in their next message. After that message, run the identical command again. Do not run a variant of it.`
+  `Patronus held this shell command before it ran (shell-command risk${score(result)}). Codex cannot ask for approval from a hook, so the user decides: tell the user exactly which command you want to run and why, and that they can approve it once by sending ${token} in their next message. After that message, run the identical command again. Do not run a variant of it.`
 
 /** `pluginRoot` is the installed plugin's own directory: its files are trusted, never scanned. */
 type Overrides = Partial<Pick<BrokerConfig, 'cwd'>> & Pick<BrokerConfig, 'stateDir' | 'executable' | 'configPath' | 'responseWaitMs' | 'requestTimeoutMs'> & { pluginRoot?: string }
@@ -329,10 +329,9 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
       // Fail-open: an unavailable check never stops the user's command; the journal records why.
       if (!record(result) || result.status === 'unavailable') { traceFailure(trace, record(result) ? result.reason : 'invalid_scanner_response'); return {} }
       if (result.status !== 'dangerous') return {}
-      if (result.risk === 'high') return map({ kind: 'deny', text: shellBlocked(result) })
       if (host === 'codex') {
         const token = requestCommandApproval(host, input.session_id, command)
-        return map({ kind: 'deny', text: token ? shellConfirm(result, token) : shellBlocked(result) })
+        return map({ kind: 'deny', text: token ? shellConfirm(result, token) : shellHeld(result) })
       }
       return map({ kind: 'ask', text: shellAsk(result) })
     }

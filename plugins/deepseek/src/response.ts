@@ -8,7 +8,6 @@ import type { SessionRuntime } from './sessions.ts'
 import { fingerprint, projectResult, isNativeCancellation } from './host.ts'
 import { blocked, receipt } from './receipts.ts'
 import { waitForScan } from './wait.ts'
-import { heldCommands } from './command.ts'
 import { autoRedact } from './auto-redaction.ts'
 import { elapsed, hashProtocolValue, type ProtocolEventSink } from './protocol-events.ts'
 import { textPayload, toolResultText } from './text.ts'
@@ -44,7 +43,7 @@ export function registerResponseGate(ctx: Context, gate: Gate, overrideMs?: numb
     let decision: PostToolDecision | undefined
     try {
       decision = await next()
-      if (gate.enabledFor?.(exec) === false || heldCommands.has(exec)) { bypassed.add(exec); return decision }
+      if (gate.enabledFor?.(exec) === false) { bypassed.add(exec); return decision }
       const envelope = projectResult(result, decision)
       const text = toolResultText(envelope)
       if (gate.isOwnTool(exec)) {

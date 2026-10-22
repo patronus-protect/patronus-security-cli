@@ -9,7 +9,7 @@ Cursor's hook API can replace only MCP results. Other outside text can be withhe
 | What reaches the agent | Cursor hook | Patronus behavior |
 | --- | --- | --- |
 | Your prompt | `beforeSubmitPrompt` | Scanned. Sensitive data blocks the prompt (`continue: false`); injection in your own prompt sends it with a warning. In the `cursor-agent` CLI only with `patronus-security-scanner integration cursor install` (user `hooks.json`): the interactive CLI skips this hook when it comes only from a plugin, and `cursor-agent -p` never runs it. |
-| Shell command (before it runs) | `beforeShellExecution` | Checked. High risk (exfiltration, reverse shells, `curl … \| sh`) is blocked with a hint; medium risk (for example `npm install`, `rm -rf node_modules`) asks you. In `cursor-agent -p`, Cursor answers an ask itself: denied without `--force`, approved with `--force`. |
+| Shell command (before it runs) | `beforeShellExecution` | Checked. A command the model flags as risky (exfiltration, reverse shells, `curl … \| sh`, but also `npm install` or `rm -rf node_modules`) asks you; Patronus never blocks a command on its own. In `cursor-agent -p`, Cursor answers an ask itself: denied without `--force`, approved with `--force`. |
 | File read by the Read tool | `beforeReadFile` | Scanned. A finding denies the read; the agent gets a receipt, or the masked file for personal data only. |
 | MCP tool result | `postToolUse` | Scanned. A finding replaces the result (`updated_mcp_tool_output`). |
 | Shell output | `postToolUse` | Scanned, **not withheld**: Cursor delivers it unchanged; Patronus adds a warning (`additional_context`). |
@@ -40,12 +40,12 @@ The directory also works as a Cursor plugin (`.cursor-plugin/plugin.json`, `hook
 | Cursor hook | Patronus behavior |
 | --- | --- |
 | `beforeSubmitPrompt` | Scans the prompt; handles `patronus on`, `patronus off` and `patronus status`. |
-| `beforeShellExecution` | Checks the command line before it runs (block or ask). |
+| `beforeShellExecution` | Checks the command line before it runs (ask). |
 | `beforeReadFile` | Scans file content before the agent receives it. |
 | `postToolUse` | Scans shell output and MCP `content[].text` blocks; answers Patronus' own MCP tools for this conversation. |
 | `stop`, `sessionEnd` | Release the conversation's runtime state. |
 
-Skills (`skills/`): `runtime` explains receipts, withheld reads, shell warnings and blocked commands; `scan` runs explicit audits; `patronus-setup` guides installation.
+Skills (`skills/`): `runtime` explains receipts, withheld reads, shell warnings and held commands; `scan` runs explicit audits; `patronus-setup` guides installation.
 
 The Patronus MCP server (`patronus_check_result`, `patronus_read_redacted`, `patronus_scan`) runs without a conversation identity in Cursor; the `postToolUse` hook replaces its placeholder answer with the result for the current conversation.
 

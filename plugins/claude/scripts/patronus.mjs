@@ -153,7 +153,7 @@ var LocalClient = class {
   }
   async checkCommand(params, signal) {
     const value = await this.rpc("check_command", params, signal);
-    if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "high" && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
+    if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
     return value;
   }
   async check(params, signal) {
@@ -2509,9 +2509,9 @@ function shellCommand(host, input) {
   return input.tool_name === "Bash" || host === "claude" && input.tool_name === "PowerShell" ? command2 : void 0;
 }
 var score = (result) => typeof result.decision_score === "number" ? `, score ${result.decision_score.toFixed(1)}` : "";
-var shellBlocked = (result) => `Patronus blocked this shell command before it ran (high shell-command risk${score(result)}). Do not rephrase, split or encode it to get past the check. If the user really needs it, explain what it does and let them run it themselves, or they can pause Patronus for this chat with "patronus off".`;
+var shellHeld = (result) => `Patronus held this shell command before it ran (shell-command risk${score(result)}). Codex cannot ask for approval from a hook. Do not rephrase, split or encode it to get past the check. If the user really needs it, explain what it does and let them run it themselves, or they can pause Patronus for this chat with "patronus off".`;
 var shellAsk = (result) => `Patronus flagged this shell command as risky (shell-command risk${score(result)}). Allow it only if you expect this command.`;
-var shellConfirm = (result, token2) => `Patronus held this shell command before it ran (medium shell-command risk${score(result)}). Codex cannot ask for approval from a hook, so the user decides: tell the user exactly which command you want to run and why, and that they can approve it once by sending ${token2} in their next message. After that message, run the identical command again. Do not run a variant of it.`;
+var shellConfirm = (result, token2) => `Patronus held this shell command before it ran (shell-command risk${score(result)}). Codex cannot ask for approval from a hook, so the user decides: tell the user exactly which command you want to run and why, and that they can approve it once by sending ${token2} in their next message. After that message, run the identical command again. Do not run a variant of it.`;
 function traceFailure(trace, reason) {
   const code = publicReason(reason);
   trace.outcome = !code ? "inactive" : integrationReasons.has(code) ? "error" : "degraded";
@@ -2623,10 +2623,9 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
         return {};
       }
       if (result2.status !== "dangerous") return {};
-      if (result2.risk === "high") return map({ kind: "deny", text: shellBlocked(result2) });
       if (host === "codex") {
         const token2 = requestCommandApproval(host, input.session_id, command2);
-        return map({ kind: "deny", text: token2 ? shellConfirm(result2, token2) : shellBlocked(result2) });
+        return map({ kind: "deny", text: token2 ? shellConfirm(result2, token2) : shellHeld(result2) });
       }
       return map({ kind: "ask", text: shellAsk(result2) });
     }

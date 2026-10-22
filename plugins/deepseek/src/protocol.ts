@@ -28,7 +28,7 @@ export interface SubmitParams {
 export interface JobParams { session: string; scan_id: string }
 export interface CommandParams { session: string; tool: string; call_id: string; command: string }
 /** Pre-execution shell command check; `risk` is set for a dangerous command. */
-export interface CommandResult { status: 'approved' | 'dangerous' | 'unavailable'; category: 'shell_command'; risk?: 'high' | 'medium'; decision_score?: number; threshold?: number; reason?: string }
+export interface CommandResult { status: 'approved' | 'dangerous' | 'unavailable'; category: 'shell_command'; risk?: 'medium'; decision_score?: number; threshold?: number; reason?: string }
 export interface ScanResult {
   scan_id: string
   status: ScanStatus
