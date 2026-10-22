@@ -254,7 +254,8 @@ fn complete_detection(outcome: &crate::ark::AnalysisOutcome) -> bool {
 pub fn prepare_models() -> Result<()> {
     let mut config = Config::load(None, None)?;
     if config.provider.mode == ProviderMode::Api {
-        return Ok(());
+        // Text scans run in the cloud; the shell command check stays local.
+        return crate::model_assets::prepare_shell(&mut config);
     }
     crate::model_assets::prepare(&mut config)
 }
@@ -384,13 +385,11 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     configure(mode, "l3")?;
     println!("Analysis: L3");
     println!("\n  3 / 5  Models and performance\n  ─────────────────────────────────────────");
-    if mode != ProviderMode::Api {
-        println!(
-            "Models: {}",
-            crate::model_assets::default_directory()?.display()
-        );
-        prepare_models()?;
-    }
+    println!(
+        "Models: {}",
+        crate::model_assets::default_directory()?.display()
+    );
+    prepare_models()?;
     if mode == ProviderMode::Local {
         println!("Running a local L3 performance check with 256 tokens…");
         let elapsed = local_l3_performance_check()?;

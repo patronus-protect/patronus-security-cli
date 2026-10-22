@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { mcpResult } from '../src/daemon.ts'
 import { handleHook as runHook } from '../src/hooks.ts'
 import { cursorExternalText, normalizeCursor } from '../src/hosts/cursor.ts'
 import type { HookInput } from '../src/types.ts'
@@ -153,4 +154,11 @@ test('stop and sessionEnd release the conversation runtime', async () => {
     assert.deepEqual(await handleHook(event, { ...common(event), status: 'completed', loop_count: 0 }, async (_config, request) => { methods.push(request.method); return { closed: true } }), {})
   }
   assert.deepEqual(methods, ['close', 'close'])
+})
+
+test('Cursor MCP results are submitted under the MCP policy scope', () => {
+  assert.equal(mcpResult('cursor', 'MCP:get_issue'), true)
+  assert.equal(mcpResult('cursor', 'Shell'), false)
+  assert.equal(mcpResult('claude', 'mcp__tracker__get_issue'), true)
+  assert.equal(mcpResult('codex', 'MCP:get_issue'), false)
 })

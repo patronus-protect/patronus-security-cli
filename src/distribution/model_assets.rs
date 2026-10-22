@@ -16,6 +16,19 @@ pub fn default_directory() -> Result<PathBuf> {
     let root = home.data_local_dir().join("com.patronus.desktop");
     Ok(root.join("patronus-ark/models"))
 }
+/// The pre-execution shell command check (Ark cat-shell-risk-commander, ~2.5 MB) always runs
+/// locally, also when text scans use the API.
+pub fn prepare_shell(config: &mut Config) -> Result<()> {
+    if config.ark.model_dir.is_none() {
+        config.ark.model_dir = Some(default_directory()?);
+    }
+    let model_dir = config.ark.model_dir.clone().unwrap();
+    if !crate::shell_check::assets_present(&model_dir) {
+        eprintln!("Downloading the shell command model…");
+        crate::shell_check::download_assets(&model_dir).map_err(ScannerError::Ark)?;
+    }
+    Ok(())
+}
 pub fn prepare(config: &mut Config) -> Result<()> {
     if config.ark.model_dir.is_none() {
         config.ark.model_dir = Some(default_directory()?);
@@ -46,12 +59,7 @@ pub fn prepare(config: &mut Config) -> Result<()> {
         "Checking local Ark models in {}…",
         config.ark.model_dir.as_ref().unwrap().display()
     );
-    // The pre-execution shell command check (Ark cat-shell-risk-commander, ~2.5 MB).
-    let model_dir = config.ark.model_dir.clone().unwrap();
-    if !crate::shell_check::assets_present(&model_dir) {
-        eprintln!("Downloading the shell command model…");
-        crate::shell_check::download_assets(&model_dir).map_err(ScannerError::Ark)?;
-    }
+    prepare_shell(config)?;
     if ArkAnalyzer::policy_assets_ready(&config.ark, &config.analysis)? {
         eprintln!("Required models are present. No download needed.");
         return Ok(());

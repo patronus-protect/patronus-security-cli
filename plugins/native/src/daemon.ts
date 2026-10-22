@@ -8,7 +8,8 @@ import { createServer, type Socket } from 'node:net'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { patronusRoot } from '../../deepseek/src/settings.ts'
-import type { JsonValue } from './types.ts'
+import type { Host, JsonValue } from './types.ts'
+import { isCursorMcp } from './hosts/cursor.ts'
 import { executablePath } from '../../deepseek/src/client.ts'
 import { SessionState, type SessionRuntime } from '../../deepseek/src/sessions.ts'
 import { StaticScanner } from '../../deepseek/src/static.ts'
@@ -22,6 +23,8 @@ const ARMED_MS = 5 * 60_000
 
 interface Offer { scanId: string; counts: Record<string, number>; armedUntil?: number }
 const run = promisify(execFile)
+/** Cursor names MCP tools `MCP:<tool>`, Claude and Codex `mcp__<server>__<tool>`; the scope picks the MCP policy. */
+export const mcpResult = (host: Host, tool: string) => host === 'cursor' ? isCursorMcp(tool) : tool.startsWith('mcp__')
 
 interface Owner { pid: number; started: string }
 
@@ -282,7 +285,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
     let job: { session: string; scan_id: string } | undefined
     let approved = false
     try {
-      const submitted = await client.submit({ session, policy_scope: `${config.host}.${request.method === 'request' ? 'user_input' : request.tool.startsWith('mcp__') ? 'mcp_result' : 'tool_result'}`, direction: request.method, tool: request.tool, call_id: request.callId, payload: request.payload }, budget)
+      const submitted = await client.submit({ session, policy_scope: `${config.host}.${request.method === 'request' ? 'user_input' : mcpResult(config.host, request.tool) ? 'mcp_result' : 'tool_result'}`, direction: request.method, tool: request.tool, call_id: request.callId, payload: request.payload }, budget)
       job = { session, scan_id: submitted.scan_id }
       let result = await waitForScan(client, job, wait, budget)
       if (result.status === 'pending' && result.job_status === undefined) result = { ...result, job_status: 'queued' }

@@ -73,7 +73,19 @@
         "call_id": { "type": "string", "minLength": 1, "maxLength": 512 },
         "command": { "type": "string", "maxLength": 65536 }
       },
-      "description": "Synchronous pre-execution shell command check (Ark cat-shell-risk-commander, L1). Nothing is stored; the reply is {status: approved|dangerous|unavailable, category: shell_command, risk?: high|medium, decision_score?, threshold?, reason?}."
+      "description": "Synchronous pre-execution shell command check (Ark cat-shell-risk-commander, L1). Nothing is stored; the reply is a command_verdict."
+    },
+    "command_verdict": {
+      "type": "object", "additionalProperties": false, "required": ["status", "category"],
+      "properties": {
+        "status": { "enum": ["approved", "dangerous", "unavailable"] },
+        "category": { "const": "shell_command" },
+        "risk": { "const": "medium" },
+        "decision_score": { "type": "number" },
+        "threshold": { "type": "number" },
+        "reason": { "type": "string" }
+      },
+      "description": "Reply to check_command. dangerous carries risk medium: hosts ask the user and never block on their own. unavailable carries a reason; the host lets the command run."
     },
     "lookup": {
       "type": "object", "additionalProperties": false,
@@ -116,6 +128,7 @@
           { "$ref": "#/$defs/redacted" },
           { "$ref": "#/$defs/disclosure_offer" },
           { "$ref": "#/$defs/disclosure_state" },
+          { "$ref": "#/$defs/command_verdict" },
           { "$ref": "#/$defs/unavailable" }
         ] }
       }

@@ -142,6 +142,43 @@ mod tests {
     }
 
     #[test]
+    fn verdicts_match_the_runtime_reply_schema() {
+        let schema: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/schemas/runtime-v1.schema.json"
+        )))
+        .unwrap();
+        let defs = &schema["$defs"]["command_verdict"];
+        let replies = schema["$defs"]["reply"]["properties"]["result"]["anyOf"]
+            .as_array()
+            .unwrap();
+        assert!(replies.contains(&serde_json::json!({"$ref": "#/$defs/command_verdict"})));
+        let dangerous = CommandVerdict {
+            status: "dangerous",
+            category: "shell_command",
+            risk: Some("medium"),
+            decision_score: Some(2.5),
+            threshold: Some(1.15),
+            reason: None,
+        };
+        for verdict in [
+            ShellCheck::new(None).check("  "),
+            ShellCheck::new(None).check("ls"),
+            dangerous,
+        ] {
+            let value = serde_json::to_value(&verdict).unwrap();
+            for key in value.as_object().unwrap().keys() {
+                assert!(defs["properties"].get(key).is_some(), "{key} not in schema");
+            }
+            let statuses = defs["properties"]["status"]["enum"].as_array().unwrap();
+            assert!(statuses.contains(&value["status"]));
+            if let Some(risk) = value.get("risk") {
+                assert_eq!(risk, &defs["properties"]["risk"]["const"]);
+            }
+        }
+    }
+
+    #[test]
     fn empty_commands_need_no_model() {
         assert_eq!(ShellCheck::new(None).check("  ").status, "approved");
     }
