@@ -22,6 +22,7 @@ Open <http://127.0.0.1:8001>.
 ## Python (3.10+)
 
 ```sh
+python3 -m venv .venv   # Python 3.10 or newer
 .venv/bin/python -m pip install -e sdk/python
 PATRONUS_API_KEY=your-key .venv/bin/python examples/file-checker/python/app.py
 ```
