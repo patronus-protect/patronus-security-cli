@@ -8,6 +8,7 @@
 - Include host event and surface context in runtime receipts, and preserve the scanner's coverage and fail-open behavior across Codex, Claude and DeepSeek.
 - Let the user reveal selected PII types (for example email or IP addresses) from one redacted runtime result to the agent, once, through the host's approval prompt in Claude Code, Codex and DeepSeek Harness (`patronus_read_redacted` with `reveal_pii`, then `patronus_reveal_pii`). Only results with nothing but PII findings qualify; with any injection, DLP or threat finding nothing becomes readable. Static file results keep the masked view.
 - Remote URL, MCP and file audits retry network errors and 502/503/504 responses up to twice with the same idempotency key, so a transient API failure no longer fails the audit or bills it twice.
+- Bump the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) to 0.1.3 so idempotency keys, `limit_kind` on quota errors and transient retries ship in a release; 0.1.2 on the registries does not have them.
 - Keep internal deployment and review evidence, generated server files and incomplete integration artifacts out of the public repository.
 
 ## 0.1.2 - 2026-09-23

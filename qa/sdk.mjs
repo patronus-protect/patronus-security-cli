@@ -31,16 +31,31 @@ const python = await modernPython()
 
 const sdks = [
   { id: 'typescript', registry: 'npm', name: '@patronus-protect/api-client', readme: 'sdk/typescript/README.md', fences: ['js', 'ts', 'typescript'],
+    manifest: 'sdk/typescript/package.json', sources: ['sdk/typescript/src'],
     version: async () => JSON.parse(await readFile(join(repository, 'sdk/typescript/package.json'), 'utf8')).version,
     published: async () => (await (await fetch('https://registry.npmjs.org/@patronus-protect%2Fapi-client/latest')).json()).version },
   { id: 'python', registry: 'PyPI', name: 'patronus-api-client', readme: 'sdk/python/README.md', fences: ['python', 'py'],
+    manifest: 'sdk/python/pyproject.toml', sources: ['sdk/python/src'],
     version: async () => /^version = "(.+)"/m.exec(await readFile(join(repository, 'sdk/python/pyproject.toml'), 'utf8'))[1],
     published: async () => (await (await fetch('https://pypi.org/pypi/patronus-api-client/json')).json()).info.version },
   { id: 'rust', registry: 'crates.io', name: 'patronus-api-client', readme: 'crates/patronus-api-client/README.md', fences: ['rust'],
+    manifest: 'crates/patronus-api-client/Cargo.toml', sources: ['crates/patronus-api-client/src'],
     version: async () => /^version = "(.+)"/m.exec(await readFile(join(repository, 'crates/patronus-api-client/Cargo.toml'), 'utf8'))[1],
     published: async () => (await (await fetch('https://crates.io/api/v1/crates/patronus-api-client', { headers: { 'user-agent': 'patronus-qa (team@patronus.studio)' } })).json()).crate.max_stable_version },
 ]
 
+/**
+ * SDK source files changed after the commit that set the current version. Equal registry
+ * and repository versions then still mean users get older code than the README describes.
+ */
+async function changedSinceVersionBump(sdk, version) {
+  const pattern = `version.*"${version.replaceAll('.', '\\.')}"`
+  const bump = await run('git', ['log', '-1', '--format=%H', '-G', pattern, '--', sdk.manifest], { cwd: repository })
+  const commit = bump.stdout.trim()
+  if (bump.code !== 0 || !commit) return []
+  const diff = await run('git', ['diff', '--name-only', commit, 'HEAD', '--', ...sdk.sources], { cwd: repository })
+  return diff.code === 0 ? diff.stdout.split('\n').filter(Boolean) : []
+}
 
 // A one-page PDF so quick starts that upload `contract.pdf` have something to send.
 const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R/Resources<<>>>>endobj 4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 20 100 Td (Patronus QA) Tj ET\nendstream endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n'
@@ -82,6 +97,13 @@ for (const sdk of sdks) {
   if (check(`${sdk.id} published on ${sdk.registry}`, Boolean(published), published ?? 'not found')) {
     if (published !== local) findings.push(finding('sdk', 'medium', `version-drift:${sdk.id}`, `${sdk.id} SDK: ${sdk.registry} has ${published}, repository is at ${local}`,
       { metric: { published, local }, suggestion: 'Publish the current version or align the README with the published API.' }))
+    else {
+      const changed = await changedSinceVersionBump(sdk, local)
+      metrics[sdk.id].changed_since_version_bump = changed.length
+      if (!check(`${sdk.id} source unchanged since ${local} was set`, !changed.length, changed.length ? `${changed.length} files changed` : ''))
+        findings.push(finding('sdk', 'high', `unreleased-changes:${sdk.id}`, `${sdk.id} SDK source changed after ${local} was published, without a version bump`,
+          { evidence: changed.join('\n'), suggestion: `Bump ${sdk.manifest} and publish, so ${sdk.registry} serves what the README documents.` }))
+    }
   } else findings.push(finding('sdk', 'high', `unpublished:${sdk.id}`, `${sdk.id} SDK ${sdk.name} is not installable from ${sdk.registry}`,
     { suggestion: `The README tells users to install it from ${sdk.registry}.` }))
 
