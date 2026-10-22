@@ -79,6 +79,22 @@ test("polls accepted jobs and rejects foreign identifiers", async () => {
   await assert.rejects(() => client.getJob("https://foreign.invalid"), error => error instanceof PatronusError && error.kind === "protocol");
 });
 
+test("polls every job of a submission up to the contract's 100", async () => {
+  const id = n => `job_${n.toString(16).padStart(32, "0")}`;
+  const accepted = count => Response.json({ status: "accepted", jobs: Array.from({ length: count }, (_, n) => ({ job_id: id(n) })) }, { status: 202 });
+  let polls = 0;
+  const client = new Patronus({ apiKey: "secret", pollIntervalMs: 1, fetch: async url => {
+    if (!/\/scan\/job_/.test(String(url))) return accepted(33);
+    polls++;
+    return Response.json({ ...fixture.jobs[0], job_id: String(url).split("/").pop() });
+  }});
+  const result = await client.scanUrl("https://example.com");
+  assert.equal(result.jobs.length, 33);
+  assert.equal(polls, 33);
+  const tooMany = new Patronus({ apiKey: "secret", pollIntervalMs: 1, fetch: async () => accepted(101) });
+  await assert.rejects(() => tooMany.scanUrl("https://example.com"), error => error instanceof PatronusError && error.kind === "protocol");
+});
+
 test("uploads document bytes as multipart", async () => {
   let body;
   const client = new Patronus({ apiKey: "secret", fetch: async (_url, init) => { body = init.body; return Response.json(fixture); } });

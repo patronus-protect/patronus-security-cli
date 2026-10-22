@@ -25,7 +25,7 @@ Run the areas in the order above. One failing area must not stop the others.
 
 ### e2e review
 
-Read `~/.patronus-qa/runs/<date>/e2e.json`. `metrics.hosts.<host>.matrix` has one row per step (first receipt, protocol trail, final status, latency, leaks); the live run is under `metrics.live`.
+Read `~/.patronus-qa/runs/<date>/e2e.json`. `metrics.hosts.<host>.matrix` has one row per step (first receipt, protocol trail, final status, latency, leaks); the live run writes `e2e-live.json` (under `metrics.live`), so it does not replace the scripted report.
 - **Leaks** (critical): a canary, secret or PII value reached a model request. The row names the step whose output first carried it; check which tool result shape the hook did not scan.
 - **False positives and recovery**: `false_positives` counts benign and mixed steps that were withheld first, how many the protocol recovered, the extra calls and the extra latency. An unrecovered one is high; a recovery that leaks is critical.
 - **Consent**: `consent-deny` must keep every value masked; `consent-approve` must reveal exactly the requested type (emails) while IBANs stay masked.

@@ -65,6 +65,8 @@ export interface Upload {
 
 const DEFAULT_BASE_URL = "https://control.patronus.studio/api/v1";
 const JOB_ID = /^job_[0-9a-f]{32}$/i;
+/** Accepted.jobs and CompletedSubmission.jobs maxItems in the pinned OpenAPI contract. */
+const MAX_JOBS = 100;
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,128}$/;
 const ENVELOPE_FIELDS = ["ark_version", "input", "extraction", "coverage", "usage", "request_id"] as const;
 
@@ -148,12 +150,12 @@ export class Patronus {
 
   private async wait(submission: ScanResponse, deadline: number): Promise<ScanResponse> {
     if (submission.status === "completed") {
-      if (!Array.isArray(submission.jobs) || !submission.jobs.length || submission.jobs.length > 32 || submission.jobs.some(job => !JOB_ID.test(job.job_id) || !["completed", "failed"].includes(job.status ?? ""))) {
+      if (!Array.isArray(submission.jobs) || !submission.jobs.length || submission.jobs.length > MAX_JOBS || submission.jobs.some(job => !JOB_ID.test(job.job_id) || !["completed", "failed"].includes(job.status ?? ""))) {
         throw new PatronusError("Invalid completed API response", "protocol");
       }
       return submission;
     }
-    if (submission.status !== "accepted" || !Array.isArray(submission.jobs) || !submission.jobs.length || submission.jobs.length > 32) throw new PatronusError("Invalid API jobs", "protocol");
+    if (submission.status !== "accepted" || !Array.isArray(submission.jobs) || !submission.jobs.length || submission.jobs.length > MAX_JOBS) throw new PatronusError("Invalid API jobs", "protocol");
     const jobs: ScanJob[] = [];
     for (const accepted of submission.jobs) {
       if (!JOB_ID.test(accepted.job_id)) throw new PatronusError("Invalid API job identifier", "protocol");

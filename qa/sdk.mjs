@@ -10,6 +10,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { args, finding, loadEnv, report, repository, run, thresholds } from './lib/common.mjs'
+import { extractQuickstart, missingDecisions, promisedDecisions, rustMain } from './lib/quickstart.mjs'
 
 loadEnv()
 const options = args()
@@ -29,23 +30,17 @@ async function modernPython() {
 const python = await modernPython()
 
 const sdks = [
-  { id: 'typescript', registry: 'npm', name: '@patronus-protect/api-client', readme: 'sdk/typescript/README.md', fence: 'ts',
+  { id: 'typescript', registry: 'npm', name: '@patronus-protect/api-client', readme: 'sdk/typescript/README.md', fences: ['js', 'ts', 'typescript'],
     version: async () => JSON.parse(await readFile(join(repository, 'sdk/typescript/package.json'), 'utf8')).version,
     published: async () => (await (await fetch('https://registry.npmjs.org/@patronus-protect%2Fapi-client/latest')).json()).version },
-  { id: 'python', registry: 'PyPI', name: 'patronus-api-client', readme: 'sdk/python/README.md', fence: 'python',
+  { id: 'python', registry: 'PyPI', name: 'patronus-api-client', readme: 'sdk/python/README.md', fences: ['python', 'py'],
     version: async () => /^version = "(.+)"/m.exec(await readFile(join(repository, 'sdk/python/pyproject.toml'), 'utf8'))[1],
     published: async () => (await (await fetch('https://pypi.org/pypi/patronus-api-client/json')).json()).info.version },
-  { id: 'rust', registry: 'crates.io', name: 'patronus-api-client', readme: 'crates/patronus-api-client/README.md', fence: 'rust',
+  { id: 'rust', registry: 'crates.io', name: 'patronus-api-client', readme: 'crates/patronus-api-client/README.md', fences: ['rust'],
     version: async () => /^version = "(.+)"/m.exec(await readFile(join(repository, 'crates/patronus-api-client/Cargo.toml'), 'utf8'))[1],
     published: async () => (await (await fetch('https://crates.io/api/v1/crates/patronus-api-client', { headers: { 'user-agent': 'patronus-qa (team@patronus.studio)' } })).json()).crate.max_stable_version },
 ]
 
-/** The first fenced block in the README's quick start: what a new user copies first. */
-async function quickstart(sdk) {
-  const text = await readFile(join(repository, sdk.readme), 'utf8')
-  const section = text.slice(text.indexOf('## Quick start'))
-  return new RegExp('```' + sdk.fence + '\\n([\\s\\S]*?)```').exec(section)?.[1]
-}
 
 // A one-page PDF so quick starts that upload `contract.pdf` have something to send.
 const pdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R/Resources<<>>>>endobj 4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 20 100 Td (Patronus QA) Tj ET\nendstream endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n'
@@ -56,24 +51,27 @@ async function runQuickstart(sdk, code, directory, env) {
   const steps = []
   if (sdk.id === 'typescript') {
     steps.push(['npm', ['init', '-y']], ['npm', ['install', sdk.name]])
-    await writeFile(join(directory, 'quickstart.mts'), code + '\nconsole.log(JSON.stringify({ status: result.status }))\n')
-    steps.push([process.execPath, ['quickstart.mts']])
+    // The README says to save it as scan.mjs; the snippet runs verbatim.
+    await writeFile(join(directory, 'scan.mjs'), code)
+    steps.push([process.execPath, ['scan.mjs']])
   } else if (sdk.id === 'python') {
     steps.push([python, ['-m', 'venv', '.venv']], ['.venv/bin/python', ['-m', 'pip', 'install', '-q', sdk.name]])
-    await writeFile(join(directory, 'quickstart.py'), code + '\nprint({"status": getattr(result, "status", None)})\n')
+    await writeFile(join(directory, 'quickstart.py'), code)
     steps.push(['.venv/bin/python', ['quickstart.py']])
   } else {
     steps.push(['cargo', ['init', '-q', '--name', 'quickstart']], ['cargo', ['add', '-q', sdk.name]])
-    // Snippets with `?` need a fallible main; a reader has to add it, so it is noted below.
-    await writeFile(join(directory, 'main.rs.tmp'), `fn main() -> Result<(), Box<dyn std::error::Error>> {\n${code}\nprintln!("{{\\"status\\":\\"{}\\"}}", result.status);\nOk(())\n}\n`)
+    // Snippets without `fn main` need one; a reader has to add it, so it is noted below.
+    await writeFile(join(directory, 'main.rs.tmp'), rustMain(code))
     steps.push(['mv', ['main.rs.tmp', 'src/main.rs']], ['cargo', ['run', '-q']])
   }
   const started = Date.now()
+  let stdout = ''
   for (const [command, argv] of steps) {
     const result = await run(command, argv, { cwd: directory, env, timeout: 600_000 })
     if (result.code !== 0) return { ok: false, step: [command, ...argv].join(' '), output: (result.stderr || result.stdout).slice(-3000), ms: Date.now() - started, files }
+    stdout = result.stdout
   }
-  return { ok: true, ms: Date.now() - started, files }
+  return { ok: true, ms: Date.now() - started, files, stdout }
 }
 
 for (const sdk of sdks) {
@@ -87,7 +85,8 @@ for (const sdk of sdks) {
   } else findings.push(finding('sdk', 'high', `unpublished:${sdk.id}`, `${sdk.id} SDK ${sdk.name} is not installable from ${sdk.registry}`,
     { suggestion: `The README tells users to install it from ${sdk.registry}.` }))
 
-  const code = await quickstart(sdk)
+  const readme = await readFile(join(repository, sdk.readme), 'utf8')
+  const code = extractQuickstart(readme, sdk.fences)
   if (!check(`${sdk.id} README has a quick start`, Boolean(code))) {
     findings.push(finding('docs', 'medium', `no-quickstart:${sdk.id}`, `${sdk.id} SDK README has no runnable quick start`))
     continue
@@ -116,6 +115,13 @@ for (const sdk of sdks) {
       { suggestion: 'Lead with scanText / scan_text so the first example runs without preparation; show file uploads second.' }))
     if (sdk.id === 'rust' && /\?/.test(code) && !/fn main/.test(code)) findings.push(finding('ux', 'low', 'quickstart-main:rust', 'Rust quick start uses `?` outside a function and does not compile when pasted into main.rs',
       { suggestion: 'Show a complete `fn main() -> Result<(), Box<dyn std::error::Error>>` example.' }))
+    if (result.ok) {
+      // The README promises what the snippet prints; a different decision is what a new user sees first.
+      const missing = missingDecisions(result.stdout, promisedDecisions(readme))
+      if (!check(`${sdk.id} quick start prints the decisions its README promises`, !missing.length, missing.length ? `missing: ${missing.join(', ')}` : ''))
+        findings.push(finding('sdk', 'medium', `quickstart-output:${sdk.id}`, `${sdk.id} SDK quick start does not print the decisions its README promises`,
+          { evidence: `missing: ${missing.join(', ')}\n\nstdout:\n${result.stdout.replaceAll(key, '***').slice(-2000)}`, suggestion: 'Align the README sentence with the scanner result, or file a detection issue if the scan verdict regressed.' }))
+    }
   } finally { await rm(directory, { recursive: true, force: true }) }
 }
 

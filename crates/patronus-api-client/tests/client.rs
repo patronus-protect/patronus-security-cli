@@ -150,6 +150,43 @@ fn polls_an_accepted_job_and_never_follows_an_untrusted_id() {
 }
 
 #[test]
+fn polls_every_job_up_to_the_contract_limit() {
+    let id = |n: usize| format!("job_{n:032x}");
+    let accepted = |count: usize| -> &'static str {
+        let jobs: Vec<String> = (0..count)
+            .map(|n| format!(r#"{{"job_id":"{}"}}"#, id(n)))
+            .collect();
+        Box::leak(
+            format!(r#"{{"status":"accepted","jobs":[{}]}}"#, jobs.join(",")).into_boxed_str(),
+        )
+    };
+    let mut responses = vec![accepted(33)];
+    for n in 0..33 {
+        let completed = format!(
+            r#"{{"job_id":"{}","status":"completed","categories":{{}}}}"#,
+            id(n)
+        );
+        responses.push(Box::leak(completed.into_boxed_str()));
+    }
+    let (base, thread) = serve(responses);
+    let result = Client::with_base_url(base, "secret")
+        .unwrap()
+        .with_poll_interval(Duration::from_millis(1))
+        .scan_text("hello")
+        .unwrap();
+    assert_eq!(result.jobs.len(), 33);
+    assert_eq!(thread.join().unwrap().len(), 34);
+
+    let (base, thread) = serve(vec![accepted(101)]);
+    let error = Client::with_base_url(base, "secret")
+        .unwrap()
+        .scan_text("hello")
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Protocol);
+    thread.join().unwrap();
+}
+
+#[test]
 fn sends_documents_as_multipart_without_parsing_them() {
     let completed = include_str!("../../../contract/fixtures/completed.json");
     let (base, thread) = serve(vec![completed]);

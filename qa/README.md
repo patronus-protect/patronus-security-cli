@@ -6,11 +6,11 @@ The recurring QA and UX loop measures hooks, SDKs, docs, the control dashboard a
 |---|---|---|
 | `node qa/hooks.mjs [--quick] [--live]` | hook success, error, timeout and latency rates, detection recall and false positives on `hooks/corpus.json`, cold start, message length, scripted Claude/Codex host suites, the Cursor hook-contract check against the installed `cursor-agent` bundle | Hooks run only in a temporary sandbox; the global host config is verified unchanged |
 | `node qa/e2e/run.mjs [--hosts claude,codex,cursor] [--mode scripted\|live]` | realistic multi-step work sessions with the plugin active: benign-content integrity, attack canaries never reaching the model, PII redaction, false positives and their recovery (`patronus_read_redacted`), selective PII disclosure (approve and deny), the `ignore_once` prompt gate, task success, and per-step hook overhead against a run without the plugin | Hooks load per process from a temporary sandbox (fixture project, local web and MCP fixtures); the global host config is verified unchanged. `--mode live` runs a real Claude session (paid turns, QA account). `cursor` emulates Cursor's agent loop around the real hook bundle (cursor-agent needs a Cursor login to run a scripted model) and reports its known partial-protection limits separately |
-| `node qa/sdk.mjs` | published SDK versions, README quick starts from a fresh install | Temporary directories only |
+| `node qa/sdk.mjs` | published SDK versions, README quick starts run verbatim from a fresh install, and whether they print the decisions the README promises | Temporary directories only |
 | `node qa/integrations.mjs` | host CLI drift, manifest versions, runtime probe, integration status, OpenAPI drift, hosted MCP | Read-only |
 | `node qa/lib/issues.mjs [--publish]` | Upserts today's findings as issues | Dry run unless `--publish` |
 
-Reports are written to `~/.patronus-qa/runs/<date>/<area>.json`, and the metrics history goes to `~/.patronus-qa/history.jsonl`. Thresholds are in `qa/thresholds.json`.
+Reports are written to `~/.patronus-qa/runs/<date>/<area>.json`, and the metrics history goes to `~/.patronus-qa/history.jsonl`. Thresholds are in `qa/thresholds.json`. Latency regressions compare against the last run of the same kind (Ark level, live or not). The harness helpers have offline tests: `node --test qa/lib/qa-lib.test.mjs`.
 
 ## One-time setup
 
