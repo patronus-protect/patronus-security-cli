@@ -569,7 +569,21 @@ mod tests {
         );
         std::fs::write(&binary, script).unwrap();
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
-        assert_eq!(discover_hooks(&binary, root.path(), true).unwrap().len(), 5);
+        // A test thread forking while the script was open for writing makes exec fail with
+        // ETXTBSY until that child execs; retry briefly instead of failing the run.
+        let mut attempts = 0;
+        let hooks = loop {
+            match discover_hooks(&binary, root.path(), true) {
+                Err(ScannerError::Integration(message))
+                    if message.contains("Text file busy") && attempts < 20 =>
+                {
+                    attempts += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                result => break result.unwrap(),
+            }
+        };
+        assert_eq!(hooks.len(), 5);
     }
 
     fn hook_response(count: usize) -> Vec<u8> {
