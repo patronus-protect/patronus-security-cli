@@ -1,0 +1,22 @@
+{
+  "name": "patronus-security",
+  "displayName": "Patronus Security",
+  "version": "0.1.2",
+  "description": "Patronus Runtime Protection for Cursor: checks prompts, shell commands, file reads, shell output and MCP results before the agent acts on them.",
+  "author": {
+    "name": "Patronus"
+  },
+  "homepage": "https://patronus.studio",
+  "repository": "https://github.com/patronus-protect/patronus-security-cli",
+  "license": "Apache-2.0",
+  "keywords": [
+    "security",
+    "prompt-injection",
+    "dlp",
+    "pii",
+    "hooks",
+    "mcp",
+    "shell"
+  ],
+  "logo": "assets/icon.png"
+}

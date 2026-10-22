@@ -141,6 +141,7 @@ pub fn detected_hosts() -> Vec<&'static str> {
         ("codex", "codex"),
         ("claude", "claude"),
         ("deepseek", "dsh"),
+        ("cursor", "cursor-agent"),
     ]
     .into_iter()
     .filter_map(|(host, bin)| {
@@ -253,7 +254,8 @@ fn complete_detection(outcome: &crate::ark::AnalysisOutcome) -> bool {
 pub fn prepare_models() -> Result<()> {
     let mut config = Config::load(None, None)?;
     if config.provider.mode == ProviderMode::Api {
-        return Ok(());
+        // Text scans run in the cloud; the shell command check stays local.
+        return crate::model_assets::prepare_shell(&mut config);
     }
     crate::model_assets::prepare(&mut config)
 }
@@ -262,6 +264,7 @@ pub fn install(host: &str, source: Option<PathBuf>) -> Result<()> {
         "claude" => IntegrationHost::Claude,
         "codex" => IntegrationHost::Codex,
         "deepseek" => IntegrationHost::Deepseek,
+        "cursor" => IntegrationHost::Cursor,
         _ => return Err(fail("Unknown plugin host")),
     };
     crate::integrations::execute(IntegrationArgs {
@@ -382,13 +385,11 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     configure(mode, "l3")?;
     println!("Analysis: L3");
     println!("\n  3 / 5  Models and performance\n  ─────────────────────────────────────────");
-    if mode != ProviderMode::Api {
-        println!(
-            "Models: {}",
-            crate::model_assets::default_directory()?.display()
-        );
-        prepare_models()?;
-    }
+    println!(
+        "Models: {}",
+        crate::model_assets::default_directory()?.display()
+    );
+    prepare_models()?;
     if mode == ProviderMode::Local {
         println!("Running a local L3 performance check with 256 tokens…");
         let elapsed = local_l3_performance_check()?;
@@ -430,7 +431,7 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     if agent_setup == AgentSetup::Cli {
         println!("No agent integration selected.");
     } else if hosts.is_empty() {
-        println!("No supported agent host was detected. You can rerun onboarding after installing Codex, Claude Code or dsh.");
+        println!("No supported agent host was detected. You can rerun onboarding after installing Codex, Claude Code, dsh or the Cursor CLI.");
     } else {
         println!("Detected agent hosts: {}", hosts.join(", "));
         let answer = ask(
@@ -472,7 +473,12 @@ pub fn start_job(action: &str, host: Option<String>, source: Option<PathBuf>) ->
     if !["models", "check", "install"].contains(&action) {
         return Err(fail("Unknown setup action"));
     }
-    if action == "install" && !matches!(host.as_deref(), Some("claude" | "codex" | "deepseek")) {
+    if action == "install"
+        && !matches!(
+            host.as_deref(),
+            Some("claude" | "codex" | "deepseek" | "cursor")
+        )
+    {
         return Err(fail("Select a plugin host"));
     }
     let mut state = job().lock().map_err(|_| fail("Setup state unavailable"))?;

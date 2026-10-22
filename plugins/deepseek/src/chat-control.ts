@@ -22,8 +22,8 @@ export async function controlChat(host: PluginHost, session: string, action: Cha
     }) } catch { throw Error("Patronus could not update this chat. Check the installed scanner and shared settings.") }
   }
   const settings = readPluginSettings()
-  const paused = !settings.enabled || settings.disabled_chats[host].includes(session)
-  const enabled = Object.entries(settings.hooks).filter(([, active]) => active).map(([name]) => name)
+  const paused = !settings.enabled || (settings.disabled_chats[host] ?? []).includes(session)
+  const enabled = Object.entries({ shell_command: true, ...settings.hooks }).filter(([, active]) => active).map(([name]) => name)
   if (paused) return 'Patronus is OFF for this chat. Future input and results will not be scanned. Send "patronus on" to resume.'
   if (enabled.length === 0) return 'Patronus has no active hooks. Enable hooks in the shared plugin settings.'
   return `Patronus is ON for future text in this chat. Active hooks: ${enabled.join(', ')}. Earlier result history is not scanned retroactively. Send "patronus off" to pause.`

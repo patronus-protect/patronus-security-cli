@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-skill'
 import type { LocalClientConfig, RuntimeClient } from './client.ts'
 import { registerResponseGate, type Gate } from './response.ts'
 import { registerPromptGate } from './prompt.ts'
+import { checkCommand } from './command.ts'
 import { registerTools } from './tools.ts'
 import { boundedMilliseconds } from './wait.ts'
 import { SessionState } from './sessions.ts'
@@ -65,7 +66,14 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   gate.isOwnTool = registerTools(ctx, async exec => (await gate.runtimeFor(exec)).client, gate.sessionFor, scanner, events)
   // Mark Patronus-owned executions before dispatch so a registry change during
   // the call cannot make their trusted result look like an external result.
-  ctx.on('tools/pre-execute', (exec, next) => { gate.isOwnTool(exec); return next() })
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    gate.isOwnTool(exec)
+    const held = await checkCommand(exec, gate, exec => {
+      const session = sessionId(exec)
+      return hookEnabled(readPluginSettings(), 'deepseek', session, 'shell_command')
+    })
+    return held ?? next()
+  })
   ctx.skills.register({
     name: 'patronus-static-scan',
     description: 'Use only when the user explicitly requests a static file, directory, repository, URL or MCP audit.',
@@ -76,7 +84,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     name: 'patronus-security',
     description: 'Use when a tool result is withheld for a Patronus security scan.',
     source: 'runtime',
-    content: 'Follow the instructions in a Patronus receipt. A pending response means the source tool already executed; continue independent work and check its scan_id later. Only approved responses expose originals. Dangerous responses expose only a redacted view, when available. Failed or incomplete scans never grant approval. Do not repeat an action merely to recover a withheld result. Only when the task needs specific masked personal data, call patronus_read_redacted with scan_id and reveal_pii, then patronus_reveal_pii with the returned grant_id; the user decides. If they deny, continue with the masked result.',
+    content: 'Follow the instructions in a Patronus receipt. Shell commands are checked before they run: a high-risk command is denied with its reason; do not rephrase, split or encode it to get past the check. A medium-risk command runs only after the user approves it. A pending response means the source tool already executed; continue independent work and check its scan_id later. Only approved responses expose originals. Dangerous responses expose only a redacted view, when available. Failed or incomplete scans never grant approval. Do not repeat an action merely to recover a withheld result. Only when the task needs specific masked personal data, call patronus_read_redacted with scan_id and reveal_pii, then patronus_reveal_pii with the returned grant_id; the user decides. If they deny, continue with the masked result.',
   })
   registerResponseGate(ctx, gate, config.responseWaitMs)
   registerPromptGate(ctx, sessions, controller.signal, events, config.requestTimeoutMs, session => hookEnabled(readPluginSettings(), 'deepseek', session, 'user_input'), { executable: config.executable, paused: session => { const policy = readPluginSettings(); return !policy.enabled || policy.disabled_chats.deepseek.includes(session) } }, degradedSessions)

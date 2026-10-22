@@ -135,3 +135,20 @@ fn frozen_config_preserves_boolean_rules_with_secret_names() {
     );
     restored.validate().unwrap();
 }
+
+#[test]
+fn profiles_saved_before_an_ark_update_get_new_rules_at_their_default() {
+    let config: Config = toml::from_str(DEFAULTS).unwrap();
+    let mut saved = Profile::current(&config, "tool_result");
+    // A profile from before Ark 0.1.10 does not know the governance rules.
+    saved
+        .l1_rules
+        .retain(|id, _| !id.starts_with("ark.injection.governance."));
+    assert!(saved.validate().is_err());
+    saved.add_missing_rules();
+    saved.validate().unwrap();
+    assert!(saved.l1_rules["ark.injection.governance.direct_admin_grant"]);
+    // Unknown rules still fail: migration only adds what the catalog defines.
+    saved.l1_rules.insert("ark.injection.unknown".into(), true);
+    assert!(saved.validate().is_err());
+}

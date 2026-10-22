@@ -13,7 +13,7 @@ import { PII_TYPES, type PiiType, type TextPayload } from '../../deepseek/src/pr
 import { boundedMilliseconds } from '../../deepseek/src/wait.ts'
 
 export interface BrokerConfig {
-  host: 'codex' | 'claude'
+  host: 'codex' | 'claude' | 'cursor'
   sessionId: string
   cwd: string
   stateDir?: string
@@ -33,6 +33,7 @@ export type BrokerRequest =
   /** Reaches the broker only after the host allowed the tool call. */
   | { method: 'reveal'; scanId: string; grantId: string }
   | { method: 'static'; kind: 'repo' | 'directory' | 'file' | 'url' | 'mcp'; path: string; server?: string }
+  | { method: 'command'; tool: string; callId: string; command: string }
   | { method: 'close' }
 
 export const MAX_PAYLOAD = 10 * 1024 * 1024
@@ -91,6 +92,10 @@ export function validRequest(value: unknown): value is BrokerRequest {
       if (value.server !== undefined && (value.kind !== 'mcp' || !text(value.server, 256))) return false
       if (typeof value.kind !== 'string' || !['repo', 'directory', 'file', 'url', 'mcp'].includes(value.kind) || !text(value.path, 8192) || (!(value.kind === 'url' || value.kind === 'mcp' && value.path.startsWith('https://')) && !isAbsolute(value.path))) return false
       break
+    case 'command':
+      keys = ['method', 'tool', 'callId', 'command']
+      if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== 'string' || Buffer.byteLength(value.command) > 64 * 1024) return false
+      break
     case 'close': keys = ['method']; break
     default: return false
   }
@@ -130,7 +135,7 @@ export async function readPrivate(path: string, limit = 16_384, maxLinks = 1): P
 /** Internal shared preparation. No scanner or candidate file content is read here. */
 async function prepareSession(input: BrokerConfig) {
   if (!['darwin', 'linux'].includes(process.platform)) throw brokerFailure()
-  if (!record(input) || !['codex', 'claude'].includes(input.host) || !text(input.sessionId, 1024) || !text(input.cwd, 4096) || !isAbsolute(input.cwd) ||
+  if (!record(input) || !['codex', 'claude', 'cursor'].includes(input.host) || !text(input.sessionId, 1024) || !text(input.cwd, 4096) || !isAbsolute(input.cwd) ||
       Object.keys(input).some(key => !['host', 'sessionId', 'cwd', 'stateDir', 'executable', 'configPath', 'responseWaitMs', 'requestTimeoutMs'].includes(key))) throw brokerFailure()
   for (const value of [input.stateDir, input.executable, input.configPath]) if (value !== undefined && (!text(value, 4096) || !isAbsolute(value))) throw brokerFailure()
   if (input.responseWaitMs !== undefined) boundedMilliseconds(input.responseWaitMs, 'responseWaitMs')

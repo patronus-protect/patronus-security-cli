@@ -22,3 +22,5 @@ For an explicit repository, directory, or file scan, use `patronus_scan` with `k
 If Patronus reports degraded protection, identify the affected content as unverified and continue only under that limitation. Do not describe failed or unavailable scanning as approval.
 
 This skill explains the native receipt workflow. Deterministic enforcement comes from the installed hooks and shared local runtime, within the supported host/tool scope; the skill itself does not protect arbitrary tools or connectors.
+
+Patronus checks each Bash and PowerShell command line before it runs. A risky command (for example a package install, a recursive delete or a network upload) asks the user first. If the user declines, do not rephrase, split or encode it to get past the check; explain what it would do and let the user decide to run it themselves.

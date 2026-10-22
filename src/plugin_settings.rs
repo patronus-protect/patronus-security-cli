@@ -12,6 +12,8 @@ pub struct PluginSettings {
     pub schema_version: u32,
     pub enabled: bool,
     pub hooks: Hooks,
+    /// `cursor` is optional and omitted while empty, so plugin bundles released before
+    /// Cursor support keep accepting settings this version writes.
     pub disabled_chats: BTreeMap<String, Vec<String>>,
 }
 
@@ -21,6 +23,18 @@ pub struct Hooks {
     pub user_input: bool,
     pub tool_result: bool,
     pub mcp_result: bool,
+    /// Pre-execution shell command check. Optional and omitted while on, so plugin bundles
+    /// released before it keep accepting settings this version writes.
+    #[serde(default = "enabled", skip_serializing_if = "is_enabled")]
+    pub shell_command: bool,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_enabled(value: &bool) -> bool {
+    *value
 }
 
 impl Default for PluginSettings {
@@ -32,6 +46,7 @@ impl Default for PluginSettings {
                 user_input: true,
                 tool_result: true,
                 mcp_result: true,
+                shell_command: true,
             },
             disabled_chats: ["codex", "claude", "deepseek"]
                 .into_iter()
@@ -60,10 +75,13 @@ impl PluginSettings {
 
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
-            || self.disabled_chats.len() != 3
             || ["codex", "claude", "deepseek"]
                 .iter()
                 .any(|host| !self.disabled_chats.contains_key(*host))
+            || self
+                .disabled_chats
+                .keys()
+                .any(|host| !["codex", "claude", "deepseek", "cursor"].contains(&host.as_str()))
             || self
                 .disabled_chats
                 .values()
@@ -90,7 +108,16 @@ impl PluginSettings {
         }
         let result = (|| {
             let mut file = options.open(&staging).at(&staging)?;
-            let bytes = serde_json::to_vec_pretty(self).map_err(|_| invalid("invalid settings"))?;
+            let mut stored = self.clone();
+            if stored
+                .disabled_chats
+                .get("cursor")
+                .is_some_and(Vec::is_empty)
+            {
+                stored.disabled_chats.remove("cursor");
+            }
+            let bytes =
+                serde_json::to_vec_pretty(&stored).map_err(|_| invalid("invalid settings"))?;
             file.write_all(&bytes).at(&staging)?;
             file.sync_all().at(&staging)?;
             crate::atomic_file::replace(&staging, path).at(path)
@@ -164,16 +191,21 @@ pub fn execute(command: crate::cli::PluginCommand) -> Result<()> {
             "user_input" => settings.hooks.user_input = enabled,
             "tool_result" => settings.hooks.tool_result = enabled,
             "mcp_result" => settings.hooks.mcp_result = enabled,
+            "shell_command" => settings.hooks.shell_command = enabled,
             _ => return Err(invalid("unknown hook")),
         },
         PluginCommand::Pause { host, chat } => {
             if !valid_chat(&chat) {
                 return Err(invalid("invalid chat ID"));
             }
-            let ids = settings
-                .disabled_chats
-                .get_mut(&host)
-                .ok_or_else(|| invalid("unknown host"))?;
+            let ids = if host == "cursor" {
+                settings.disabled_chats.entry(host).or_default()
+            } else {
+                settings
+                    .disabled_chats
+                    .get_mut(&host)
+                    .ok_or_else(|| invalid("unknown host"))?
+            };
             if !ids.contains(&chat) {
                 ids.push(chat);
             }
@@ -182,11 +214,11 @@ pub fn execute(command: crate::cli::PluginCommand) -> Result<()> {
             if !valid_chat(&chat) {
                 return Err(invalid("invalid chat ID"));
             }
-            settings
-                .disabled_chats
-                .get_mut(&host)
-                .ok_or_else(|| invalid("unknown host"))?
-                .retain(|id| id != &chat);
+            if let Some(ids) = settings.disabled_chats.get_mut(&host) {
+                ids.retain(|id| id != &chat);
+            } else if host != "cursor" {
+                return Err(invalid("unknown host"));
+            }
         }
     }
     settings.write(&path)?;

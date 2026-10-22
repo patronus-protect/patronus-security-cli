@@ -34,7 +34,7 @@ Start a new Codex task after installation. Try:
 | --- | --- |
 | `SessionStart` | Validates lifecycle input and reads protection settings so lifecycle failures can be reported. The scanner starts lazily with the first protected event; startup is not proof of an active scan. |
 | `UserPromptSubmit` | Checks user-authored text before model delivery to catch sensitive data and warn about pasted instructions. Also recognizes exact chat protection commands. User-prompt PII detection is off by default. |
-| `PreToolUse` | Attributes Patronus receipt-status, redaction and explicit scan operations to the current chat because the Codex MCP process has no chat identity, and arms a selective PII disclosure before Codex's approval prompt. Ordinary tool requests are not scanned. |
+| `PreToolUse` | Attributes Patronus receipt-status, redaction and explicit scan operations to the current chat because the Codex MCP process has no chat identity, and arms a selective PII disclosure before Codex's approval prompt. Checks each `Bash` command line before it runs: high risk is blocked with a hint; for medium risk (for example `npm install`, `rm -rf node_modules`) Codex cannot show a hook approval dialog, so Patronus holds the command and gives you a one-time `patronus_allow <token>`. Send that token in your next message to run exactly that command once. Other tool requests are not scanned. |
 | `PostToolUse` | Gates raw tool-result text before model delivery to enforce findings without rerunning the tool. MCP text uses the separate MCP-result policy; Patronus receipts are not rescanned. Delivers an approved selective PII disclosure. |
 | `Stop` | Releases the turn's private broker runtime state. Codex emits this event at turn end, not only when the chat closes. |
 

@@ -340,5 +340,113 @@
     "category": "prompt_injection",
     "description": "Decode a Unicode-escaped instruction override or prompt disclosure",
     "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.cross_tool_next_request",
+    "category": "prompt_injection",
+    "description": "A tool result overrides the next user request and redirects execution to another tool",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.nested_system_override",
+    "category": "prompt_injection",
+    "description": "Nested system control tokens contain an instruction override and enable a jailbreak mode",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.german_policy_replacement",
+    "category": "prompt_injection",
+    "description": "German directive discards the current policy and installs new rules",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.identity_state_override",
+    "category": "prompt_injection",
+    "description": "A memory update claims altered system state and privileged identity",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.encrypted_swarm_override",
+    "category": "prompt_injection",
+    "description": "An encrypted coordination marker initiates a swarm override",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.refund_control_bypass",
+    "category": "prompt_injection",
+    "description": "A claimed manager instruction bypasses receipt controls for a manual refund",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.executive_password_reset_redirect",
+    "category": "prompt_injection",
+    "description": "An executive password-reset link is redirected to an alternative email address",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.forged_verified_allow",
+    "category": "prompt_injection",
+    "description": "A forged verified marker grants persistent external API access",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.purpose_and_safety_override",
+    "category": "prompt_injection",
+    "description": "A temporally activated directive discards the agent's original purpose",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.autonomous_approval_bypass",
+    "category": "prompt_injection",
+    "description": "An indefinite background task bypasses human approval for future actions",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.direct_authority_discard",
+    "category": "prompt_injection",
+    "description": "A standalone imperative discards an explicitly prior instruction authority",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.authority_nullification",
+    "category": "prompt_injection",
+    "description": "A standalone directive explicitly voids prior instruction authority",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.unrestricted_mode_activation",
+    "category": "prompt_injection",
+    "description": "A direct activation command installs an unrestricted persona or response mode",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.raw_system_role_boundary",
+    "category": "prompt_injection",
+    "description": "Raw chat control tokens inject a system-role segment",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.embedded_new_task_boundary",
+    "category": "prompt_injection",
+    "description": "A markdown authority boundary installs a new task and attacker-chosen output constraint",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.hypothetical_unrestricted_mode",
+    "category": "prompt_injection",
+    "description": "A standalone hypothetical directly grants the assistant unrestricted behavior",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.direct_admin_grant",
+    "category": "prompt_injection",
+    "description": "A standalone second-person statement grants full administrator access",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.direct_privileged_tool_call",
+    "category": "prompt_injection",
+    "description": "A standalone directive requires immediate invocation of a privileged execution tool",
+    "default_enabled": true
   }
 ]

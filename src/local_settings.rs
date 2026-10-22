@@ -50,6 +50,9 @@ pub fn policy(command: PolicyCommand) -> Result<i32> {
         }
         PolicyCommand::Import { path } => {
             config.plugin_policies = read(&path)?;
+            for profile in config.plugin_policies.values_mut() {
+                profile.add_missing_rules();
+            }
             save(&config)?;
         }
         PolicyCommand::Check { path } => {

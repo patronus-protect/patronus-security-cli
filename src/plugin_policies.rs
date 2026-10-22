@@ -3,7 +3,7 @@ use crate::{config::Config, policy::rules};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const HOSTS: [&str; 3] = ["claude", "codex", "deepseek"];
+pub const HOSTS: [&str; 4] = ["claude", "codex", "deepseek", "cursor"];
 pub const SURFACES: [&str; 3] = ["user_input", "tool_result", "mcp_result"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +48,14 @@ impl Profile {
         }
         Ok(())
     }
+    /// Profiles saved before an Ark update lack rules the new catalog added. They get the rule's
+    /// default instead of failing validation; unknown rule IDs still fail.
+    pub fn add_missing_rules(&mut self) {
+        for rule in rules() {
+            self.l1_rules.entry(rule.id).or_insert(rule.default_enabled);
+        }
+    }
+
     /// Seed previously unconfigured scopes from the user's current settings.
     pub fn current(config: &Config, surface: &str) -> Self {
         let category_enabled = |category: &str| {

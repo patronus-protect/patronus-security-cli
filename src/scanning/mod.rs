@@ -10,4 +10,5 @@ pub mod policy;
 pub mod progress;
 pub mod remote_scan;
 pub mod report;
+pub mod shell_check;
 pub mod target;

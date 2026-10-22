@@ -18,8 +18,8 @@ pub use dashboard::server as dashboard_server;
 pub use distribution::{maintenance, model_assets, onboarding, releases, support};
 pub use scanning::{
     analysis_config, api_client, ark, chunk, content, discovery, inference, output, policy,
-    progress, remote_scan, report, target,
+    progress, remote_scan, report, shell_check, target,
 };
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const ARK_VERSION: &str = "0.1.8";
+pub const ARK_VERSION: &str = "0.1.10";

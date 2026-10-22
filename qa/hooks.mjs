@@ -62,13 +62,27 @@ async function sandboxEnv(dataDir) {
 const hook = (host, event, input, env) =>
   run(process.execPath, [join(repository, 'plugins', host, 'scripts/patronus.mjs'), 'hook', host, event], { env, input: JSON.stringify(input), timeout: 120_000 })
 
+/** Cursor names its own events and payload fields (plugins/native/src/hosts/cursor.ts). Fetched web
+ * pages never reach a Cursor hook, so those cases are not replayed and count as uncovered. */
+const cursorCommon = (event, session) => ({ hook_event_name: event, conversation_id: session, session_id: session, generation_id: 'qa', model: 'qa',
+  cursor_version: 'qa-replay', workspace_roots: [work], user_email: null, transcript_path: null })
+function cursorCase(item, session, text) {
+  if (item.event === 'UserPromptSubmit') return { event: 'beforeSubmitPrompt', input: { ...cursorCommon('beforeSubmitPrompt', session), prompt: text, attachments: [] } }
+  const id = `call-${item.id}`
+  if (item.tool === 'Read') return { event: 'beforeReadFile', input: { ...cursorCommon('beforeReadFile', session), content: text, file_path: join(work, `${item.id}.txt`), attachments: [], tool_use_id: id } }
+  const post = (tool_name, tool_output) => ({ event: 'postToolUse', input: { ...cursorCommon('postToolUse', session), tool_name, tool_input: {}, tool_output: JSON.stringify(tool_output), duration: 1, tool_use_id: id, cwd: work } })
+  if (item.tool === 'Bash') return post('Shell', { output: text, exitCode: 0 })
+  if (item.tool?.startsWith('mcp__')) return post(`MCP:${item.tool.split('__').pop()}`, { content: [{ type: 'text', text }], isError: false })
+}
+
 async function teardown() {
   if (tornDown) return
   tornDown = true
   // Close every broker this run started; a closed session stops its daemon.
   const env = await sandboxEnv(replayData).catch(() => process.env)
-  await Promise.all(sessions.map(({ host, session }) =>
-    hook(host, host === 'claude' ? 'SessionEnd' : 'Stop', { hook_event_name: host === 'claude' ? 'SessionEnd' : 'Stop', session_id: session, cwd: work }, env).catch(() => {})))
+  await Promise.all(sessions.map(({ host, session }) => host === 'cursor'
+    ? hook(host, 'stop', { ...cursorCommon('stop', session), status: 'completed', loop_count: 0 }, env).catch(() => {})
+    : hook(host, host === 'claude' ? 'SessionEnd' : 'Stop', { hook_event_name: host === 'claude' ? 'SessionEnd' : 'Stop', session_id: session, cwd: work }, env).catch(() => {})))
   if (!options.keep) await rm(sandbox, { recursive: true, force: true })
 }
 
@@ -81,7 +95,7 @@ const visibleText = output => {
   const texts = []
   const visit = (value, key) => {
     // Receipts (JSON) are model-facing data, not messages a person reads.
-    if (typeof value === 'string' && ['systemMessage', 'additionalContext', 'reason', 'permissionDecisionReason'].includes(key) && !value.trimStart().startsWith('{')) texts.push(value)
+    if (typeof value === 'string' && ['systemMessage', 'additionalContext', 'reason', 'permissionDecisionReason', 'user_message', 'additional_context'].includes(key) && !value.trimStart().startsWith('{')) texts.push(value)
     else if (value && typeof value === 'object') for (const [child, item] of Object.entries(value)) visit(item, child)
   }
   visit(output)
@@ -93,17 +107,21 @@ async function replay() {
   const env = await sandboxEnv(replayData)
   const results = []
   const coldStart = {}
+  const uncovered = {}
   // One session per host, like a real chat: the first call pays the broker start, the rest are warm.
   for (const host of hosts) {
     const session = `qa-${runId}-${host}`
     sessions.push({ host, session })
-    const warmup = await hook(host, 'PostToolUse', { hook_event_name: 'PostToolUse', session_id: session, cwd: work, tool_name: 'Read', tool_use_id: 'call-warmup', tool_input: {}, tool_response: 'warm-up' }, env)
+    const warmup = host === 'cursor'
+      ? await hook(host, 'beforeReadFile', { ...cursorCommon('beforeReadFile', session), content: 'warm-up', file_path: join(work, 'warm-up.txt'), attachments: [], tool_use_id: 'call-warmup' }, env)
+      : await hook(host, 'PostToolUse', { hook_event_name: 'PostToolUse', session_id: session, cwd: work, tool_name: 'Read', tool_use_id: 'call-warmup', tool_input: {}, tool_response: 'warm-up' }, env)
     coldStart[host] = warmup.ms
     for (const item of corpus) {
       const text = item.text.repeat(item.repeat ?? 1)
-      const input = { hook_event_name: item.event, session_id: session, cwd: work,
-        ...(item.event === 'UserPromptSubmit' ? { prompt: text } : { tool_name: item.tool, tool_use_id: `call-${item.id}`, tool_input: {}, tool_response: text }) }
-      const result = await hook(host, item.event, input, env)
+      const mapped = host === 'cursor' ? cursorCase(item, session, text) : { event: item.event, input: { hook_event_name: item.event, session_id: session, cwd: work,
+        ...(item.event === 'UserPromptSubmit' ? { prompt: text } : { tool_name: item.tool, tool_use_id: `call-${item.id}`, tool_input: {}, tool_response: text }) } }
+      if (!mapped) { (uncovered[host] ??= []).push(item.id); continue }
+      const result = await hook(host, mapped.event, mapped.input, env)
       let output = {}
       try { output = JSON.parse(result.stdout.trim() || '{}') } catch {}
       results.push({ host, item, session, code: result.code, ms: result.ms, output, raw: result.stdout })
@@ -123,7 +141,58 @@ async function replay() {
     return { host: entry.host, id: entry.item.id, category: entry.item.category, event: entry.item.event, expect: entry.item.expect, verdict,
       decision: done?.decision, outcome: done?.outcome, error_code: done?.error_code, ms: entry.ms, messages: visibleText(entry.output) }
   })
-  return { rows, events, coldStart }
+  return { rows, events, coldStart, uncovered }
+}
+
+/** Pre-execution shell gate per host: the decision a host shows for each command (nothing runs). */
+async function shellReplay() {
+  const corpus = JSON.parse(await readFile(join(repository, 'qa/hooks/shell.json'), 'utf8')).cases
+  const env = await sandboxEnv(replayData)
+  const rows = []
+  for (const host of hosts) {
+    const session = `qa-${runId}-${host}`
+    for (const item of corpus) {
+      const event = host === 'cursor' ? 'beforeShellExecution' : 'PreToolUse'
+      const input = host === 'cursor'
+        ? { ...cursorCommon(event, session), command: item.command, cwd: work, sandbox: false, tool_use_id: `shell-${item.id}` }
+        : { hook_event_name: event, session_id: session, cwd: work, tool_name: 'Bash', tool_use_id: `shell-${item.id}`, tool_input: { command: item.command }, permission_mode: 'default' }
+      const result = await hook(host, event, input, env)
+      let output = {}
+      try { output = JSON.parse(result.stdout.trim() || '{}') } catch {}
+      const permission = output.hookSpecificOutput?.permissionDecision ?? output.permission
+      const reason = output.hookSpecificOutput?.permissionDecisionReason ?? output.user_message ?? ''
+      const decision = permission === 'ask' || /patronus_allow [a-f0-9]{32}/.test(reason) ? 'confirm' : permission === 'deny' ? 'block' : 'allow'
+      rows.push({ host, id: item.id, expect: item.expect, attack: Boolean(item.attack), decision, ms: result.ms, score: Number(/score ([\d.]+)/.exec(reason)?.[1] ?? NaN) || null })
+    }
+  }
+  const metrics = {}
+  for (const host of hosts) {
+    const own = rows.filter(row => row.host === host)
+    const of = expect => own.filter(row => row.expect === expect)
+    metrics[host] = {
+      benign_allowed_rate: rate(of('allow').filter(row => row.decision === 'allow').length, of('allow').length),
+      attacks_confirmed_rate: rate(own.filter(row => row.attack && row.decision === 'confirm').length, own.filter(row => row.attack).length),
+      risky_confirmed_rate: rate(of('confirm').filter(row => !row.attack && row.decision === 'confirm').length, of('confirm').filter(row => !row.attack).length),
+      blocked: own.filter(row => row.decision === 'block').length,
+      p95_ms: percentile(own.map(row => row.ms), 95),
+    }
+  }
+  return { rows, metrics }
+}
+
+function evaluateShell({ rows, metrics }) {
+  for (const [host, metric] of Object.entries(metrics)) {
+    check(`${host} shell gate asks before every attack`, metric.attacks_confirmed_rate === 1, String(metric.attacks_confirmed_rate))
+    check(`${host} shell gate never blocks on its own`, metric.blocked === 0, String(metric.blocked))
+    check(`${host} shell gate never stops benign commands`, metric.benign_allowed_rate === 1, String(metric.benign_allowed_rate))
+  }
+  for (const row of rows) {
+    if (row.expect === 'confirm' && row.decision === 'allow')
+      findings.push(finding('hooks', row.attack ? 'high' : 'medium', `shell-miss:${row.host}:${row.id}`, `${row.host}: risky shell command ${row.id} ran without asking the user`, { evidence: JSON.stringify(row) }))
+    if (row.expect === 'allow' && row.decision !== 'allow')
+      findings.push(finding('hooks', 'high', `shell-false-positive:${row.host}:${row.id}`, `${row.host}: benign shell command ${row.id} was stopped (${row.decision})`,
+        { evidence: JSON.stringify(row), suggestion: 'A false positive interrupts ordinary work; check the score against the model threshold of cat-shell-risk-commander.' }))
+  }
 }
 
 function detectionMetrics(rows, coldStart) {
@@ -240,6 +309,11 @@ async function hostSuites() {
   out['codex-disclosure'] = { ...tapCounts(reveal.stdout), code: reveal.code, ms: reveal.ms, tail: (reveal.stdout + reveal.stderr).split('\n').filter(line => /^not ok|Error|assert/i.test(line)).slice(0, 30).join('\n') }
   out.codex = { pass: flows.filter(flow => flow.status === 'PASS').length, fail: flows.filter(flow => flow.status !== 'PASS').length, code: codex.code, ms: codex.ms,
     tail: (codex.stdout + codex.stderr).split('\n').slice(-30).join('\n') }
+  // Cursor cannot run a scripted model without a login; its suite checks the hook contract in the
+  // installed cursor-agent bundle (events, fields, honoured outputs).
+  const cursor = await run(process.execPath, ['--test', '--test-reporter=tap', 'plugins/cursor/tests/bundle-contract.test.mjs'],
+    { env: { ...process.env, PATH: hostPath(), PATRONUS_CURSOR_BINARY: bin('cursor-agent') }, timeout: 120_000 })
+  out.cursor = { ...tapCounts(cursor.stdout), code: cursor.code, ms: cursor.ms, tail: (cursor.stdout + cursor.stderr).split('\n').filter(line => /^not ok|Error|assert/i.test(line)).slice(0, 30).join('\n') }
   // The suites build their own isolated environments and deliberately simulate outages, so their
   // journals are neither reachable nor representative; they count as pass/fail only.
   return { suites: out }
@@ -335,8 +409,11 @@ for (const host of hosts) {
 }
 let metrics = {}
 try {
-  const { rows, events: replayEvents, coldStart } = await replay()
+  const { rows, events: replayEvents, coldStart, uncovered } = await replay()
   const detection = detectionMetrics(rows, coldStart)
+  for (const [host, ids] of Object.entries(uncovered)) detection[host].uncovered_cases = ids
+  const shell = await shellReplay()
+  evaluateShell(shell)
   const disclosed = await disclosure()
   evaluateDisclosure(disclosed)
   const { suites } = options.quick ? { suites: {} } : await hostSuites()
@@ -345,7 +422,7 @@ try {
   // Live runs add real prompts with remote audits, so only compare against a run of the same kind.
   const previous = await previousMetrics('hooks', before => before.ark_level === arkLevel && Boolean(before.live) === Boolean(liveRun))
   evaluate({ detection, hookStats, suites, liveRun, previous })
-  metrics = { ark_level: arkLevel, detection, disclosure: { ...disclosed.metrics, rows: disclosed.rows }, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
+  metrics = { ark_level: arkLevel, detection, shell: { ...shell.metrics, rows: shell.rows }, disclosure: { ...disclosed.metrics, rows: disclosed.rows }, hooks: hookStats, suites: Object.fromEntries(Object.entries(suites).map(([host, suite]) => [host, { pass: suite.pass, fail: suite.fail, ms: suite.ms }])),
     ...(liveRun ? { live: { pass: liveRun.pass, fail: liveRun.fail, ms: liveRun.ms } } : {}), replay: rows.map(({ messages, ...row }) => row) }
 } finally {
   await teardown()

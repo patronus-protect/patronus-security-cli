@@ -38,8 +38,10 @@ test('successful masked retrieval tells every native host to continue with the a
 test('ordinary tool requests are outside the runtime text contract for every host', async () => {
   const calls: unknown[] = []
   const rpc = async (config: unknown, request: unknown) => { calls.push({ config, request }); return { scan_id: 'scan-731', status: 'approved' } }
-  assert.deepEqual(await handleHook('codex', 'PreToolUse', input('PreToolUse'), {}, rpc), {})
-  assert.deepEqual(await handleHook('claude', 'PreToolUse', input('PreToolUse'), {}, rpc), {})
+  // Only shell command lines are checked before a tool runs (shell-command.test.ts).
+  const write = input('PreToolUse', { tool_name: 'Write', tool_input: { file_path: '/private/tmp/x', content: 'text' } })
+  assert.deepEqual(await handleHook('codex', 'PreToolUse', write, {}, rpc), {})
+  assert.deepEqual(await handleHook('claude', 'PreToolUse', write, {}, rpc), {})
   assert.equal(calls.length, 0)
 })
 

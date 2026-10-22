@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor beforeSubmitPrompt",
+        "timeout": 90
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor beforeShellExecution",
+        "timeout": 30
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor beforeReadFile",
+        "timeout": 90
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor postToolUse",
+        "timeout": 90
+      }
+    ],
+    "stop": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor stop",
+        "timeout": 30
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor sessionEnd",
+        "timeout": 30
+      }
+    ]
+  }
+}

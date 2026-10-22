@@ -19,8 +19,10 @@
     {
       "id": "cursor",
       "name": "Cursor (IDE agent and cursor-agent CLI)",
-      "status": "planned",
-      "notes": "Highest priority. Check the hooks system (shell, MCP, file read/edit events) and whether the headless cursor-agent CLI runs the same hooks so a real-binary test is possible."
+      "status": "pr_open",
+      "notes": "Partial: prompts blocked (beforeSubmitPrompt), shell commands checked before they run (beforeShellExecution: block or ask), Read-tool file reads withheld (beforeReadFile), MCP results replaced (updated_mcp_tool_output); shell output warned only; Grep, Fetch, MCP resources, lints, listings (metadata only), server-side search and attached context (rules, AGENTS.md, images) unscanned; no PII disclosure dialog. Real agent loop needs a Cursor login, so it is unverified; hook contract checked against the cursor-agent 2026.10.14 bundle (re-verified 2026-10-20).",
+      "pr": "https://github.com/patronus-protect/patronus-security-cli/pull/50",
+      "protection": "partial"
     },
     {
       "id": "copilot",
