@@ -1,7 +1,7 @@
 {
   "name": "patronus-security",
   "displayName": "Patronus Security",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Patronus Runtime Protection for Cursor: checks prompts, shell commands, file reads, shell output and MCP results before the agent acts on them.",
   "author": {
     "name": "Patronus"

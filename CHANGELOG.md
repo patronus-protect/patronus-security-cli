@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.3 - 2026-10-23
+
 - Add a hosted API plugin with account OAuth guidance and explicit scans for selected text, documents, URLs and MCP metadata. Its package contains no local runtime hooks or scanner binaries.
 - Add a shared interactive Patronus home for native and hosted MCP connections, with scan results, bounded polling, account navigation and optional local setup guidance.
 - Add `patronus-security-scanner probe` and in-session runtime checks that distinguish hook scan coverage from host delivery and withholding.

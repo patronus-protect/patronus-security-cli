@@ -1,6 +1,6 @@
 {
   "name": "patronus-security",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Authenticated Patronus API security scans for selected content, URLs and MCP servers.",
   "author": {
     "name": "Patronus",
