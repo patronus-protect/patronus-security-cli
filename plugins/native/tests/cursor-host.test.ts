@@ -83,7 +83,7 @@ test('Patronus\' own plugin files are trusted, never scanned', async () => {
 })
 
 test('a prompt with sensitive data is blocked before it is sent; injection in it only warns', async () => {
-  const secret = 'deploy with AKIAIOSFODNN7EXAMPLE'
+  const secret = 'deploy with AKIAQ7TZ4MXK2B3HL9VD'
   const output = await handleHook('beforeSubmitPrompt', prompt(secret), async () => ({ scan_id: 'a'.repeat(32), status: 'dangerous', findings: [{ category: 'dlp' }] }))
   assert.equal(output.continue, false)
   assert.doesNotMatch(output.user_message, /AKIA/)

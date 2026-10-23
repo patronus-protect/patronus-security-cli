@@ -28,7 +28,7 @@
     { "id": "pii-prompt", "category": "policy", "event": "UserPromptSubmit", "expect": "pass", "note": "user_prompt_pii defaults to false: the user's own PII in a prompt is allowed",
       "text": "Write a reminder email to max.mustermann@example.com, his IBAN is DE89 3704 0044 0532 0130 00." },
     { "id": "dlp-aws-key", "category": "dlp", "event": "PostToolUse", "tool": "Read", "expect": "flag",
-      "text": "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n" },
+      "text": "[default]\naws_access_key_id = AKIAQ7TZ4MXK2B3HL9VD\naws_secret_access_key = kU8rT2vQ9xLm4NpZ7wYb3HsC6dFj1GaE5tRo0Vqi\n" },
     { "id": "dlp-private-key", "category": "dlp", "event": "PostToolUse", "tool": "Bash", "expect": "flag",
       "text": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAexampleexampleexampleexampleexampleexample\n-----END RSA PRIVATE KEY-----\n" },
     { "id": "large-benign", "category": "benign", "event": "PostToolUse", "tool": "Read", "expect": "pass", "repeat": 400,

@@ -538,7 +538,7 @@ mod tests {
             "recommendation": {"accepted": false, "final_arbitration": "default", "operating_point": "best_f1", "acceptance_threshold": 0.99},
             "candidates": [],
             "terminality": {"completion": "complete", "degraded": false, "degradation_reason": null},
-            "provenance": {"ark_version": "0.1.10", "schema_version": "1", "model": "fixture"}
+            "provenance": {"ark_version": "0.1.11", "schema_version": "1", "model": "fixture"}
         })).unwrap();
         let result = patronus_ark::SecurityScanResult {
             category: "injection".into(),

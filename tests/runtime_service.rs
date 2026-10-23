@@ -150,7 +150,7 @@ fn user_prompts_skip_pii_but_responses_and_other_categories_remain_protected() {
         ),
         (
             "request",
-            json!("AWS access key: AKIAIOSFODNN7EXAMPLE"),
+            json!("AWS access key: AKIAQ7TZ4MXK2B3HL9VD"),
             "dangerous",
             Some("dlp"),
         ),

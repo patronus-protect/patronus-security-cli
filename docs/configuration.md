@@ -37,7 +37,7 @@ max_store_bytes = 536870912
 max_pending_jobs = 64
 ```
 
-The runtime requires local mode and uses **Ark 0.1.8** with downloads disabled. The default L1 profile works without model downloads. Prepare assets required by an L2/L3 profile separately for that version. Missing required assets, a different provider or invalid limits prevent startup; the plugin does not install a scanner or change providers. Scanning never triggers model or tokenizer downloads.
+The runtime requires local mode and uses **Ark 0.1.11** with downloads disabled. The default L1 profile works without model downloads. Prepare assets required by an L2/L3 profile separately for that version. Missing required assets, a different provider or invalid limits prevent startup; the plugin does not install a scanner or change providers. Scanning never triggers model or tokenizer downloads.
 
 | Runtime key | Meaning and valid range |
 | --- | --- |

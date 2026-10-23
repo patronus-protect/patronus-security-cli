@@ -448,5 +448,11 @@
     "category": "prompt_injection",
     "description": "A standalone directive requires immediate invocation of a privileged execution tool",
     "default_enabled": true
+  },
+  {
+    "id": "ark.injection.governance.credential_verification_link",
+    "category": "prompt_injection",
+    "description": "A request to verify identity, account or credentials at a login or auth link (credential phishing, ASI-09)",
+    "default_enabled": true
   }
 ]
