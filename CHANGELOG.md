@@ -10,6 +10,7 @@
 - Remote URL, MCP and file audits retry network errors and 502/503/504 responses up to twice with the same idempotency key, so a transient API failure no longer fails the audit or bills it twice.
 - Bump the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) to 0.1.3 so idempotency keys, `limit_kind` on quota errors and transient retries ship in a release; 0.1.2 on the registries does not have them.
 - Keep internal deployment and review evidence, generated server files and incomplete integration artifacts out of the public repository.
+- Upgrade the local scanner to Ark 0.1.11: more precise PII and DLP detection, new rules for German ID card, passport and tax numbers, EU VAT IDs, GitLab tokens and credentials in URLs, and an injection rule for credential-phishing login links. Saved plugin policies get the new rules at their default.
 
 ## 0.1.2 - 2026-09-23
 

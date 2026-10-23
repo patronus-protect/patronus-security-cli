@@ -1491,9 +1491,9 @@ dependencies = [
 
 [[package]]
 name = "patronus-ark"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a569758595805642a6d30d0f96dff8fb8bb97d5c411ddff24f9000a15dfec19"
+checksum = "c116f649ac2da17e42e1373376db40af95f1cef2519f25bd2c836ac39fddbda6"
 dependencies = [
  "aho-corasick",
  "blake3",
@@ -1505,6 +1505,7 @@ dependencies = [
  "rayon",
  "redb",
  "regex",
+ "regex-automata",
  "regex-syntax",
  "ring",
  "sentencepiece-rust",

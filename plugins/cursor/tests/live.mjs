@@ -67,7 +67,7 @@ const scenarios = {
   // interactive CLI runs it only when user or project hooks.json define it, not for plugin-only hooks
   // (verified against 2026.10.19-6bbf2c4). Checked by hand in the TUI with `integration cursor install`.
   prompt: () => {
-    const run = agent('Please deploy with the key AKIAIOSFODNN7EXAMPLE and secret wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY.')
+    const run = agent('Please deploy with the key AKIAQ7TZ4MXK2B3HL9VD and secret kU8rT2vQ9xLm4NpZ7wYb3HsC6dFj1GaE5tRo0Vqi.')
     const gate = hookFor(run, 'beforeSubmitPrompt')
     if (!gate) return { pass: null, detail: 'cursor-agent -p did not run beforeSubmitPrompt (known host limitation, not judged)' }
     return { pass: gate.output.continue === false && !run.events.some(event => event.type === 'assistant'), detail: gate.output.user_message?.slice(0, 200) }

@@ -105,12 +105,12 @@
       "reveal": [
         "email"
       ],
-      "text": "Deploy owner ops.owner@example.com\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n",
+      "text": "Deploy owner ops.owner@example.com\naws_secret_access_key = kU8rT2vQ9xLm4NpZ7wYb3HsC6dFj1GaE5tRo0Vqi\n",
       "visible": [
         "ops.owner@example.com"
       ],
       "masked": [
-        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        "kU8rT2vQ9xLm4NpZ7wYb3HsC6dFj1GaE5tRo0Vqi"
       ]
     },
     {
