@@ -77,6 +77,17 @@ Cursor names its own events; the hook bundle maps them onto the flows above
 | `stop` | `Stop` | Closes the broker and runtime session. |
 | `sessionEnd` | `SessionEnd` | Closes the broker and runtime session. |
 
+GitHub Copilot CLI also names its own (camelCase) events; the hook bundle maps them the same way
+(protection level **full** for tool and MCP results, see `plugins/copilot/README.md`). Copilot
+payloads carry no tool call ID, so the hook derives one from the event timestamp and tool name.
+
+| Copilot event | Handled as | Purpose |
+| --- | --- | --- |
+| `userPromptTransformed` | `UserPromptSubmit` | Prompt gate; `modifiedTransformedPrompt` replaces what the model receives. |
+| `preToolUse` | `PreToolUse` | Shell gate for `bash`/`powershell` (section 7) and disclosure arming (section 5). |
+| `postToolUse` | `PostToolUse` | Result gate for every built-in and MCP tool (`textResultForLlm`); answers Patronus' own MCP tools. |
+| `postToolUseFailure` | `PostToolUseFailure` | Scans a failed tool's error text; it cannot be replaced, a finding adds a warning. |
+
 ### Runtime RPC methods
 
 | Method | Caller | Effect |
@@ -138,6 +149,7 @@ How the replacement reaches the model:
 | Codex | `decision: "block"` with the receipt as `reason`. | `systemMessage` plus `additionalContext`. |
 | DeepSeek | `tools/post-execute` returns a `block` decision with the receipt as feedback. | Degraded-protection notice on the result. |
 | Cursor | MCP: `updated_mcp_tool_output`. File read: `beforeReadFile` `permission: "deny"` with the receipt as `user_message`. Shell output cannot be replaced; it gets a warning. | `additional_context` for the model. |
+| Copilot | `postToolUse.modifiedResult` (`textResultForLlm`) for every tool. A failed tool's error text cannot be replaced; it gets a warning. | `additionalContext`, appended to the result. |
 
 The source tool already ran; receipts tell the model never to run it again to
 recover its result.
@@ -218,6 +230,13 @@ sequenceDiagram
   else DeepSeek
     H->>B: tool executes in-process with the agent's session
     B-->>M: tool result
+  else Cursor, Copilot (result hook has the session)
+    H->>S: tools/call
+    S-->>H: placeholder (Copilot: not an error result)
+    H->>K: postToolUse (has the session)
+    K->>B: check(scanId)
+    B-->>K: receipt
+    K-->>M: result replaced with the receipt
   end
 ```
 
@@ -269,6 +288,7 @@ sequenceDiagram
 | Codex | `.mcp.json` sets `approval_mode = "prompt"` for `patronus_reveal_pii` (Codex fails open on a PreToolUse `ask`); the hook shows the question as a notice. | PostToolUse hook replaces the MCP placeholder; a denied call never reaches it. |
 | DeepSeek | The tool calls the Harness approval seam; only `allowed-once` releases. | The tool itself. |
 | Cursor | Nobody: a hook cannot request Cursor's approval dialog, so disclosure answers `disclosure_unavailable`. | Never released. |
+| Copilot | `preToolUse` returns `permissionDecision: "ask"` with the question; Copilot denies it in prompt mode, autopilot and the cloud agent. | `postToolUse` replaces the MCP placeholder; a denied call never reaches it. |
 
 ```mermaid
 stateDiagram-v2
@@ -325,7 +345,7 @@ flowchart LR
 | Score | Risk | Decision |
 | --- | --- | --- |
 | below the model threshold (1.15) | none | Runs. |
-| at or above the threshold | `medium` | The user decides: Claude `permissionDecision: "ask"`, Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
+| at or above the threshold | `medium` | The user decides: Claude and Copilot `permissionDecision: "ask"` (Copilot denies it in prompt mode and autopilot), Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
 
 Patronus never blocks a command on its own. The model's scores do not separate attacks from
 destructive developer work well enough for a block tier: `cat ~/.ssh/id_rsa` scores 1.2 next to

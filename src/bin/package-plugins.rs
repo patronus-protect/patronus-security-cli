@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     print_checksum(&cli_archive)?;
 
     if include_plugins {
-        for plugin in ["codex", "claude", "cursor"] {
+        for plugin in ["codex", "claude", "cursor", "copilot"] {
             let archive_name = format!(
                 "patronus-security-{plugin}-{}.zip",
                 env!("CARGO_PKG_VERSION")
@@ -83,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "codex" => Path::new(".agents/plugins/marketplace.json"),
                 "claude" => Path::new(".claude-plugin/marketplace.json"),
                 "cursor" => Path::new(".cursor-plugin/marketplace.json"),
+                "copilot" => Path::new(".github/plugin/marketplace.json"),
                 _ => unreachable!(),
             };
             add_file(&mut archive, marketplace, marketplace, false)?;
@@ -124,6 +125,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "skills/runtime/SKILL.md",
                     "skills/scan/SKILL.md",
                 ],
+                "copilot" => &[
+                    "plugin.json",
+                    ".mcp.json",
+                    "README.md",
+                    "INSTALL.md",
+                    "assets/icon.png",
+                    "hooks/hooks.json",
+                    "scripts/patronus.mjs",
+                    "skills/patronus-setup/SKILL.md",
+                    "skills/runtime/SKILL.md",
+                    "skills/scan/SKILL.md",
+                ],
                 _ => unreachable!(),
             };
             for relative in files {
@@ -154,6 +167,8 @@ fn verify_versions(expected: &str) -> Result<(), Box<dyn std::error::Error>> {
         ".claude-plugin/marketplace.json",
         "plugins/cursor/.cursor-plugin/plugin.json",
         ".cursor-plugin/marketplace.json",
+        "plugins/copilot/plugin.json",
+        ".github/plugin/marketplace.json",
         "plugins/deepseek/package.json",
         "plugins/native/package.json",
     ] {
