@@ -44,8 +44,9 @@ Read `~/.patronus-qa/runs/<date>/e2e.json`. `metrics.hosts.<host>.matrix` has on
 
 - Deterministic scripts produce findings in their report JSON. Agentic areas add findings by writing `~/.patronus-qa/runs/<date>/<area>.json` in the same shape (`schema: patronus.qa.report.v1`; findings use `area`, `severity` = critical|high|medium|low, a stable `fingerprint` of the form `qa:<area>:<slug>`, `title`, `evidence`, `suggestion`).
 - A fingerprint must be stable across runs. Derive it from what is wrong, not from today's values.
+- One root cause is one issue. When the same problem shows on several hosts or steps (same scanner, same protocol path), give the findings a shared `group` (`{ key, title }`, see `finding()` in `qa/lib/common.mjs`); the upsert merges them into one issue. Documented host limitations (`plugins/<host>/README.md`) are not findings; record them in the report metrics.
 - Before filing, re-check any finding that seems surprising (rerun the one command). Drop findings you cannot reproduce.
-- Publish: `node qa/lib/issues.mjs --publish`. This creates one issue per new fingerprint and comments on open ones.
+- Publish: `node qa/lib/issues.mjs --publish`. This creates one issue per new fingerprint or group and comments on open ones.
 
 ## Improvements (draft PRs)
 
