@@ -5,6 +5,7 @@
 ## 0.1.4 - 2026-10-24
 
 - Fix the shell gate letting every command through without notice after an upgrade that pins a new shell model revision (0.1.3 with Ark 0.1.11): the runtime now downloads the pinned `cat-shell-risk-commander` revision in the background when its bundle is missing or stale, instead of waiting for `assets prepare`.
+- Publish the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) as 0.1.4 together with the CLI; they are unchanged since 0.1.3.
 
 ## 0.1.3 - 2026-10-23
 
