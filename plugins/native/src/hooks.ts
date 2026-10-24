@@ -281,6 +281,11 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
     if ((!policy.enabled || (policy.disabled_chats[host] ?? []).includes(input.session_id)) && !(event === ownEvent && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) { trace.outcome = 'disabled'; return {} }
     const enabled = (surface: 'user_input' | 'tool_result' | 'mcp_result' | 'shell_command') => hookEnabled(policy, host, input.session_id, surface)
     const responseEnabled = () => enabled(mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result')
+    if (event === 'SessionStart') {
+      // Model loading takes seconds; starting it now keeps it off the first prompt and tool results.
+      if ((['user_input', 'tool_result', 'mcp_result', 'shell_command'] as const).some(enabled)) await rpc(config, { method: 'warm' }).catch(() => ({}))
+      return {}
+    }
     if (event === 'PostToolUseFailure') {
       if (!responseEnabled()) return {}
       if (host !== 'claude') return fail('hook_event_unsupported')

@@ -510,6 +510,7 @@ function validRequest(value) {
       keys = ["method", "tool", "callId", "command"];
       if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== "string" || Buffer.byteLength(value.command) > 64 * 1024) return false;
       break;
+    case "warm":
     case "close":
       keys = ["method"];
       break;
@@ -1584,13 +1585,20 @@ async function serveBroker(input) {
         message: "Use a file_id returned by a static finding in this session."
       };
     }
+    if (request.method === "warm") {
+      void boot().catch(() => {
+      });
+      return { warming: true };
+    }
     const { client, hello } = await boot().catch((error) => {
       throw brokerFailure(failureReason(error) ?? "runtime_start_failed");
     });
     if (signal.aborted) return unavailable("scan_timeout");
     const session = sessions.capability(id2);
     if (request.method === "check") {
-      const value = await client.check({ session, scan_id: request.scanId }, signal);
+      const job2 = { session, scan_id: request.scanId };
+      const wait2 = config.responseWaitMs ?? hello.runtime.response_wait_ms;
+      const value = wait2 > 0 ? await waitForScan(client, job2, wait2, signal) : await client.check(job2, signal);
       const visible = await autoRedact(value, () => client.readRedacted({ session, scan_id: request.scanId }, signal));
       if (visible.status === "redacted") return { ...scanResult(value, false), status: "redacted", result: visible.result };
       return value.status === "unavailable" ? unavailableScanReference() : scanResult(value, true);
@@ -2570,6 +2578,10 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
     }
     const enabled = (surface) => hookEnabled(policy, host, input.session_id, surface);
     const responseEnabled = () => enabled(mcpTool(host, input.tool_name) ? "mcp_result" : "tool_result");
+    if (event === "SessionStart") {
+      if (["user_input", "tool_result", "mcp_result", "shell_command"].some(enabled)) await rpc(config, { method: "warm" }).catch(() => ({}));
+      return {};
+    }
     if (event === "PostToolUseFailure") {
       if (!responseEnabled()) return {};
       if (host !== "claude") return fail("hook_event_unsupported");
