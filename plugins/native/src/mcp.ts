@@ -27,7 +27,11 @@ function isErrorResult(outcome: OwnOperationOutcome): boolean {
 
 /** With a host session (Claude), tools run against that session's broker and return ordinary results.
  * Without one (Codex), the native PreToolUse hook answers instead and this is only a fallback. */
-export async function handleMcp(value: unknown, session?: McpSession): Promise<object | undefined> {
+const resultHookPending = 'Patronus answers this tool in its result hook. If this text is visible, the hook did not run and no scan result was released. Check: patronus-security-scanner integration copilot status --format json.'
+
+/** `resultHook` (Copilot): the result hook replaces this tool's answer, which therefore must not be an
+ * error result; Copilot routes errors past the replaceable result hook. */
+export async function handleMcp(value: unknown, session?: McpSession, resultHook = false): Promise<object | undefined> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid request.' } }
   const request = value as Record<string, unknown>
   if (request.id === undefined) return undefined
@@ -46,6 +50,7 @@ export async function handleMcp(value: unknown, session?: McpSession): Promise<o
       catch { outcome = { kind: 'result', text: JSON.stringify({ scan_id: '', status: 'unavailable' }) } }
       return result({ isError: isErrorResult(outcome), content: [{ type: 'text', text: outcome.text }] })
     }
+    if (resultHook && operation) return result({ isError: false, content: [{ type: 'text', text: resultHookPending }] })
     // Codex runs this only after its approval prompt; the session-bound PostToolUse hook
     // then replaces this placeholder with the disclosed result.
     if (params.name === 'patronus_reveal_pii') return result({ isError: false, content: [{ type: 'text', text: revealPlaceholder }] })

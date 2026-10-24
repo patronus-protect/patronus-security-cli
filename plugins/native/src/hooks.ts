@@ -12,12 +12,17 @@ import { callBroker, type BrokerConfig } from './broker.ts'
 import { codexExternalTextPayload, mapCodex } from './hosts/codex.ts'
 import { claudeExternalTextPayload, knownClaudeResult, mapClaude } from './hosts/claude.ts'
 import { cursorExternalTextPayload, isCursorMcp, knownCursorResult, mapCursor, normalizeCursor } from './hosts/cursor.ts'
+import { copilotExternalTextPayload, isCopilotMcp, knownCopilotResult, mapCopilot, normalizeCopilot } from './hosts/copilot.ts'
 import { recordProtocolScan, type HookTrace, type ProtocolRecorder } from './protocol.ts'
 import type { HookDecision, HookInput, Host, JsonValue } from './types.ts'
 import { PROBE_TEXT } from './probe.ts'
 import { approveFromPrompt, consumeCommandApproval, requestCommandApproval } from './command-approval.ts'
 import type { CommandResult } from '../../deepseek/src/protocol.ts'
 
+/** Copilot's Claude-compatible payloads: ISO-string timestamps, which Claude Code never sends. */
+const copilotPayload = (value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value) &&
+  typeof (value as Record<string, unknown>).timestamp === 'string' && (value as Record<string, unknown>).transcript_path === undefined &&
+  (value as Record<string, unknown>).tool_use_id === undefined
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const id = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,256}$/.test(value)
 const ownPrefixes: Record<Host, string[]> = {
@@ -26,10 +31,15 @@ const ownPrefixes: Record<Host, string[]> = {
   // Cursor names MCP tools `MCP:<tool>` without the server. A foreign server's tool with a
   // Patronus name is harmless: the result hook always replaces it with the real answer.
   cursor: ['MCP:'],
+  // Copilot names MCP tools `<server>-<tool>`; the result hook answers them like Cursor's.
+  copilot: ['patronus-'],
 }
-const mcpTool = (host: Host, name: unknown) => host === 'cursor' ? isCursorMcp(name) : typeof name === 'string' && name.startsWith('mcp__')
+const mcpTool = (host: Host, name: unknown) => host === 'cursor' ? isCursorMcp(name) : host === 'copilot' ? isCopilotMcp(name) : typeof name === 'string' && name.startsWith('mcp__')
 const externalPayload = (host: Host, event: string, input: HookInput) =>
-  host === 'codex' ? codexExternalTextPayload(event, input) : host === 'cursor' ? cursorExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
+  host === 'codex' ? codexExternalTextPayload(event, input) : host === 'cursor' ? cursorExternalTextPayload(event, input)
+    : host === 'copilot' ? copilotExternalTextPayload(event, input) : claudeExternalTextPayload(event, input)
+/** Hosts whose MCP server has no session: their result hook answers Patronus tools. */
+const resultHookAnswers = (host: Host) => host === 'cursor' || host === 'copilot'
 const operations = new Map([['patronus_check_result', 'check'], ['patronus_read_redacted', 'read_redacted'], ['patronus_reveal_pii', 'reveal'], ['patronus_scan', 'static']])
 
 /** Permission modes in which the host shows an approval dialog for an `ask` decision. */
@@ -172,7 +182,8 @@ async function armDisclosure(host: Host, input: HookInput, scan: Scan, map: (dec
   const scanId = record(args) && typeof args.scan_id === 'string' && /^[a-f0-9]{32}$/.test(args.scan_id) ? args.scan_id : undefined
   const grantId = record(args) && typeof args.grant_id === 'string' && /^[a-f0-9]{32}$/.test(args.grant_id) ? args.grant_id : undefined
   if (!scanId || !grantId) return map({ kind: 'deny', text: JSON.stringify(invalidArguments(['scan_id', 'grant_id'], [])) })
-  if (typeof input.permission_mode !== 'string' || !promptingModes.has(input.permission_mode)) {
+  // Copilot reports no permission mode; it asks the user for a hook `ask` and denies it where nobody can answer.
+  if (host !== 'copilot' && (typeof input.permission_mode !== 'string' || !promptingModes.has(input.permission_mode))) {
     return map({ kind: 'deny', text: JSON.stringify(disclosureUnavailable(scanId, 'PII disclosure needs the user to approve it in a dialog, which this permission mode skips. Continue with the masked result; the user can switch to the default permission mode and ask again.')) })
   }
   const armed = await scan({ method: 'arm_reveal', scanId, grantId })
@@ -180,7 +191,7 @@ async function armDisclosure(host: Host, input: HookInput, scan: Scan, map: (dec
   if (!question) return map({ kind: 'deny', text: JSON.stringify(disclosureUnavailable(scanId, 'This disclosure offer is no longer available. Continue with the masked result.')) })
   // Claude shows this question in its own dialog. Codex rejects `ask` but prompts for this tool
   // through its MCP approval_mode, so the question precedes that prompt as a visible notice.
-  return host === 'claude' ? map({ kind: 'ask', text: question }) : map({ kind: 'warn', text: question, context: 'Patronus asked the user to approve this disclosure. If the call is denied, continue with the masked result.' })
+  return host === 'claude' || host === 'copilot' ? map({ kind: 'ask', text: question }) : map({ kind: 'warn', text: question, context: 'Patronus asked the user to approve this disclosure. If the call is denied, continue with the masked result.' })
 }
 
 /** Codex's MCP server has no session; after an approved call its result hook delivers the view. */
@@ -207,12 +218,20 @@ async function cursorOwnOperation(operation: string, input: HookInput, scan: Sca
   return (await runOwnOperation('cursor', operation, args, input.cwd, scan)).text
 }
 
+/** Copilot asks the user for a hook `ask` (and denies it where nobody can answer), so a disclosure is
+ * armed in the pre hook like Claude's and delivered by the result hook like Codex's. */
+async function copilotOwnOperation(operation: string, input: HookInput, scan: Scan): Promise<string> {
+  if (operation === 'reveal') return deliverDisclosure(input, scan)
+  return (await runOwnOperation('copilot', operation, input.tool_input, input.cwd, scan)).text
+}
+
 /** The command line of a shell tool call, per host. Cursor's beforeShellExecution arrives as `Shell`. */
 function shellCommand(host: Host, input: HookInput): string | undefined {
   const args = input.tool_input
   const command = record(args) && typeof args.command === 'string' ? args.command : undefined
   if (command === undefined) return undefined
   if (host === 'cursor') return input.tool_name === 'Shell' ? command : undefined
+  if (host === 'copilot') return input.tool_name === 'bash' || input.tool_name === 'powershell' ? command : undefined
   // Claude's PowerShell tool and Codex's unified exec both report a string `command`.
   return input.tool_name === 'Bash' || host === 'claude' && input.tool_name === 'PowerShell' ? command : undefined
 }
@@ -241,14 +260,18 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
   // Cursor also runs Claude Code plugin hooks ("third-party hooks"), with Cursor payloads. The
   // Cursor integration protects those chats; the Claude hook stays out of the way.
   if (host === 'claude' && record(hostValue) && typeof hostValue.cursor_version === 'string') { trace.outcome = 'disabled'; trace.error_code = 'cursor_payload'; return {} }
-  // Cursor names its own events; they are handled as the matching shared event.
-  const normalized = host === 'cursor' ? normalizeCursor(hostEvent, hostValue) : undefined
-  if (host === 'cursor' && !normalized) return {}
+  // Copilot CLI runs hooks from a project's .claude/settings.json with Claude-named events but its own
+  // payload (ISO timestamp, no transcript or tool call ID). The Copilot integration protects those chats.
+  if (host === 'claude' && copilotPayload(hostValue)) { trace.outcome = 'disabled'; trace.error_code = 'copilot_payload'; return {} }
+  // Cursor and Copilot name their own events; they are handled as the matching shared event.
+  const normalized = host === 'cursor' ? normalizeCursor(hostEvent, hostValue) : host === 'copilot' ? normalizeCopilot(hostEvent, hostValue) : undefined
+  if ((host === 'cursor' || host === 'copilot') && !normalized) return {}
   const event = normalized?.event ?? hostEvent
   const value = normalized ? normalized.input : hostValue
   const map = (decision: HookDecision) => {
     trace.decision = decision.kind
-    return host === 'codex' ? mapCodex(event, decision) : host === 'cursor' ? mapCursor(hostEvent, decision, value as HookInput) : mapClaude(event, decision, value as HookInput)
+    return host === 'codex' ? mapCodex(event, decision) : host === 'cursor' ? mapCursor(hostEvent, decision, value as HookInput)
+      : host === 'copilot' ? mapCopilot(hostEvent, decision, value as HookInput) : mapClaude(event, decision, value as HookInput)
   }
   const warn = (text = inactiveMessage(host)) => map({ kind: 'warn', text })
   const fail = (reason: string) => { traceFailure(trace, reason); return warn(failureMessage(host, { reason })) }
@@ -266,6 +289,10 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
     // Cursor's agent reads Patronus' own skills with the Read tool; they describe attacks by design.
     if (host === 'cursor' && hostEvent === 'beforeReadFile' && pluginRoot && typeof input.file_path === 'string' &&
         resolve(input.file_path).startsWith(resolve(pluginRoot) + sep)) return { permission: 'allow' }
+    // The same holds for Copilot's agent reading the installed plugin's skills with `view`.
+    const viewed = record(input.tool_input) ? input.tool_input.path : undefined
+    if (host === 'copilot' && hostEvent === 'postToolUse' && input.tool_name === 'view' && pluginRoot && typeof viewed === 'string' &&
+        resolve(input.cwd, viewed).startsWith(resolve(pluginRoot) + sep)) return {}
     const scan = (request: Parameters<typeof rpc>[1]) => { trace.scans++; return protocol(config!, request, () => rpc(config!, request)) }
     if (event === 'SessionEnd' || event === 'Stop') { await rpc(config, { method: 'close' }).catch(() => ({ closed: false })); return {} }
     if (event === 'UserPromptSubmit') {
@@ -276,16 +303,18 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
       if (action) return map({ kind: 'replace', text: await control(host, input.session_id, action, config.executable) })
     }
     const policy = settings()
-    // Patronus' own tools answer even in a paused chat (Cursor answers them in its result hook).
-    const ownEvent = host === 'cursor' ? 'PostToolUse' : 'PreToolUse'
+    // Patronus' own tools answer even in a paused chat (Cursor and Copilot answer them in their result hook).
+    const ownEvent = resultHookAnswers(host) ? 'PostToolUse' : 'PreToolUse'
     if ((!policy.enabled || (policy.disabled_chats[host] ?? []).includes(input.session_id)) && !(event === ownEvent && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) { trace.outcome = 'disabled'; return {} }
     const enabled = (surface: 'user_input' | 'tool_result' | 'mcp_result' | 'shell_command') => hookEnabled(policy, host, input.session_id, surface)
     const responseEnabled = () => enabled(mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result')
     if (event === 'PostToolUseFailure') {
       if (!responseEnabled()) return {}
-      if (host !== 'claude') return fail('hook_event_unsupported')
+      if (host !== 'claude' && host !== 'copilot') return fail('hook_event_unsupported')
       if (!id(input.tool_use_id) || typeof input.tool_name !== 'string' || !input.tool_name || input.tool_name.length > 256) throw Error('Invalid tool metadata.')
-      const payload = claudeExternalTextPayload(event, input)
+      // Patronus' own tool errors are its own text.
+      if (ownOperation(host, input.tool_name)) return {}
+      const payload = externalPayload(host, event, input)
       if (payload === undefined) return {}
       const result = await scan({ method: 'response', tool: input.tool_name, callId: input.tool_use_id, payload }) as unknown as ScanResult
       if (result.status === 'approved' || degraded.has(result.status)) return noted(result)
@@ -317,7 +346,7 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
       // Claude's MCP server knows its session and answers as an ordinary tool result.
       // Codex gives its MCP server no session identity, so the hook answers as deny feedback.
       if (operation === 'reveal') return await armDisclosure(host, input, scan, map)
-      if (host === 'claude') return {}
+      if (host === 'claude' || host === 'copilot') return {}
       const outcome = await runOwnOperation(host, operation, input.tool_input, input.cwd, scan)
       return map({ kind: outcome.kind === 'static_failed' ? 'warn' : 'deny', text: outcome.text })
     }
@@ -340,6 +369,7 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
     }
     if (operation === 'reveal' && host === 'codex') return map({ kind: 'replace', text: await deliverDisclosure(input, scan) })
     if (operation && host === 'cursor') return map({ kind: 'replace', text: await cursorOwnOperation(operation, input, scan) })
+    if (operation && host === 'copilot') return map({ kind: 'replace', text: await copilotOwnOperation(operation, input, scan) })
     // Patronus' own results are already scan receipts; rescanning them would loop.
     if (operation) return {}
     if (!responseEnabled()) return {}
@@ -349,6 +379,7 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
       // journal it so QA notices new tool shapes instead of letting them pass silently.
       const known = host === 'codex' ? !record(input.tool_response) || Array.isArray(input.tool_response.content)
         : host === 'cursor' ? knownCursorResult(input.tool_name, input.tool_response)
+        : host === 'copilot' ? knownCopilotResult(input.tool_response)
         : knownClaudeResult(input.tool_name, input.tool_response)
       if (!known) trace.error_code = 'unscanned_shape'
       return {}

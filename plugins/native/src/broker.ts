@@ -13,7 +13,7 @@ import { PII_TYPES, type PiiType, type TextPayload } from '../../deepseek/src/pr
 import { boundedMilliseconds } from '../../deepseek/src/wait.ts'
 
 export interface BrokerConfig {
-  host: 'codex' | 'claude' | 'cursor'
+  host: 'codex' | 'claude' | 'cursor' | 'copilot'
   sessionId: string
   cwd: string
   stateDir?: string
@@ -135,7 +135,7 @@ export async function readPrivate(path: string, limit = 16_384, maxLinks = 1): P
 /** Internal shared preparation. No scanner or candidate file content is read here. */
 async function prepareSession(input: BrokerConfig) {
   if (!['darwin', 'linux'].includes(process.platform)) throw brokerFailure()
-  if (!record(input) || !['codex', 'claude', 'cursor'].includes(input.host) || !text(input.sessionId, 1024) || !text(input.cwd, 4096) || !isAbsolute(input.cwd) ||
+  if (!record(input) || !['codex', 'claude', 'cursor', 'copilot'].includes(input.host) || !text(input.sessionId, 1024) || !text(input.cwd, 4096) || !isAbsolute(input.cwd) ||
       Object.keys(input).some(key => !['host', 'sessionId', 'cwd', 'stateDir', 'executable', 'configPath', 'responseWaitMs', 'requestTimeoutMs'].includes(key))) throw brokerFailure()
   for (const value of [input.stateDir, input.executable, input.configPath]) if (value !== undefined && (!text(value, 4096) || !isAbsolute(value))) throw brokerFailure()
   if (input.responseWaitMs !== undefined) boundedMilliseconds(input.responseWaitMs, 'responseWaitMs')
