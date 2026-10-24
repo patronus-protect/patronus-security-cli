@@ -14,10 +14,17 @@ const exceptions = [
   { advisory: 'GHSA-mrhx-c7xc-m3w5', path: 'node_modules/zod', version: '3.25.76' },
 ];
 
+let output;
+try { output = execFileSync('npm', ['audit', '--json', '--audit-level=low'], { cwd: root, encoding: 'utf8' }); }
+catch (error) { output = error.stdout; }
+// An unreachable or failing audit endpoint is not a clean audit: fail closed.
 let report;
-try { report = execFileSync('npm', ['audit', '--json', '--audit-level=low'], { cwd: root, encoding: 'utf8' }); }
-catch (error) { report = error.stdout; }
-const { vulnerabilities = {} } = JSON.parse(report);
+try { report = JSON.parse(output); } catch {}
+if (!report || report.error || typeof report.vulnerabilities !== 'object' || report.vulnerabilities === null) {
+  process.stderr.write(`npm audit did not return a vulnerability report: ${report?.message || report?.error?.summary || String(output ?? '').slice(0, 500)}\n`);
+  process.exit(1);
+}
+const { vulnerabilities } = report;
 const lock = JSON.parse(readFileSync(new URL('package-lock.json', root), 'utf8')).packages;
 
 const excepted = (name, vulnerability) => vulnerability.via.every(via => {
