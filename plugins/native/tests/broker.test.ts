@@ -160,6 +160,28 @@ test('waits for an in-progress private capability creation without replacing it'
   } finally { await rm(root, { recursive: true, force: true }) }
 })
 
+test('check waits for the scan like a tool result, so one call returns the final status', { timeout: 20_000 }, async () => {
+  const { root, config } = await stub({ delayMs: 600 })
+  config.responseWaitMs = 400
+  try {
+    const pending = await hook(config, { method: 'response', tool: 'read_file', callId: 'slow', payload: 'slow benign result' })
+    assert.equal(pending.status, 'pending', JSON.stringify(pending))
+    const checked = await hook(config, { method: 'check', scanId: pending.scan_id })
+    assert.equal(checked.status, 'approved', JSON.stringify(checked))
+    assert.equal(checked.result, 'slow benign result')
+  } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }
+})
+
+test('warm starts the runtime without waiting for it', { timeout: 20_000 }, async () => {
+  const { root, config, calls } = await stub()
+  try {
+    assert.deepEqual(await hook(config, { method: 'warm' }), { warming: true })
+    const deadline = Date.now() + 10_000
+    while (!(await calls()).some(row => row.args[0] === 'serve') && Date.now() < deadline) await delay(50)
+    assert((await calls()).some(row => row.args[0] === 'serve'))
+  } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }
+})
+
 test('request deadlines and caller abort never approve pending work', { timeout: 20_000 }, async () => {
   const { root, config } = await stub({ delayMs: 2000 })
   config.requestTimeoutMs = 300

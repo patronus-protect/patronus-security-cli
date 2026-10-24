@@ -34,6 +34,8 @@ export type BrokerRequest =
   | { method: 'reveal'; scanId: string; grantId: string }
   | { method: 'static'; kind: 'repo' | 'directory' | 'file' | 'url' | 'mcp'; path: string; server?: string }
   | { method: 'command'; tool: string; callId: string; command: string }
+  /** Starts the session runtime in the background (SessionStart), so the first scans skip the cold start. */
+  | { method: 'warm' }
   | { method: 'close' }
 
 export const MAX_PAYLOAD = 10 * 1024 * 1024
@@ -96,7 +98,7 @@ export function validRequest(value: unknown): value is BrokerRequest {
       keys = ['method', 'tool', 'callId', 'command']
       if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== 'string' || Buffer.byteLength(value.command) > 64 * 1024) return false
       break
-    case 'close': keys = ['method']; break
+    case 'warm': case 'close': keys = ['method']; break
     default: return false
   }
   return Object.keys(value).every(key => keys.includes(key))

@@ -229,11 +229,16 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
         message: 'Use a file_id returned by a static finding in this session.',
       }
     }
+    if (request.method === 'warm') { void boot().catch(() => {}); return { warming: true } }
     const { client, hello } = await boot().catch(error => { throw brokerFailure(failureReason(error) ?? 'runtime_start_failed') })
     if (signal.aborted) return unavailable('scan_timeout')
     const session = sessions.capability(id)
     if (request.method === 'check') {
-      const value = await client.check({ session, scan_id: request.scanId }, signal)
+      // Waits like a tool result does, so one check usually returns the final status instead of the agent polling in a loop.
+      // waitForScan does not ask at all without a budget; a check always asks at least once.
+      const job = { session, scan_id: request.scanId }
+      const wait = config.responseWaitMs ?? hello.runtime.response_wait_ms
+      const value = wait > 0 ? await waitForScan(client, job, wait, signal) : await client.check(job, signal)
       const visible = await autoRedact(value, () => client.readRedacted({ session, scan_id: request.scanId }, signal))
       if (visible.status === 'redacted') return { ...scanResult(value, false) as object, status: 'redacted', result: visible.result! }
       return value.status === 'unavailable' ? unavailableScanReference() : scanResult(value, true)

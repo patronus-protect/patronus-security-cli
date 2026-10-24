@@ -659,3 +659,20 @@ test('Claude Grep results are scanned and unknown structured results are journal
   assert.equal(unknown.error_code, 'unscanned_shape')
   assert.equal(unknown.scans, 0)
 })
+
+test('SessionStart starts the runtime in the background only while a scan surface is on', async () => {
+  const off = { user_input: false, tool_result: false, mcp_result: false, shell_command: false }
+  const policy = (hooks = {}, enabled = true) => () => ({ schema_version: 1 as const, enabled,
+    hooks: { user_input: true, tool_result: true, mcp_result: true, ...hooks }, disabled_chats: { codex: [], claude: [], deepseek: [] } })
+  for (const host of ['claude', 'codex'] as const) {
+    const requests: unknown[] = []
+    const rpc = async (_config: unknown, request: unknown) => { requests.push(request); return { warming: true } }
+    assert.deepEqual(await runHook(host, 'SessionStart', input('SessionStart'), {}, rpc, noProtocol, policy()), {})
+    assert.deepEqual(requests, [{ method: 'warm' }])
+    await runHook(host, 'SessionStart', input('SessionStart'), {}, rpc, noProtocol, policy(off))
+    await runHook(host, 'SessionStart', input('SessionStart'), {}, rpc, noProtocol, policy({}, false))
+    assert.equal(requests.length, 1)
+    const failing = async () => { throw Error('broker down') }
+    assert.deepEqual(await runHook(host, 'SessionStart', input('SessionStart'), {}, failing, noProtocol, policy()), {})
+  }
+})
