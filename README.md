@@ -90,7 +90,7 @@ require an account for local protection.
 To pin a specific release, replace the version in this URL:
 
 ```sh
-curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.3/install.sh | sh
+curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.4/install.sh | sh
 ```
 
 Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.

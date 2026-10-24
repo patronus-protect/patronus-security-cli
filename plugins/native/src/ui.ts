@@ -97,7 +97,7 @@ window.addEventListener('message', event => {
   else waiter.resolve(message.result);
 });
 const ready = window.parent !== window ? request('ui/initialize', {
-  protocolVersion: '2026-01-26', appCapabilities: {}, appInfo: { name: 'Patronus Security', version: '0.1.3' }
+  protocolVersion: '2026-01-26', appCapabilities: {}, appInfo: { name: 'Patronus Security', version: '0.1.4' }
 }).then(() => { window.parent.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/initialized' }, '*'); return true; }).catch(() => false) : Promise.resolve(false);
 document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', async () => {
   const text = prompts[button.dataset.action];

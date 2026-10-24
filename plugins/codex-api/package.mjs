@@ -17,7 +17,7 @@ const { $schema, extensions, ...identity } = plugin
 await mkdir(join(root, '.codex-plugin'), { recursive: true })
 await writeFile(join(root, '.codex-plugin/plugin.json'), JSON.stringify({ ...identity, ...extensions['com.openai'], skills: './skills/', mcpServers: './.mcp.json' }, null, 2) + '\n')
 await writeFile(join(root, '.mcp.json'), JSON.stringify({ mcpServers: { 'patronus-api': { url: mcp.mcpServers['patronus-api'].url } } }, null, 2) + '\n')
-const output = resolve(process.argv[2] || join(tmpdir(), 'patronus-security-api-0.1.3.zip'))
+const output = resolve(process.argv[2] || join(tmpdir(), 'patronus-security-api-0.1.4.zip'))
 const stage = await mkdtemp(join(tmpdir(), 'patronus-public-plugin-'))
 try {
   for (const name of files) {
