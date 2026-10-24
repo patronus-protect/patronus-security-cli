@@ -349,11 +349,11 @@ function evaluate({ detection, hookStats, suites, liveRun, previous }) {
       if (minimum !== undefined && recall !== null && recall < minimum)
         findings.push(finding('hooks', category === 'injection' ? 'high' : 'medium', `recall:${host}:${category}`,
           `${host}: ${category} detection below target (${recall} < ${minimum})`,
-          { metric: { recall }, evidence: JSON.stringify(metric, null, 2), suggestion: 'Inspect missed corpus cases in the run report (verdict=pass with expect=flag) and the scanner categories in the QA scanner config.' }))
+          { metric: { recall }, evidence: JSON.stringify(metric, null, 2), group: { key: `recall:${category}`, title: `${category} detection below target (${minimum})` }, suggestion: 'Inspect missed corpus cases in the run report (verdict=pass with expect=flag) and the scanner categories in the QA scanner config.' }))
     }
     if (metric.false_positive_rate > limits.max_false_positive_rate)
       findings.push(finding('hooks', 'medium', `fp:${host}`, `${host}: benign tool results are withheld (false positive rate ${metric.false_positive_rate})`,
-        { metric: { false_positive_rate: metric.false_positive_rate }, suggestion: 'Benign content should reach the model unchanged; check which benign corpus cases were flagged.' }))
+        { metric: { false_positive_rate: metric.false_positive_rate }, group: { key: 'false-positives', title: 'Benign tool results are withheld (false positive rate above target)' }, suggestion: 'Benign content should reach the model unchanged; check which benign corpus cases were flagged.' }))
     if (metric.unscanned_rate > 0)
       findings.push(finding('hooks', 'high', `unscanned:${host}`, `${host}: hooks completed without a scan (rate ${metric.unscanned_rate})`,
         { metric: { unscanned_rate: metric.unscanned_rate }, suggestion: 'See error codes in the run report; fail-open paths should be rare outside of outages.' }))
@@ -362,7 +362,7 @@ function evaluate({ detection, hookStats, suites, liveRun, previous }) {
         { metric: { pending_rate: metric.pending_rate } }))
     if (metric.cold_start_ms > limits.max_cold_start_ms)
       findings.push(finding('ux', 'medium', `cold-start:${host}`, `${host}: first hook of a session takes ${metric.cold_start_ms} ms`,
-        { metric: { cold_start_ms: metric.cold_start_ms }, suggestion: 'The first tool result of every new chat waits for the broker and scanner start; consider starting the broker at SessionStart.' }))
+        { metric: { cold_start_ms: metric.cold_start_ms }, group: { key: 'cold-start', title: `First hook of a session takes longer than ${limits.max_cold_start_ms} ms` }, suggestion: 'The first tool result of every new chat waits for the broker and scanner start; consider starting the broker at SessionStart.' }))
     if (metric.max_message_chars > limits.max_message_chars)
       findings.push(finding('ux', 'low', `message-length:${host}`, `${host}: hook message exceeds ${limits.max_message_chars} characters (${metric.max_message_chars})`,
         { suggestion: 'Long hook messages crowd the agent context and are hard for users to scan; shorten or move details behind a command.' }))

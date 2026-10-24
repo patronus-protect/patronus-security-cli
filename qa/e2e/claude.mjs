@@ -90,7 +90,9 @@ export async function claudeScripted({ root, cwd, model, plugin, env, binary, ti
 
 async function approvalLog(root) {
   const read = async name => (await readFile(join(root, name), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line))
-  return { reveal: await read('approvals.jsonl'), other: await read('other-approvals.jsonl') }
+  // A Bash approval is the shell gate asking for a medium-risk command, not an unexpected prompt.
+  const other = await read('other-approvals.jsonl')
+  return { reveal: await read('approvals.jsonl'), shell: other.filter(item => item.tool_name === 'Bash'), other: other.filter(item => item.tool_name !== 'Bash') }
 }
 
 /**

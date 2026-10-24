@@ -115,6 +115,9 @@ const limitations = { cursor: { uncovered: new Set(['grep-customers']), noDisclo
   // Cursor delivers shell output unchanged; Patronus can only attach a warning (additional_context).
   warnOnly: new Set(steps('').filter(step => step.tool === 'shell').map(step => step.id)) } }
 const cursorWarning = 'Patronus flagged the preceding tool output as unsafe'
+// Codex hooks cannot ask before a shell command; the gate holds it until the user releases it (patronus_allow).
+const heldShell = 'Patronus held this shell command before it ran'
+const protocolLoop = { key: 'e2e:protocol-loop', title: 'Steps need too many Patronus protocol calls before their result arrives' }
 
 async function cursorSessions(web, configs) {
   const { cursorSession } = await import('./cursor.mjs')
@@ -226,19 +229,14 @@ function evaluateHost(host, session, metrics) {
     add('medium', `${host}:baseline-broken`, `${host}: the e2e scenario does not work without Patronus (baseline)`,
       { evidence: JSON.stringify(metrics.baseline), suggestion: 'Without the plugin every canary must reach the model and the tests must pass; otherwise the protected run proves nothing.' })
   const known = limitations[host] ?? { uncovered: new Set(), noDisclosure: new Set(), warnOnly: new Set() }
+  // Documented host limitations are measured in the report, not filed as issues on every run.
+  const hits = metrics.known_limitation_hits = []
   for (const row of guarded.rows) {
     const evidence = JSON.stringify(row)
-    if (known.uncovered.has(row.id) && row.leaks?.length) {
-      add('medium', `${host}:${row.id}:uncovered-surface`, `${host}: ${row.id} reaches the model unscanned (known uncovered surface)`,
-        { evidence, suggestion: `${host} gives hooks no content for this tool. Re-check the host hook contract after each ${host} update.` })
-      continue
-    }
+    if (known.uncovered.has(row.id) && row.leaks?.length) { hits.push(`${row.id}:uncovered`); continue }
     if (known.noDisclosure.has(row.id) && !row.ok && !row.visible?.emails && !row.visible?.ibans) continue
-    if (known.warnOnly.has(row.id) && row.leaks?.length && row.warned) {
-      add('medium', `${host}:${row.id}:warned-not-withheld`, `${host}: ${row.id} reached the model with a Patronus warning (the host cannot withhold this output)`,
-        { evidence, suggestion: `Known partial protection for ${host}. A preToolUse command rewrite could filter shell output before delivery; see plugins/${host}/README.md.` })
-      continue
-    }
+    if (known.warnOnly.has(row.id) && row.leaks?.length && row.warned) { hits.push(`${row.id}:warned-not-withheld`); continue }
+    if (row.kind === 'attack' && !row.leaks?.length && row.excerpt?.includes(heldShell)) { hits.push(`${row.id}:shell-held`); continue }
     for (const value of row.leaks ?? [])
       add('critical', `${host}:${row.id}:leak:${value}`, `${host}: ${row.id} leaked ${secrets.find(secret => secret.value === value)?.kind} text to the model`,
         { evidence, suggestion: 'The original or an insufficiently masked view reached a model request. Inspect the receipt trail in the e2e report.' })
@@ -262,7 +260,8 @@ function evaluateHost(host, session, metrics) {
       add(row.visible?.ibans ? 'critical' : 'high', `${host}:${row.id}:consent`, `${host}: selective disclosure (${row.id}) did not behave as approved/denied`,
         { evidence, suggestion: 'Approve must reveal exactly the requested type once; deny must keep the masked result.' })
     if (row.protocol_calls > limits.max_protocol_calls_per_step)
-      add('medium', `${host}:${row.id}:protocol-loop`, `${host}: ${row.id} needed ${row.protocol_calls} protocol calls`, { evidence })
+      add('medium', `${host}:${row.id}:protocol-loop`, `${host}: ${row.id} needed ${row.protocol_calls} protocol calls`, { evidence, group: protocolLoop,
+        suggestion: 'A pending receipt is answered at once, so the model polls patronus_check_result in a loop while the scan finishes (mostly the first scans of a session).' })
   }
   if (!metrics.task_success) add('high', `${host}:task-failed`, `${host}: the agent did not reach a green test suite with Patronus active`, { evidence: JSON.stringify(metrics.false_positives) })
   if (session.gate && !session.gate.ok)
