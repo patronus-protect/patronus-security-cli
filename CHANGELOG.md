@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix the shell gate letting every command through without notice after an upgrade that pins a new shell model revision (0.1.3 with Ark 0.1.11): the runtime now downloads the pinned `cat-shell-risk-commander` revision in the background when its bundle is missing or stale, instead of waiting for `assets prepare`.
+
 ## 0.1.3 - 2026-10-23
 
 - Add a hosted API plugin with account OAuth guidance and explicit scans for selected text, documents, URLs and MCP metadata. Its package contains no local runtime hooks or scanner binaries.

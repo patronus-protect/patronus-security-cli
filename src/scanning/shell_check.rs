@@ -5,6 +5,8 @@
 //! permission policy. It is deliberately separate from the text analysis of prompts and
 //! results: those never go through the shell model.
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use patronus_ark::assets::SHELL_COMMAND_ASSET;
 use patronus_ark::detectors::shell::shell_risk::ShellRiskPipeline;
@@ -59,31 +61,102 @@ pub fn download_assets(model_dir: &Path) -> Result<(), String> {
 
 /// Lazily loaded classifier. A missing or invalid bundle reports `unavailable` instead of failing
 /// the runtime: hosts then let the command run (fail-open) and journal the reason.
+///
+/// With `updates` (the runtime), a bundle that is missing or from another pinned revision, as
+/// after an Ark upgrade, is downloaded once in the background; the check reports
+/// `shell_model_updating` until the pinned revision is in place, then loads it.
 pub struct ShellCheck {
     model_dir: Option<PathBuf>,
-    pipeline: std::sync::OnceLock<Result<ShellRiskPipeline, &'static str>>,
+    updates: bool,
+    download: fn(&Path) -> Result<(), String>,
+    pipeline: OnceLock<Result<ShellRiskPipeline, &'static str>>,
+    update: Arc<Mutex<Update>>,
 }
 
+#[derive(Default)]
+struct Update {
+    running: bool,
+    failed_at: Option<Instant>,
+}
+
+/// A failed download (offline, rate limit) is retried at most this often.
+const UPDATE_RETRY: Duration = Duration::from_secs(10 * 60);
+
 impl ShellCheck {
+    /// A check that only uses a bundle that is already prepared.
     pub fn new(model_dir: Option<PathBuf>) -> Self {
         Self {
             model_dir,
-            pipeline: std::sync::OnceLock::new(),
+            updates: false,
+            download: download_assets,
+            pipeline: OnceLock::new(),
+            update: Arc::default(),
+        }
+    }
+
+    /// A check that downloads the pinned bundle in the background when it is missing or stale.
+    pub fn self_updating(model_dir: Option<PathBuf>) -> Self {
+        Self {
+            updates: true,
+            ..Self::new(model_dir)
         }
     }
 
     fn pipeline(&self) -> Result<&ShellRiskPipeline, &'static str> {
+        if let Some(loaded) = self.pipeline.get() {
+            return loaded.as_ref().map_err(|reason| *reason);
+        }
+        let dir = self.model_dir.as_deref().ok_or("shell_model_missing")?;
+        if !assets_present(dir) {
+            return Err(self.start_update(dir));
+        }
         self.pipeline
             .get_or_init(|| {
-                let dir = self.model_dir.as_deref().ok_or("shell_model_missing")?;
-                if !assets_present(dir) {
-                    return Err("shell_model_missing");
-                }
                 ShellRiskPipeline::from_bundle_dir(&bundle_dir(dir))
                     .map_err(|_| "shell_model_invalid")
             })
             .as_ref()
             .map_err(|reason| *reason)
+    }
+
+    /// Starts at most one background download of the pinned bundle and returns the reason to
+    /// report meanwhile. Ark writes each file atomically and the revision marker last, so a
+    /// runtime of another host never loads a half-written bundle.
+    fn start_update(&self, dir: &Path) -> &'static str {
+        if !self.updates {
+            return "shell_model_missing";
+        }
+        let mut state = self
+            .update
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if state.running {
+            return "shell_model_updating";
+        }
+        if state
+            .failed_at
+            .is_some_and(|at| at.elapsed() < UPDATE_RETRY)
+        {
+            return "shell_model_missing";
+        }
+        state.running = true;
+        let (update, dir, download) = (Arc::clone(&self.update), dir.to_path_buf(), self.download);
+        let spawned = std::thread::Builder::new()
+            .name("patronus-shell-model".into())
+            .spawn(move || {
+                let result = download(&dir);
+                let mut state = update
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                state.running = false;
+                state.failed_at = result.is_err().then(Instant::now);
+            });
+        if spawned.is_err() {
+            state.running = false;
+            state.failed_at = Some(Instant::now());
+            return "shell_model_missing";
+        }
+        "shell_model_updating"
     }
 
     pub fn check(&self, command: &str) -> CommandVerdict {
@@ -176,6 +249,63 @@ mod tests {
                 assert_eq!(risk, &defs["properties"]["risk"]["const"]);
             }
         }
+    }
+
+    fn wait_for_update(check: &ShellCheck) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while check.update.lock().unwrap().running {
+            assert!(
+                Instant::now() < deadline,
+                "background update did not finish"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn a_stale_bundle_is_updated_once_in_the_background() {
+        static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        static RELEASE: Mutex<bool> = Mutex::new(false);
+        fn slow_failing_download(_: &Path) -> Result<(), String> {
+            CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            while !*RELEASE.lock().unwrap() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err("offline".into())
+        }
+        // An older revision marker, as left behind by the previous Ark release.
+        let temp = tempfile::tempdir().unwrap();
+        let bundle = bundle_dir(temp.path());
+        std::fs::create_dir_all(&bundle).unwrap();
+        std::fs::write(bundle.join(".patronus-revision"), "0000000").unwrap();
+        let check = ShellCheck {
+            download: slow_failing_download,
+            ..ShellCheck::self_updating(Some(temp.path().to_path_buf()))
+        };
+        for _ in 0..3 {
+            let verdict = check.check("rm -rf ~/.ssh");
+            assert_eq!(verdict.status, "unavailable");
+            assert_eq!(verdict.reason, Some("shell_model_updating"));
+        }
+        *RELEASE.lock().unwrap() = true;
+        wait_for_update(&check);
+        assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // A failed download is not retried on every command.
+        assert_eq!(check.check("ls").reason, Some("shell_model_missing"));
+        assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn only_the_runtime_check_downloads() {
+        fn unexpected_download(_: &Path) -> Result<(), String> {
+            panic!("ShellCheck::new must not download")
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let check = ShellCheck {
+            download: unexpected_download,
+            ..ShellCheck::new(Some(temp.path().to_path_buf()))
+        };
+        assert_eq!(check.check("ls").reason, Some("shell_model_missing"));
     }
 
     #[test]

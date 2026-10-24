@@ -313,6 +313,11 @@ Every host checks a shell command line before it runs. The scanner classifies on
 string with Ark's `cat-shell-risk-commander` (L1, ~2.5 MB, prepared by `assets prepare`); it never
 executes, parses or expands it. Prompts and results never go through this model.
 
+The runtime keeps the model current by itself: when the bundle is missing or from another pinned
+revision (for example after an upgrade to a new Ark release), it downloads the pinned revision once
+in the background and answers `unavailable` with `shell_model_updating` until it is in place. A
+failed download is retried at most every 10 minutes.
+
 ```mermaid
 flowchart LR
   C[Agent wants to run a command] --> K[Shell hook]
