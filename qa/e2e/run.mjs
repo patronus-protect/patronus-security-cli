@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // End-to-end QA: realistic multi-step agent work sessions with the Patronus plugin active.
 //
-//   node qa/e2e/run.mjs [--hosts claude,codex,cursor] [--mode scripted|live] [--out DIR] [--keep]
+//   node qa/e2e/run.mjs [--hosts claude,codex,cursor,copilot] [--mode scripted|live] [--out DIR] [--keep]
 //
 // cursor (scripted only) emulates Cursor's agent loop around the real hook bundle, because the public
 // cursor-agent cannot run a scripted model without a Cursor login (see qa/e2e/cursor.mjs).
+// copilot (scripted only) runs the real Copilot CLI offline against the scripted model (qa/e2e/copilot.mjs).
 //
 // scripted: real host CLIs with a scripted model that follows Patronus' receipt protocol, once with
 // and once without the plugin (baseline), plus a prompt-gate (ignore_once) chat. live: a real Claude
@@ -20,7 +21,7 @@ import { approvals, evaluate, freshChallenge, gatePhase, pii, scriptedModel, sec
 loadEnv()
 const argv = process.argv.slice(2)
 const option = (name, fallback) => { const at = argv.indexOf(name); return at >= 0 ? argv[at + 1] : fallback }
-const options = { hosts: option('--hosts', 'claude,codex,cursor').split(','), mode: option('--mode', 'scripted'), out: option('--out'), keep: argv.includes('--keep') }
+const options = { hosts: option('--hosts', 'claude,codex,cursor,copilot').split(','), mode: option('--mode', 'scripted'), out: option('--out'), keep: argv.includes('--keep') }
 const limits = thresholds.e2e
 const arkLevel = process.env.PATRONUS_QA_ARK_LEVEL ?? 'l3'
 const findings = [], checks = []
@@ -115,6 +116,47 @@ const limitations = { cursor: { uncovered: new Set(['grep-customers']), noDisclo
   // Cursor delivers shell output unchanged; Patronus can only attach a warning (additional_context).
   warnOnly: new Set(steps('').filter(step => step.tool === 'shell').map(step => step.id)) } }
 const cursorWarning = 'Patronus flagged the preceding tool output as unsafe'
+// Copilot prompt mode (`-p`) denies every hook `ask`: nobody can approve a PII disclosure there, and
+// shell commands the gate flags are denied instead of asked (counted as `shell_confirmations`).
+limitations.copilot = { uncovered: new Set(), noDisclosure: new Set(['consent-approve']), warnOnly: new Set() }
+const copilotAskDenied = 'Denied by preToolUse hook (unable to ask user for confirmation)'
+
+async function copilotSessions(web, configs) {
+  const { copilotSession } = await import('./copilot.mjs')
+  const binary = bin('copilot')
+  const out = {}
+  for (const variant of ['baseline', 'protected']) {
+    const plan = steps(web.url)
+    const model = scriptedModel(plan, { protocol: variant === 'protected' })
+    const cwd = await workspace(join(sandbox, `pw-${variant}`))
+    const env = await patronusEnv(`p${variant[0]}`, configs.main)
+    const since = Date.now()
+    const session = await copilotSession({ root: join(sandbox, `ph-${variant}`), cwd, env, plugin: variant === 'protected', binary })
+    let turn
+    try { turn = await session.work(model, task) } finally { await session.close() }
+    const rows = evaluate(plan, model.records, session.requests, { protected: variant === 'protected' })
+    const denied = model.records.filter(record => (record.received ?? '').includes(copilotAskDenied)).map(record => record.id)
+    out[variant] = { ...turn, requests: session.requests, rows, testsPass: await testsPass(cwd), events: await journal(env.PATRONUS_DATA_DIR, since),
+      approvals: { reveal: [], other: [], shell: denied } }
+  }
+  const env = await patronusEnv('pg', configs.prompt)
+  const session = await copilotSession({ root: join(sandbox, 'ph-gate'), cwd: await workspace(join(sandbox, 'pw-gate')), env, plugin: true, binary })
+  const phases = []
+  try {
+    let token
+    for (const [name, text, expect] of [['first', gate.prompt, 'blocked'], ['resend', gate.prompt, 'sent'], ['reuse', gate.prompt, 'blocked'], ['other-text', gate.other, 'blocked']]) {
+      const sent = name === 'first' ? text : `${text} ${token ?? ''}`.trim()
+      const [result] = await session.gate([sent])
+      // Only this turn's own user message counts; earlier released prompts stay in the history.
+      const reached = result.received.some(received => received.includes(gate.secret) || received.includes('erin.other@example.com'))
+      const challenge = freshChallenge(result.stdout, token)
+      if (challenge) token = challenge
+      phases.push(gatePhase(name, expect, reached, challenge, result.ms, result.stdout + result.stderr))
+    }
+  } finally { await session.close() }
+  out.gate = { phases, ok: phases.every(phase => phase.outcome === phase.expect) && phases[0].challenge, events: await journal(env.PATRONUS_DATA_DIR) }
+  return out
+}
 
 async function cursorSessions(web, configs) {
   const { cursorSession } = await import('./cursor.mjs')
@@ -337,7 +379,7 @@ async function live(web) {
 // ---------------------------------------------------------------------------------------------
 
 const before = await snapshot()
-for (const host of ['claude', 'codex', 'cursor']) check(`${host} hooks globally off before run`, before.status[host] !== 'active', before.status[host])
+for (const host of ['claude', 'codex', 'cursor', 'copilot']) check(`${host} hooks globally off before run`, before.status[host] !== 'active', before.status[host])
 const metrics = { mode: options.mode, ark_level: arkLevel, hosts: {} }
 const started = Date.now()
 let web
@@ -353,7 +395,10 @@ try {
   } else {
     for (const host of options.hosts) {
       let session
-      try { session = host === 'claude' ? await claudeSessions(web, configs) : host === 'cursor' ? await cursorSessions(web, configs) : await codexSessions(web, configs) }
+      try {
+        session = host === 'claude' ? await claudeSessions(web, configs) : host === 'cursor' ? await cursorSessions(web, configs)
+          : host === 'copilot' ? await copilotSessions(web, configs) : await codexSessions(web, configs)
+      }
       catch (error) { check(`${host}: e2e sessions ran`, false, String(error.stack ?? error).slice(0, 800)); add('high', `${host}:harness`, `${host}: the e2e harness failed`, { evidence: String(error.stack ?? error).slice(0, 2000) }); continue }
       const summary = hostMetrics(host, session)
       evaluateHost(host, session, summary)
@@ -372,7 +417,7 @@ const after = await snapshot()
 const changed = changedFiles(before, after)
 check('global host config unchanged', changed.length === 0, changed.join(', '))
 if (changed.length) add('critical', `global-changed:${changed.join(',')}`, 'Global host configuration changed during the e2e QA run', { evidence: changed.join('\n') })
-for (const host of ['claude', 'codex', 'cursor']) check(`${host} integration state unchanged`, before.status[host] === after.status[host], `${before.status[host]} -> ${after.status[host]}`)
+for (const host of ['claude', 'codex', 'cursor', 'copilot']) check(`${host} integration state unchanged`, before.status[host] === after.status[host], `${before.status[host]} -> ${after.status[host]}`)
 check('sandbox removed', options.keep || !existsSync(sandbox), sandbox)
 
 for (const [host, value] of Object.entries(metrics.hosts)) {
