@@ -203,6 +203,7 @@ fn installed_native_plugin_roots() -> Vec<PathBuf> {
     }
     if let Ok(root) = crate::config::user_root() {
         add_existing_root(&mut roots, root.join("integrations/cursor"));
+        add_existing_root(&mut roots, root.join("integrations/copilot"));
     }
     roots
 }

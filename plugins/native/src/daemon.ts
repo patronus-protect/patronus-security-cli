@@ -10,6 +10,7 @@ import { promisify } from 'node:util'
 import { patronusRoot } from '../../deepseek/src/settings.ts'
 import type { Host, JsonValue } from './types.ts'
 import { isCursorMcp } from './hosts/cursor.ts'
+import { isCopilotMcp } from './hosts/copilot.ts'
 import { executablePath } from '../../deepseek/src/client.ts'
 import { SessionState, type SessionRuntime } from '../../deepseek/src/sessions.ts'
 import { StaticScanner } from '../../deepseek/src/static.ts'
@@ -23,8 +24,8 @@ const ARMED_MS = 5 * 60_000
 
 interface Offer { scanId: string; counts: Record<string, number>; armedUntil?: number }
 const run = promisify(execFile)
-/** Cursor names MCP tools `MCP:<tool>`, Claude and Codex `mcp__<server>__<tool>`; the scope picks the MCP policy. */
-export const mcpResult = (host: Host, tool: string) => host === 'cursor' ? isCursorMcp(tool) : tool.startsWith('mcp__')
+/** Cursor names MCP tools `MCP:<tool>`, Copilot `<server>-<tool>`, Claude and Codex `mcp__<server>__<tool>`; the scope picks the MCP policy. */
+export const mcpResult = (host: Host, tool: string) => host === 'cursor' ? isCursorMcp(tool) : host === 'copilot' ? isCopilotMcp(tool) : tool.startsWith('mcp__')
 
 interface Owner { pid: number; started: string }
 

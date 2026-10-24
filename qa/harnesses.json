@@ -19,7 +19,7 @@
     {
       "id": "cursor",
       "name": "Cursor (IDE agent and cursor-agent CLI)",
-      "status": "pr_open",
+      "status": "merged",
       "notes": "Partial: prompts blocked (beforeSubmitPrompt), shell commands checked before they run (beforeShellExecution: block or ask), Read-tool file reads withheld (beforeReadFile), MCP results replaced (updated_mcp_tool_output); shell output warned only; Grep, Fetch, MCP resources, lints, listings (metadata only), server-side search and attached context (rules, AGENTS.md, images) unscanned; no PII disclosure dialog. Real agent loop needs a Cursor login, so it is unverified; hook contract checked against the cursor-agent 2026.10.14 bundle (re-verified 2026-10-20).",
       "pr": "https://github.com/patronus-protect/patronus-security-cli/pull/50",
       "protection": "partial"
@@ -27,8 +27,10 @@
     {
       "id": "copilot",
       "name": "GitHub Copilot (CLI and coding agent)",
-      "status": "planned",
-      "notes": "Second priority. Cover the Copilot CLI first if it exposes hooks; document what the cloud coding agent allows."
+      "status": "pr_open",
+      "notes": "Full for tool and MCP results: every built-in and MCP tool result replaced (postToolUse modifiedResult), prompts replaced (userPromptTransformed modifiedTransformedPrompt), shell commands asked before they run (preToolUse ask; denied in copilot -p and autopilot). Failed-tool error text warned only; custom instructions, skills, attachments and MCP resources unscanned; cloud coding agent not covered. Verified against the real copilot 1.0.103 binary offline with a scripted BYOK model (contract test 4/4, e2e matrix). Interactive ask prompt not verified.",
+      "pr": "https://github.com/patronus-protect/patronus-security-cli/pull/82",
+      "protection": "full"
     },
     {
       "id": "antigravity",

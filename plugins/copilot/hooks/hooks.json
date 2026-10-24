@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "hooks": {
+    "userPromptTransformed": [
+      {
+        "type": "command",
+        "bash": "node \"$PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot userPromptTransformed",
+        "powershell": "node \"$env:PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot userPromptTransformed",
+        "timeoutSec": 90
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "node \"$PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot preToolUse",
+        "powershell": "node \"$env:PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot preToolUse",
+        "timeoutSec": 60
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "node \"$PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot postToolUse",
+        "powershell": "node \"$env:PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot postToolUse",
+        "timeoutSec": 330
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "type": "command",
+        "bash": "node \"$PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot postToolUseFailure",
+        "powershell": "node \"$env:PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot postToolUseFailure",
+        "timeoutSec": 90
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "node \"$PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot sessionEnd",
+        "powershell": "node \"$env:PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot sessionEnd",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}

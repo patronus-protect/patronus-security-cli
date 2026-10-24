@@ -1,0 +1,13 @@
+{
+  "name": "patronus-security",
+  "version": "0.1.3",
+  "description": "Patronus Runtime Protection for GitHub Copilot CLI: checks prompts, shell commands and every tool and MCP result before the agent acts on them.",
+  "author": {
+    "name": "Patronus"
+  },
+  "homepage": "https://patronus.studio",
+  "repository": "https://github.com/patronus-protect/patronus-security-cli",
+  "license": "Apache-2.0",
+  "keywords": ["security", "prompt-injection", "dlp", "pii", "hooks", "mcp", "shell"],
+  "category": "security"
+}

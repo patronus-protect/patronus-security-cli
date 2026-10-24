@@ -55,7 +55,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["session", "direction", "tool", "call_id", "payload"],
       "properties": {
-        "policy_scope": { "type": "string", "pattern": "^(claude|codex|deepseek|cursor)\\.(user_input|tool_result|mcp_result)$" },
+        "policy_scope": { "type": "string", "pattern": "^(claude|codex|deepseek|cursor|copilot)\\.(user_input|tool_result|mcp_result)$" },
         "session": { "$ref": "#/$defs/session" },
         "direction": { "enum": ["request", "response"] },
         "tool": { "type": "string", "minLength": 1, "maxLength": 512 },
