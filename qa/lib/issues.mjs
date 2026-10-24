@@ -3,7 +3,14 @@ import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { args, qaHome, run, severities } from './common.mjs'
 
-const labels = { qa: '5319e7', 'qa/hooks': 'c5def5', 'qa/sdk': 'c5def5', 'qa/docs': 'c5def5', 'qa/dashboard': 'c5def5', 'qa/integrations': 'c5def5', 'qa/ux': 'c5def5' }
+const labels = { qa: '5319e7', 'qa/hooks': 'c5def5', 'qa/e2e': 'c5def5', 'qa/sdk': 'c5def5', 'qa/docs': 'c5def5', 'qa/dashboard': 'c5def5', 'qa/integrations': 'c5def5', 'qa/ux': 'c5def5' }
+
+/** Every label an upsert needs: the fixed set plus `qa/<area>` for areas it does not list (e2e, qa-env, …). */
+export function labelsFor(findings) {
+  const wanted = { ...labels }
+  for (const item of findings) wanted[`qa/${item.area}`] ??= labels['qa/hooks']
+  return wanted
+}
 
 async function gh(argv, input) {
   const result = await run('gh', argv, { input, timeout: 60_000 })
@@ -31,7 +38,7 @@ function body(item) {
 /** Returns what was done per finding: created, commented or (dry run) planned. */
 export async function upsert(findings, { dryRun = true } = {}) {
   const outcomes = []
-  if (!dryRun) for (const [name, color] of Object.entries(labels)) await gh(['label', 'create', name, '--color', color, '--force'])
+  if (!dryRun) for (const [name, color] of Object.entries(labelsFor(findings))) await gh(['label', 'create', name, '--color', color, '--force'])
   for (const item of findings) {
     if (dryRun) { outcomes.push({ fingerprint: item.fingerprint, action: 'planned', title: item.title }); continue }
     const found = JSON.parse(await gh(['issue', 'list', '--label', 'qa', '--state', 'open', '--search', `"${item.fingerprint}" in:body`, '--json', 'number,body', '--limit', '5']))
