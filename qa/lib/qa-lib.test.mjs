@@ -63,3 +63,10 @@ test('previous metrics skip runs that are not comparable', async () => {
     assert.equal(await previousMetrics('hooks', () => false), undefined)
   } finally { await rm(home, { recursive: true, force: true }) }
 })
+
+test('issue labels cover every finding area, including e2e and qa-env', async () => {
+  // Imported here: common.mjs reads PATRONUS_QA_HOME once, and the history test above sets it.
+  const { labelsFor } = await import('./issues.mjs')
+  const names = Object.keys(labelsFor([{ area: 'e2e' }, { area: 'qa-env' }, { area: 'hooks' }]))
+  for (const name of ['qa', 'qa/e2e', 'qa/qa-env', 'qa/hooks']) assert.ok(names.includes(name), name)
+})
