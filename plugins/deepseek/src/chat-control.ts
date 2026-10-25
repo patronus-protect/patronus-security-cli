@@ -6,11 +6,23 @@ import { readPluginSettings, type PluginHost } from './settings.ts'
 export type ChatAction = 'on' | 'off' | 'status'
 const run = promisify(execFile)
 
-/** Only an entire user-authored text value is a control, never result text or a quoted fragment. */
+/** Context the host app wraps around the typed message, e.g. `<system-reminder>…</system-reminder>`. */
+const hostEnvelope = /^\s*<([a-z][\w-]*)>[\s\S]*?<\/\1>/i
+
+function withoutEnvelopes(text: string): string {
+  let rest = text
+  for (let match = hostEnvelope.exec(rest); match; match = hostEnvelope.exec(rest)) rest = rest.slice(match[0].length)
+  return rest.trim()
+}
+
+/** Only an entire user-authored text value is a control, never result text or a quoted fragment.
+ * Desktop apps prepend their own tagged context blocks, so those are set aside first. */
 export function chatCommand(payload: unknown): ChatAction | undefined {
-  const text = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload
+  const values = (Array.isArray(payload) ? payload : [payload]).map(value => typeof value === 'string' ? withoutEnvelopes(value) : value)
+  const typed = values.filter(value => value !== '')
+  const text = typed.length === 1 ? typed[0] : undefined
   if (typeof text !== 'string') return undefined
-  const match = /^\/?patronus (on|off|status)$/i.exec(text.trim())
+  const match = /^\/?patronus (on|off|status)$/i.exec(text)
   return match?.[1]?.toLowerCase() as ChatAction | undefined
 }
 
