@@ -16,6 +16,9 @@
     "dlp"
   ],
   "onboardingSkill": "./skills/patronus-api-setup/SKILL.md",
+  "publication": {
+    "release_notes": "Initial public package, version 0.1.5. Connect an existing Patronus account through host OAuth and run explicit scans of selected text, supported files, public URLs and MCP server metadata. The Patronus home provides scan forms, results and bounded job polling, with account usage available in the account dashboard. Selected Space/Page content requires host-authorized access. Local repository access and automatic runtime protection require the separately installed CLI and reviewed local hooks."
+  },
   "review": {
     "test_cases": {
       "positive": [

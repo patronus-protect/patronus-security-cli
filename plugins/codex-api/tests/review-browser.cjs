@@ -57,6 +57,14 @@ test('P5: navigation and setup do not submit scans or install local tools', () =
   await ui.locator('#feedback').evaluate(async ()=>{await new Promise(r=>setTimeout(r,100));});
   assert(calls.some(c=>c.method==='ui/open-link'&&c.params.url==='https://control.patronus.studio')); assert.equal(tools().length,0);
 }));
+test('optional local setup sends one user request without running tools', () => fixture(async ({ui,calls,tools}) => {
+  await ui.locator('[data-view="setup"]').first().click();
+  await ui.locator('#setup-dialog [data-action="setup"]').click();
+  await ui.locator('#feedback').filter({hasText:'Request sent'}).waitFor();
+  const messages=calls.filter(c=>c.method==='ui/message');
+  assert.equal(messages.length,1); assert.equal(messages[0].params.role,'user');
+  assert.equal(tools().length,0);
+}));
 test('N1: denied account surfaces an error with no anonymous fallback', () => fixture(async ({ui,tools,respond}) => {
   respond(()=>({isError:true,content:[{type:'text',text:'Authentication required. Reconnect Patronus.'}]}));
   await ui.locator('[data-scan="text"]').click();await ui.locator('#scan-text').fill('Selected');await submit(ui);
