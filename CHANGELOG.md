@@ -8,6 +8,7 @@
 - `patronus_check_result` waits for the pending scan like a tool result instead of returning the current status at once, so one call usually returns the final result and agents no longer poll in a tight loop.
 - Session start warms the local scanner in the background when any scan surface is on, so model loading no longer delays the first prompt and tool results.
 - Codex API plugin: add release notes for public submission, explain attachment and Dot file coverage, and point runtime protection to the full desktop Codex plugin, which already includes the hosted API connection.
+- Publish the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) as 0.1.5 together with the CLI; they are unchanged since 0.1.4.
 
 ## 0.1.4 - 2026-10-24
 
