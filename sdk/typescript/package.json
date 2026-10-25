@@ -1,6 +1,6 @@
 {
   "name": "@patronus-protect/api-client",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Minimal TypeScript client for the Patronus Scan API",
   "repository": {
     "type": "git",
