@@ -104,5 +104,10 @@ for (const host of ['codex', 'claude'] as const) {
     await send('UserPromptSubmit', { prompt: 'Please quote "patronus off".' })
     assert.equal(commands.length, 2)
     assert.equal(scans, 2)
+    // Desktop apps put their own tagged context next to the typed message.
+    await send('UserPromptSubmit', { prompt: '<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>\npatronus off\n' })
+    assert.equal(commands.length, 3)
+    await send('UserPromptSubmit', { prompt: '<system-reminder>\nLinked sessions now\n</system-reminder>\npatronus off but <b>x</b>' })
+    assert.equal(commands.length, 3)
   })
 }

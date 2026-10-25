@@ -1762,10 +1762,18 @@ async function serveBroker(input) {
 import { execFile as execFile2 } from "node:child_process";
 import { promisify as promisify2 } from "node:util";
 var run3 = promisify2(execFile2);
+var hostEnvelope = /^\s*<([a-z][\w-]*)>[\s\S]*?<\/\1>/i;
+function withoutEnvelopes(text2) {
+  let rest = text2;
+  for (let match = hostEnvelope.exec(rest); match; match = hostEnvelope.exec(rest)) rest = rest.slice(match[0].length);
+  return rest.trim();
+}
 function chatCommand(payload) {
-  const text2 = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+  const values = (Array.isArray(payload) ? payload : [payload]).map((value) => typeof value === "string" ? withoutEnvelopes(value) : value);
+  const typed = values.filter((value) => value !== "");
+  const text2 = typed.length === 1 ? typed[0] : void 0;
   if (typeof text2 !== "string") return void 0;
-  const match = /^\/?patronus (on|off|status)$/i.exec(text2.trim());
+  const match = /^\/?patronus (on|off|status)$/i.exec(text2);
   return match?.[1]?.toLowerCase();
 }
 async function controlChat(host, session, action, executable) {
