@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.5 - 2026-10-25
+
+- Fix `patronus off`, `patronus on` and `patronus status` doing nothing in the Claude and Codex desktop apps: the apps add their own tagged context (for example `<system-reminder>`) next to the typed message, so the exact-message check never matched and the command was scanned as an ordinary prompt. Leading tagged context is now set aside first; quoted or embedded commands still never count.
+- `patronus_check_result` waits for the pending scan like a tool result instead of returning the current status at once, so one call usually returns the final result and agents no longer poll in a tight loop.
+- Session start warms the local scanner in the background when any scan surface is on, so model loading no longer delays the first prompt and tool results.
+- Codex API plugin: add release notes for public submission, explain attachment and Dot file coverage, and point runtime protection to the full desktop Codex plugin, which already includes the hosted API connection.
+
 ## 0.1.4 - 2026-10-24
 
 - Fix the shell gate letting every command through without notice after an upgrade that pins a new shell model revision (0.1.3 with Ark 0.1.11): the runtime now downloads the pinned `cat-shell-risk-commander` revision in the background when its bundle is missing or stale, instead of waiting for `assets prepare`.
