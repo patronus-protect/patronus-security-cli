@@ -910,6 +910,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec9d92d097f4749b64e8cc33d924d9f40a2d4eb91402b458014b781f5733d60f"
 
 [[package]]
+name = "home"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "http"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1491,9 +1500,9 @@ dependencies = [
 
 [[package]]
 name = "patronus-ark"
-version = "0.1.11"
+version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c116f649ac2da17e42e1373376db40af95f1cef2519f25bd2c836ac39fddbda6"
+checksum = "b1d4192a2aa4967f270bb93b30c51024453b16d908fad82094bc85e5f269a794"
 dependencies = [
  "aho-corasick",
  "blake3",
@@ -1502,6 +1511,7 @@ dependencies = [
  "log",
  "memmap2",
  "ort",
+ "patronus-ark-core",
  "rayon",
  "redb",
  "regex",
@@ -1513,6 +1523,32 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokenizers",
+ "unicode-normalization",
+ "ureq 2.12.1",
+ "url",
+]
+
+[[package]]
+name = "patronus-ark-core"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff307ccd0aa0308114c67c884107a2c33ef5743110db167b7b19519da608605c"
+dependencies = [
+ "aho-corasick",
+ "blake3",
+ "fs2",
+ "half",
+ "home",
+ "log",
+ "ort",
+ "rayon",
+ "regex",
+ "regex-automata",
+ "regex-syntax",
+ "ring",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
  "unicode-normalization",
  "ureq 2.12.1",
  "url",

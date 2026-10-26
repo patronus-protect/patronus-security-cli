@@ -23,7 +23,7 @@ pub struct CommandVerdict {
     /// threshold, where only routine developer work scored (`npm install`, `git push --force`);
     /// hosts let it run. `medium` lies above it: hosts ask the user and never block on their own.
     /// The scores do not separate attacks from destructive developer work well enough for a
-    /// block tier (a reverse shell 3.4 next to `git reset --hard` 3.6).
+    /// block tier (a reverse shell and `git reset --hard` score close together).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub risk: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
