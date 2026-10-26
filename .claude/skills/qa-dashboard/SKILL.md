@@ -44,4 +44,4 @@ Write `~/.patronus-qa/runs/<date>/dashboard.json` in the report shape:
 - `metrics.console_errors` with the total number
 - Findings use area `dashboard` (bugs) or `ux` (usability). Each finding names the page URL and the exact element. Put a short description of the screenshot in the evidence, never a credential or key.
 
-The dashboard source is not in this repository, so file issues only, no PRs.
+The dashboard source is not in this repository, so propose issues for the control-plane repository only, no PRs.

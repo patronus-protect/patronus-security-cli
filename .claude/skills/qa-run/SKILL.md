@@ -1,6 +1,6 @@
 ---
 name: qa-run
-description: Run the Patronus QA and UX routine (hooks, SDKs, docs, control dashboard, integrations), file findings as GitHub issues labelled qa and open up to three draft PRs with fixes. Use for the scheduled QA runs or when asked to "run QA".
+description: Run the Patronus QA and UX routine (hooks, SDKs, docs, control dashboard, integrations), propose findings as issues for the person to approve and open up to three draft PRs with fixes. Use for the scheduled QA runs or when asked to "run QA".
 argument-hint: "[--areas hooks,e2e,integrations,sdk,dx,dashboard | all] [--live]"
 ---
 
@@ -44,9 +44,13 @@ Read `~/.patronus-qa/runs/<date>/e2e.json`. `metrics.hosts.<host>.matrix` has on
 
 - Deterministic scripts produce findings in their report JSON. Agentic areas add findings by writing `~/.patronus-qa/runs/<date>/<area>.json` in the same shape (`schema: patronus.qa.report.v1`; findings use `area`, `severity` = critical|high|medium|low, a stable `fingerprint` of the form `qa:<area>:<slug>`, `title`, `evidence`, `suggestion`).
 - A fingerprint must be stable across runs. Derive it from what is wrong, not from today's values.
-- One root cause is one issue. When the same problem shows on several hosts or steps (same scanner, same protocol path), give the findings a shared `group` (`{ key, title }`, see `finding()` in `qa/lib/common.mjs`); the upsert merges them into one issue. Documented host limitations (`plugins/<host>/README.md`) are not findings; record them in the report metrics.
-- Before filing, re-check any finding that seems surprising (rerun the one command). Drop findings you cannot reproduce.
-- Publish: `node qa/lib/issues.mjs --publish`. This creates one issue per new fingerprint or group and comments on open ones.
+- One root cause is one proposed issue. When the same problem shows on several hosts or steps (same scanner, same protocol path), give the findings a shared `group` (`{ key, title }`, see `finding()` in `qa/lib/common.mjs`); the upsert merges them into one issue once it is published. Documented host limitations (`plugins/<host>/README.md`) are not findings; record them in the report metrics.
+- Before proposing, re-check any finding that seems surprising (rerun the one command). Drop findings you cannot reproduce.
+- Never publish on your own: this repository is public. Run the dry run `node qa/lib/issues.mjs` and list the planned issues in your reply, grouped by target:
+  - **this repository**: real bugs in the CLI, SDKs or hooks;
+  - **the control-plane repository**: control plane, dashboard and docs site, with the file and line you located;
+  - **internal**, summary only and never an issue: the QA login, browser session and machine, noise just over a threshold, unannounced features.
+- Only after the person agrees in the chat: `node qa/lib/issues.mjs --publish` creates one issue per new fingerprint or group and comments on open ones.
 
 ## Improvements (draft PRs)
 
@@ -58,16 +62,16 @@ At most **3 draft PRs per run**, each small and focused. Pick the highest-severi
 For each PR:
 1. Create a branch `qa/<date>-<slug>` from `main`.
 2. Make the change and run the relevant tests (`cargo test`, `node plugins/native/scripts/test.mjs <file>`, SDK tests).
-3. Commit, push, and run `gh pr create --draft --label qa`. Reference the issue with `Refs #<n>`, not `Fixes`.
+3. Commit, push, and run `gh pr create --draft --label qa`. Reference an existing issue with `Refs #<n>`, not `Fixes`; when there is none yet, describe the finding in the PR.
 4. Switch back to `main`.
 
-Do not attempt detection-quality changes in the scanner (Ark) or anything on control.patronus.studio or docs.patronus.studio. Those are issues only, because their source is not in this repository.
+Do not attempt detection-quality changes in the scanner (Ark) or anything on control.patronus.studio or docs.patronus.studio. Those are proposed issues for the control-plane repository only, because their source is not in this repository.
 
 ## Summary
 
 Finish by writing `~/.patronus-qa/runs/<date>/summary.md`. It contains:
 - one line per area with the check pass rate,
 - the key metrics with their delta to the previous run (`~/.patronus-qa/history.jsonl`),
-- the issues created or commented on and the draft PRs opened.
+- the proposed issues per target and the draft PRs opened.
 
 Reply with that summary.
