@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { Patronus, PatronusError } from "../dist/index.js";
 
@@ -192,4 +195,26 @@ test("polls once per second by default", async () => {
   assert.equal((await client.scanUrl("https://example.com")).status, "completed");
   assert.equal(calls, 3);
   assert.ok(Date.now() - started >= 950, `polled after ${Date.now() - started} ms`);
+});
+
+test("README snippets continue in one module without redeclaring names", async () => {
+  // The README says the examples continue in the quick start's module; parse them that way.
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+  const imports = new Set();
+  const lines = [];
+  for (const [, block] of readme.matchAll(/```(?:js|ts)\n([\s\S]*?)```/g)) {
+    for (const line of block.split("\n")) {
+      if (line.startsWith("import ") && imports.has(line)) continue;
+      if (line.startsWith("import ")) imports.add(line);
+      lines.push(line);
+    }
+  }
+  const directory = await mkdtemp(join(tmpdir(), "patronus-readme-"));
+  try {
+    await writeFile(join(directory, "readme.mjs"), lines.join("\n"));
+    const check = spawnSync(process.execPath, ["--check", join(directory, "readme.mjs")], { encoding: "utf8" });
+    assert.equal(check.status, 0, check.stderr);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
