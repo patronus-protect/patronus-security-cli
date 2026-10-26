@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Upgrade the local scanner to Ark 0.1.13: the shell-command model `cat-shell-risk-commander` moves to revision `30d77a80` with fewer false positives for routine agent scripting (heredocs into interpreters, loops, `ssh host '…'`, gh/git publishing) and recalibrated thresholds (`0.474714` / `2.517865`). PII detection adds Unicode and apostrophe e-mail local parts, IDN domains with IANA TLD validation, and checksum-validated Swedish, Danish, Norwegian and Finnish personal identifiers. The runtime downloads the new shell model in the background on first use; offline installs should run `assets prepare` before upgrading.
+## 0.1.6 - 2026-10-26
 
+- Upgrade the local scanner to Ark 0.1.13: the shell-command model `cat-shell-risk-commander` moves to revision `30d77a80` with fewer false positives for routine agent scripting (heredocs into interpreters, loops, `ssh host '…'`, gh/git publishing) and recalibrated thresholds (`0.474714` / `2.517865`). PII detection adds Unicode and apostrophe e-mail local parts, IDN domains with IANA TLD validation, and checksum-validated Swedish, Danish, Norwegian and Finnish personal identifiers. The runtime downloads the new shell model in the background on first use; offline installs should run `assets prepare` before upgrading.
 - Shell check: a flagged command at or below the model's 0.1% FPR threshold (`block_0_1pct_fpr`) is reported as `low` and runs without asking; only `medium` above it asks the user (Claude, Cursor, DeepSeek) or holds it for the one-time token (Codex). Routine commands like `npm install` or `git push --force` no longer interrupt the session.
+- Publish the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) as 0.1.6 together with the CLI; they are unchanged since 0.1.5.
 
 ## 0.1.5 - 2026-10-25
 
