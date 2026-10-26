@@ -80,12 +80,12 @@
       "properties": {
         "status": { "enum": ["approved", "dangerous", "unavailable"] },
         "category": { "const": "shell_command" },
-        "risk": { "const": "medium" },
+        "risk": { "enum": ["low", "medium"] },
         "decision_score": { "type": "number" },
         "threshold": { "type": "number" },
         "reason": { "type": "string" }
       },
-      "description": "Reply to check_command. dangerous carries risk medium: hosts ask the user and never block on their own. unavailable carries a reason; the host lets the command run."
+      "description": "Reply to check_command. dangerous carries risk low or medium: hosts let low run, ask the user for medium and never block on their own. unavailable carries a reason; the host lets the command run."
     },
     "lookup": {
       "type": "object", "additionalProperties": false,

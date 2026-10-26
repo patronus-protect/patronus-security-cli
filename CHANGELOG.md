@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Shell check: a flagged command at or below the model's 0.1% FPR threshold (`block_0_1pct_fpr`) is reported as `low` and runs without asking; only `medium` above it asks the user (Claude, Cursor, DeepSeek) or holds it for the one-time token (Codex). Routine commands like `npm install` or `git push --force` no longer interrupt the session.
+
 ## 0.1.5 - 2026-10-25
 
 - Fix `patronus off`, `patronus on` and `patronus status` doing nothing in the Claude and Codex desktop apps: the apps add their own tagged context (for example `<system-reminder>`) next to the typed message, so the exact-message check never matched and the command was scanned as an ordinary prompt. Leading tagged context is now set aside first; quoted or embedded commands still never count.

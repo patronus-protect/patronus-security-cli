@@ -324,17 +324,20 @@ flowchart LR
   K -->|check_command| R[Runtime]
   R -->|approved| RUN[Command runs]
   R -->|unavailable| RUN
-  R -->|dangerous| ASK[User decides]
+  R -->|dangerous, low| RUN
+  R -->|dangerous, medium| ASK[User decides]
 ```
 
 | Score | Risk | Decision |
 | --- | --- | --- |
-| below the model threshold (1.15) | none | Runs. |
-| at or above the threshold | `medium` | The user decides: Claude `permissionDecision: "ask"`, Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
+| at or below `external_commands_1pct_fpr` (0.658) | none | Runs. |
+| above it, at or below `block_0_1pct_fpr` (2.242) | `low` | Runs. In this band only routine developer work scored (`rm -rf build/` 0.7, `git push --force` 1.3, `kill -9` 1.5, `npm install` 1.8). |
+| above `block_0_1pct_fpr` | `medium` | The user decides: Claude `permissionDecision: "ask"`, Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
 
-Patronus never blocks a command on its own. The model's scores do not separate attacks from
-destructive developer work well enough for a block tier: `cat ~/.ssh/id_rsa` scores 1.2 next to
-`npm install` at 2.5, and `curl … | jq` 4.9 next to `curl … | sh` at 11.5.
+Patronus never blocks a command on its own. The thresholds are the two policies in the pinned
+model; a model without `block_0_1pct_fpr` keeps every flagged command at `medium`. Above it the
+scores do not separate attacks from destructive developer work well enough for a block tier:
+a reverse shell scores 3.4 next to `git reset --hard` at 3.6.
 
 Measured scores (QA corpus `qa/hooks/shell.json`): ordinary commands score below the threshold;
 `npm install` 2.5, `rm -rf node_modules` 2.0 and `git reset --hard` 3.7 are medium; exfiltration,
