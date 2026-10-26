@@ -153,7 +153,7 @@ var LocalClient = class {
   }
   async checkCommand(params, signal) {
     const value = await this.rpc("check_command", params, signal);
-    if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
+    if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "low" && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
     return value;
   }
   async check(params, signal) {
