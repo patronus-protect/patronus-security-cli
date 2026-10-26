@@ -339,9 +339,9 @@ model; a model without `block_0_1pct_fpr` keeps every flagged command at `medium
 scores do not separate attacks from destructive developer work well enough for a block tier:
 a reverse shell and `git reset --hard` score close together.
 
-Measured scores (QA corpus `qa/hooks/shell.json`): ordinary commands score below the threshold;
-`npm install` 2.5, `rm -rf node_modules` 2.0 and `git reset --hard` 3.7 are medium; exfiltration,
-reverse shells, `curl … | sh` and `sudo rm -rf /` score 6.4 to 11.5. A missing model or runtime
+Measured scores (QA corpus `qa/hooks/shell.json`, Ark 0.1.13): ordinary commands and `npm install`
+stay at or below `block_0_1pct_fpr` and run; `rm -rf node_modules` 2.8 and `git reset --hard` 4.1
+are medium; exfiltration, reverse shells, `curl … | sh` and `sudo rm -rf /` score 6.4 to 15.5. A missing model or runtime
 fails open. The `shell_command` hook setting (`plugins hook shell_command false`) and a paused
 chat turn the gate off.
 
