@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Shell check: the runtime client now accepts the `low` risk band introduced in 0.1.6. Until now it rejected every low-band verdict as an invalid response, so commands such as `npm install` or `cat .env` ran through the fail-open path, the hooks journaled `broker_unavailable` and the score was lost. Medium-risk commands were not affected.
+
 ## 0.1.6 - 2026-10-26
 
 - Upgrade the local scanner to Ark 0.1.13: the shell-command model `cat-shell-risk-commander` moves to revision `30d77a80` with fewer false positives for routine agent scripting (heredocs into interpreters, loops, `ssh host '…'`, gh/git publishing) and recalibrated thresholds (`0.474714` / `2.517865`). PII detection adds Unicode and apostrophe e-mail local parts, IDN domains with IANA TLD validation, and checksum-validated Swedish, Danish, Norwegian and Finnish personal identifiers. The runtime downloads the new shell model in the background on first use; offline installs should run `assets prepare` before upgrading.
