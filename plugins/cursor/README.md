@@ -9,7 +9,7 @@ Cursor's hook API can replace only MCP results. Other outside text can be withhe
 | What reaches the agent | Cursor hook | Patronus behavior |
 | --- | --- | --- |
 | Your prompt | `beforeSubmitPrompt` | Scanned. Sensitive data blocks the prompt (`continue: false`); injection in your own prompt sends it with a warning. In the `cursor-agent` CLI only with `patronus-security-scanner integration cursor install` (user `hooks.json`): the interactive CLI skips this hook when it comes only from a plugin, and `cursor-agent -p` never runs it. |
-| Shell command (before it runs) | `beforeShellExecution` | Checked. A command the model flags as risky (exfiltration, reverse shells, `curl … \| sh`, but also `npm install` or `rm -rf node_modules`) asks you; Patronus never blocks a command on its own. In `cursor-agent -p`, Cursor answers an ask itself: denied without `--force`, approved with `--force`. |
+| Shell command (before it runs) | `beforeShellExecution` | Checked. A command the model flags as risky (exfiltration, reverse shells, `curl … \| sh`, but also `rm -rf node_modules` or `git reset --hard`; routine commands such as `npm install` run) asks you; Patronus never blocks a command on its own. In `cursor-agent -p`, Cursor answers an ask itself: denied without `--force`, approved with `--force`. |
 | File read by the Read tool | `beforeReadFile` | Scanned. A finding denies the read; the agent gets a receipt, or the masked file for personal data only. |
 | MCP tool result | `postToolUse` | Scanned. A finding replaces the result (`updated_mcp_tool_output`). |
 | Shell output | `postToolUse` | Scanned, **not withheld**: Cursor delivers it unchanged; Patronus adds a warning (`additional_context`). |
