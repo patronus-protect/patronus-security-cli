@@ -2643,7 +2643,7 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
         traceFailure(trace, record11(result2) ? result2.reason : "invalid_scanner_response");
         return {};
       }
-      if (result2.status !== "dangerous") return {};
+      if (result2.status !== "dangerous" || result2.risk === "low") return {};
       if (host === "codex") {
         const token2 = requestCommandApproval(host, input.session_id, command2);
         return map({ kind: "deny", text: token2 ? shellConfirm(result2, token2) : shellHeld(result2) });

@@ -32,6 +32,10 @@ describe('DeepSeek pre-execution shell command check', () => {
     expect(decision).toMatchObject({ kind: 'ask' })
   })
 
+  it('lets a low-risk command run without asking', async () => {
+    expect(await checkCommand(exec('bash', { command: 'npm install' }), gate({ status: 'dangerous', category: 'shell_command', risk: 'low', decision_score: 1.8 }), on)).toBeUndefined()
+  })
+
   it('lets the command run when the check is off, unavailable or failing', async () => {
     const command = exec('bash', { command: 'rm -rf /' })
     expect(await checkCommand(command, gate({ status: 'dangerous', category: 'shell_command', risk: 'medium' }), () => false)).toBeUndefined()
