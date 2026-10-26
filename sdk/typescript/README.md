@@ -41,7 +41,7 @@ Upload a file using the platform `Blob` and an explicit filename:
 import { readFile } from "node:fs/promises";
 
 const bytes = await readFile("contract.pdf");
-const result = await patronus.scanFile({
+const file = await patronus.scanFile({
   name: "contract.pdf",
   data: new Blob([bytes], { type: "application/pdf" }),
 });
@@ -91,7 +91,7 @@ and charging a new one:
 
 ```js
 const key = crypto.randomUUID();
-const result = await patronus.scanText("Some text", undefined, { idempotencyKey: key });
+const retried = await patronus.scanText("Some text", undefined, { idempotencyKey: key });
 ```
 
 `scanFile` and `scanFiles` take it in their options: `{ idempotencyKey: key }`.
