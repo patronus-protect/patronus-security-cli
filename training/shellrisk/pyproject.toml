@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "patronus-shellrisk"
+version = "0.1.0"
+description = "Training, evaluation gates and reference verdicts for the Patronus shell-command risk model"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = ["numpy", "scipy", "scikit-learn", "joblib", "cedarpy", "pyarrow"]
+
+[project.optional-dependencies]
+holdout = ["fsspec", "aiohttp"]
+test = ["pytest"]
+
+[project.scripts]
+shellrisk = "shellrisk.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+shellrisk = ["facts/*.csv", "policies/*.json"]

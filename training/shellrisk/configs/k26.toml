@@ -1,0 +1,20 @@
+# K26: current candidate (2026-11-04). kf1 features (live tokens + legacy markers + patronus.facts/1 tokens),
+# infraset and DefenseClaw negatives, benign templates with risky contrasts, agent-test templates at weight 0.5.
+name = "k26"
+features = "kf1"
+C = [10]
+pos_w = 1.0
+infra_n = 1000
+infra_w = 1.0
+dc = true
+dc_w = 1.0
+aug = true
+contrast = true
+agent_aug = true
+aug_skip = ["kill_one"]
+
+[aug_group_w]
+download_file = 0.3
+own_prog_verb = 0.5
+archiver = 0.5
+heredoc_cases = 0.5

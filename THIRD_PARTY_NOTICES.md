@@ -37,3 +37,15 @@ The marks are not part of Patronus Security's Apache-2.0 license. They may not
 be reused under that license. Their owners' current brand and trademark terms
 continue to apply. The Patronus plugin icon remains the Patronus mark in plugin
 manifests and release packages; the third-party marks are documentation-only.
+
+## Shell-risk training package (`training/shellrisk/`)
+
+`training/shellrisk/data/dc_relabelled.jsonl` and `training/shellrisk/src/shellrisk/policies/dc_rules.json`
+are derived from the DefenseClaw security suite and default guardrail rule packs
+(cisco-ai-defense/defenseclaw, commit 7dca866a), licensed under the Apache License 2.0.
+
+- The commands carry labels assigned by Patronus.
+- The rules were translated by Patronus into Cedar conditions over `patronus.facts/1`.
+
+The licences of the other training and evaluation data are listed in `training/shellrisk/MODEL_CARD.md`.
+That data is not distributed in this repository.

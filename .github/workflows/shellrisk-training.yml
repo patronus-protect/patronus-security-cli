@@ -1,0 +1,29 @@
+name: Shell-risk training package
+
+on:
+  push:
+    paths: ['training/shellrisk/**', '.github/workflows/shellrisk-training.yml']
+  pull_request:
+    paths: ['training/shellrisk/**', '.github/workflows/shellrisk-training.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: training/shellrisk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned dependencies
+        run: python -m pip install -r requirements.lock -e .
+      # data-free tests only: the frozen inputs and trained models are not in the repository
+      - name: Tests
+        run: python -m pytest -q -p no:cacheprovider tests
+      - name: CLI smoke test
+        run: shellrisk --help

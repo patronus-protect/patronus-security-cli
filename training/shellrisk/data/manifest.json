@@ -1,0 +1,59 @@
+{
+ "version": "v1",
+ "frozen": "2026-11-04",
+ "how": "tools/freeze_inputs.py against the research workspace",
+ "files": {
+  "agent_holdout.jsonl": {
+   "bytes": 48551389,
+   "sha256": "bdf8cdc66202ffbbd20db509cdb6a89ca654cfabd9fee3ac6e654f5f6ba6d3cd"
+  },
+  "corpus.jsonl": {
+   "bytes": 18892925,
+   "sha256": "1740df2cb207e34ce4fba855d1180f16020d7b45188043cba453cddabd28fa9c"
+  },
+  "evalsets.jsonl": {
+   "bytes": 22722430,
+   "sha256": "e6d35e75c14cebf86b00eda873c51420b97ebfce213a512e172bdd25502eac35"
+  },
+  "fixtures_159.jsonl": {
+   "bytes": 9333,
+   "sha256": "942d444d938db2af73aaf86e0f526b918364577917c897bc41d5a9368579e225"
+  },
+  "infraset_pool.jsonl": {
+   "bytes": 2601062,
+   "sha256": "8b0a5b40f4dfe48d2f43c0511d750015de8d490f12288f38489caade5260cfc5"
+  },
+  "reference_g/evaluation.json": {
+   "bytes": 20734,
+   "sha256": "cfe6015c015515e4892e784b756fa21e058b839c921495771bc97b8f14fdeac5"
+  },
+  "reference_g/manifest.json": {
+   "bytes": 2603,
+   "sha256": "5950f8a9c80b76cf64a6890190b5f1403f2946c7b1fc324abbd01d1b554860b4"
+  },
+  "reference_g/model.json": {
+   "bytes": 4425243,
+   "sha256": "d98594ef15e220efbbdb6ca5ed22ed99ff40d15cf9adb539490ec99a747cab3f"
+  },
+  "reference_g/shell_cat_guard_a1.py": {
+   "bytes": 2086,
+   "sha256": "73ab583fe2e65e5f64270c79cceebcd3e9a3b93005cfb1f624b8711a74a17a38"
+  },
+  "reference_g/shell_tokens.py": {
+   "bytes": 15857,
+   "sha256": "ab2c54b416b06b98acff4c7a5c5a275076a65a99298c66378ee89d3007c75cc9"
+  },
+  "reference_g/validation.json": {
+   "bytes": 273,
+   "sha256": "14b9eb6bd4220454f352bef34a7e5d48fb8bcb2ea98ef08113e912b0cdddc5b8"
+  }
+ },
+ "sources": {
+  "corpus.jsonl": "shell-risk corpus 159g (fit/val/test): tomngdev/shell-safety (MIT), zyw-286/shell-attack-evolution-dataset (CC-BY-4.0), redcanaryco/atomic-red-team (MIT), nebius/SWE-agent-trajectories (CC-BY-4.0), ShellRisk-Bench, own synthetic rows",
+  "infraset_pool.jsonl": "infraset/infraset commands.parquet (benign agent commands), risky-looking rows removed",
+  "evalsets.jsonl": "all gate sets: original bash test, classic corpus test, #159 fixtures, issue #128, rogue-security, nl2bash, infraset test, DefenseClaw held-out, secret-exfil probes, cross-shell robustness sets, honeypot holdout, DefenseClaw fixtures, canonical fresh, synthetic roles",
+  "fixtures_159.jsonl": "issue #159 fixtures",
+  "agent_holdout.jsonl": "ai-and/termgrade-trajectories (Apache-2.0), harithoppil/terminal-bench-2-trajectories (Apache-2.0); see shellrisk holdout-fetch",
+  "reference_g/": "released model G, patronus-studio/cat-shell-risk-commander (private), candidate a1-relations-heredoc-ops-dosed-2026-10-25"
+ }
+}
