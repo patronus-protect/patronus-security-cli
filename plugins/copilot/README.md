@@ -35,7 +35,14 @@ patronus-security-scanner integration copilot install
 
 The CLI downloads and verifies the matching release asset and copies the hook runtime to `~/.patronus-security-scanner/integrations/copilot`. It then writes its own hook file, `~/.copilot/hooks/patronus-security.json`, and adds the `patronus` entry to `~/.copilot/mcp-config.json` (or the same paths under `$COPILOT_HOME`). Other hook files and MCP servers stay as they are. Start a new `copilot` session afterwards. For installation by an agent, provide [`INSTALL.md`](INSTALL.md).
 
-The directory also works as a Copilot plugin (`plugin.json`, `hooks/hooks.json`, `.mcp.json`), for example with `copilot --plugin-dir plugins/copilot` or `copilot plugin install patronus-protect/patronus-security-cli:plugins/copilot`. Install it only one way; otherwise every hook runs twice.
+The directory also works as a Copilot plugin (`plugin.json`, `hooks/hooks.json`, `.mcp.json`). Install it from the repository's marketplace (`.github/plugin/marketplace.json`):
+
+```sh
+copilot plugin marketplace add patronus-protect/patronus-security-cli
+copilot plugin install patronus-security@patronus-local
+```
+
+For a single session, `copilot --plugin-dir plugins/copilot` works too. Copilot 1.0.106 deprecates direct installs from a repository path or URL (`copilot plugin install owner/repo:path`); only `plugin@marketplace` installs will stay supported. Install it only one way; otherwise every hook runs twice.
 
 ## Hooks
 

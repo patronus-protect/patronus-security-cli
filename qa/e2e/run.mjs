@@ -123,7 +123,7 @@ const copilotAskDenied = 'Denied by preToolUse hook (unable to ask user for conf
 
 async function copilotSessions(web, configs) {
   const { copilotSession } = await import('./copilot.mjs')
-  const binary = bin('copilot')
+  const binary = process.env.PATRONUS_COPILOT_BINARY ?? bin('copilot')
   const out = {}
   for (const variant of ['baseline', 'protected']) {
     const plan = steps(web.url)
