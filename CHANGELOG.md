@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Shell check: the runtime client now accepts the `low` risk band introduced in 0.1.6. Until now it rejected every low-band verdict as an invalid response, so commands such as `npm install` or `cat .env` ran through the fail-open path, the hooks journaled `broker_unavailable` and the score was lost. Medium-risk commands were not affected.
+
+## 0.1.6 - 2026-10-26
+
+- Upgrade the local scanner to Ark 0.1.13: the shell-command model `cat-shell-risk-commander` moves to revision `30d77a80` with fewer false positives for routine agent scripting (heredocs into interpreters, loops, `ssh host '…'`, gh/git publishing) and recalibrated thresholds (`0.474714` / `2.517865`). PII detection adds Unicode and apostrophe e-mail local parts, IDN domains with IANA TLD validation, and checksum-validated Swedish, Danish, Norwegian and Finnish personal identifiers. The runtime downloads the new shell model in the background on first use; offline installs should run `assets prepare` before upgrading.
+- Shell check: a flagged command at or below the model's 0.1% FPR threshold (`block_0_1pct_fpr`) is reported as `low` and runs without asking; only `medium` above it asks the user (Claude, Cursor, DeepSeek) or holds it for the one-time token (Codex). Routine commands like `npm install` or `git push --force` no longer interrupt the session.
+- Publish the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) as 0.1.6 together with the CLI; they are unchanged since 0.1.5.
+
+## 0.1.5 - 2026-10-25
+
+- Fix `patronus off`, `patronus on` and `patronus status` doing nothing in the Claude and Codex desktop apps: the apps add their own tagged context (for example `<system-reminder>`) next to the typed message, so the exact-message check never matched and the command was scanned as an ordinary prompt. Leading tagged context is now set aside first; quoted or embedded commands still never count.
+- `patronus_check_result` waits for the pending scan like a tool result instead of returning the current status at once, so one call usually returns the final result and agents no longer poll in a tight loop.
+- Session start warms the local scanner in the background when any scan surface is on, so model loading no longer delays the first prompt and tool results.
+- Codex API plugin: add release notes for public submission, explain attachment and Dot file coverage, and point runtime protection to the full desktop Codex plugin, which already includes the hosted API connection.
+- Publish the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) as 0.1.5 together with the CLI; they are unchanged since 0.1.4.
+
+## 0.1.4 - 2026-10-24
+
+- Fix the shell gate letting every command through without notice after an upgrade that pins a new shell model revision (0.1.3 with Ark 0.1.11): the runtime now downloads the pinned `cat-shell-risk-commander` revision in the background when its bundle is missing or stale, instead of waiting for `assets prepare`.
+- Publish the API clients (npm `@patronus-protect/api-client`, PyPI and crates.io `patronus-api-client`) as 0.1.4 together with the CLI; they are unchanged since 0.1.3.
+
 ## 0.1.3 - 2026-10-23
 
 - Add a hosted API plugin with account OAuth guidance and explicit scans for selected text, documents, URLs and MCP metadata. Its package contains no local runtime hooks or scanner binaries.

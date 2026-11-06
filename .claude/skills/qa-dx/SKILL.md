@@ -52,4 +52,4 @@ Write `~/.patronus-qa/runs/<date>/dx.json` in the report shape (see the qa-run s
 
 **Fixes:**
 - In-repo docs, READMEs and examples are draft-PR candidates.
-- Fixes to docs.patronus.studio are issues only. Quote the exact wrong text and the proposed replacement.
+- Fixes to docs.patronus.studio are proposed issues for the control-plane repository only. Quote the exact wrong text and the proposed replacement.

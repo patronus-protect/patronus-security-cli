@@ -308,6 +308,11 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
     if ((!policy.enabled || (policy.disabled_chats[host] ?? []).includes(input.session_id)) && !(event === ownEvent && typeof input.tool_name === 'string' && ownOperation(host, input.tool_name))) { trace.outcome = 'disabled'; return {} }
     const enabled = (surface: 'user_input' | 'tool_result' | 'mcp_result' | 'shell_command') => hookEnabled(policy, host, input.session_id, surface)
     const responseEnabled = () => enabled(mcpTool(host, input.tool_name) ? 'mcp_result' : 'tool_result')
+    if (event === 'SessionStart') {
+      // Model loading takes seconds; starting it now keeps it off the first prompt and tool results.
+      if ((['user_input', 'tool_result', 'mcp_result', 'shell_command'] as const).some(enabled)) await rpc(config, { method: 'warm' }).catch(() => ({}))
+      return {}
+    }
     if (event === 'PostToolUseFailure') {
       if (!responseEnabled()) return {}
       if (host !== 'claude' && host !== 'copilot') return fail('hook_event_unsupported')
@@ -357,7 +362,8 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
       const result = await scan({ method: 'command', tool: input.tool_name, callId: input.tool_use_id, command }) as unknown as CommandResult
       // Fail-open: an unavailable check never stops the user's command; the journal records why.
       if (!record(result) || result.status === 'unavailable') { traceFailure(trace, record(result) ? result.reason : 'invalid_scanner_response'); return {} }
-      if (result.status !== 'dangerous') return {}
+      // Low lies within the model's 0.1% FPR threshold, where routine developer work scores.
+      if (result.status !== 'dangerous' || result.risk === 'low') return {}
       if (host === 'codex') {
         const token = requestCommandApproval(host, input.session_id, command)
         return map({ kind: 'deny', text: token ? shellConfirm(result, token) : shellHeld(result) })

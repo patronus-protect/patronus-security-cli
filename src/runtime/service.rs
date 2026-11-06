@@ -53,7 +53,7 @@ impl Runtime {
         store.recover(&fingerprint)?;
         let store = Arc::new(Mutex::new(store));
         let worker = Worker::start(store.clone(), config.clone(), fingerprint.clone())?;
-        let shell = crate::shell_check::ShellCheck::new(config.ark.model_dir.clone());
+        let shell = crate::shell_check::ShellCheck::self_updating(config.ark.model_dir.clone());
         Ok(Self {
             store,
             worker,

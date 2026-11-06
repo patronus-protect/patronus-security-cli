@@ -29,7 +29,7 @@ The hooks must **never** be enabled in the global Claude or Codex configuration 
 2. Read `~/.patronus-qa/runs/<date>/hooks.json`. Check that every check is ok, especially `global host config unchanged`. If that check failed, stop and report it as critical. Do not restore files yourself.
 3. Investigate the findings:
    - **Error or timeout rates**: look at `metrics.hooks[*].errors` and trace the error code in `plugins/native/src/hooks.ts`, `broker.ts`, `daemon.ts`.
-   - **Detection misses**: look at `metrics.replay` rows with `expect=flag` and `verdict=pass`. Scanner quality lives in Ark, outside this repository, so file an issue that names the corpus case IDs.
+   - **Detection misses**: look at `metrics.replay` rows with `expect=flag` and `verdict=pass`. Scanner quality lives in Ark, outside this repository, so propose an issue (see `/qa-run`) that names the corpus case IDs.
    - **False positives**: rows with `expect=pass` and `verdict=flag`.
    - **Prompt policy**: `UserPromptSubmit` misses may be policy, not detection; compare with `plugins/deepseek/src/prompt-policy.ts`.
    - **Cold start / latency**: compare against `qa/thresholds.json` and the previous run in `~/.patronus-qa/history.jsonl`.

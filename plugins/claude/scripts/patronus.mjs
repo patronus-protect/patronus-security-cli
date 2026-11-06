@@ -153,7 +153,7 @@ var LocalClient = class {
   }
   async checkCommand(params, signal) {
     const value = await this.rpc("check_command", params, signal);
-    if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
+    if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "low" && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
     return value;
   }
   async check(params, signal) {
@@ -510,6 +510,7 @@ function validRequest(value) {
       keys = ["method", "tool", "callId", "command"];
       if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== "string" || Buffer.byteLength(value.command) > 64 * 1024) return false;
       break;
+    case "warm":
     case "close":
       keys = ["method"];
       break;
@@ -1713,7 +1714,7 @@ async function serveBroker(input) {
       await privateDirectory(join6(directory2, "scanner"));
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir });
       const connected = await runtimeSessions.runtime(id2, shutdown.signal);
-      if (connected.hello.ark_version !== "0.1.11") {
+      if (connected.hello.ark_version !== "0.1.13") {
         await runtimeSessions.close();
         throw brokerFailure("runtime_version_mismatch");
       }
@@ -1741,13 +1742,20 @@ async function serveBroker(input) {
         message: "Use a file_id returned by a static finding in this session."
       };
     }
+    if (request.method === "warm") {
+      void boot().catch(() => {
+      });
+      return { warming: true };
+    }
     const { client, hello } = await boot().catch((error) => {
       throw brokerFailure(failureReason(error) ?? "runtime_start_failed");
     });
     if (signal.aborted) return unavailable("scan_timeout");
     const session = sessions.capability(id2);
     if (request.method === "check") {
-      const value = await client.check({ session, scan_id: request.scanId }, signal);
+      const job2 = { session, scan_id: request.scanId };
+      const wait2 = config.responseWaitMs ?? hello.runtime.response_wait_ms;
+      const value = wait2 > 0 ? await waitForScan(client, job2, wait2, signal) : await client.check(job2, signal);
       const visible = await autoRedact(value, () => client.readRedacted({ session, scan_id: request.scanId }, signal));
       if (visible.status === "redacted") return { ...scanResult(value, false), status: "redacted", result: visible.result };
       return value.status === "unavailable" ? unavailableScanReference() : scanResult(value, true);
@@ -1911,10 +1919,18 @@ async function serveBroker(input) {
 import { execFile as execFile2 } from "node:child_process";
 import { promisify as promisify2 } from "node:util";
 var run3 = promisify2(execFile2);
+var hostEnvelope = /^\s*<([a-z][\w-]*)>[\s\S]*?<\/\1>/i;
+function withoutEnvelopes(text2) {
+  let rest = text2;
+  for (let match = hostEnvelope.exec(rest); match; match = hostEnvelope.exec(rest)) rest = rest.slice(match[0].length);
+  return rest.trim();
+}
 function chatCommand(payload) {
-  const text2 = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+  const values = (Array.isArray(payload) ? payload : [payload]).map((value) => typeof value === "string" ? withoutEnvelopes(value) : value);
+  const typed = values.filter((value) => value !== "");
+  const text2 = typed.length === 1 ? typed[0] : void 0;
   if (typeof text2 !== "string") return void 0;
-  const match = /^\/?patronus (on|off|status)$/i.exec(text2.trim());
+  const match = /^\/?patronus (on|off|status)$/i.exec(text2);
   return match?.[1]?.toLowerCase();
 }
 async function controlChat(host, session, action, executable) {
@@ -2743,6 +2759,10 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
     }
     const enabled = (surface) => hookEnabled(policy, host, input.session_id, surface);
     const responseEnabled = () => enabled(mcpTool(host, input.tool_name) ? "mcp_result" : "tool_result");
+    if (event === "SessionStart") {
+      if (["user_input", "tool_result", "mcp_result", "shell_command"].some(enabled)) await rpc(config, { method: "warm" }).catch(() => ({}));
+      return {};
+    }
     if (event === "PostToolUseFailure") {
       if (!responseEnabled()) return {};
       if (host !== "claude" && host !== "copilot") return fail("hook_event_unsupported");
@@ -2797,7 +2817,7 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
         traceFailure(trace, record12(result2) ? result2.reason : "invalid_scanner_response");
         return {};
       }
-      if (result2.status !== "dangerous") return {};
+      if (result2.status !== "dangerous" || result2.risk === "low") return {};
       if (host === "codex") {
         const token2 = requestCommandApproval(host, input.session_id, command2);
         return map({ kind: "deny", text: token2 ? shellConfirm(result2, token2) : shellHeld(result2) });
@@ -2876,7 +2896,7 @@ async function handleMcp(value, session, resultHook = false) {
   const id2 = typeof request.id === "number" && Number.isSafeInteger(request.id) || typeof request.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(request.id) ? request.id : null;
   const result = (data) => ({ jsonrpc: "2.0", id: id2, result: data });
   if (request.jsonrpc !== "2.0" || id2 === null) return { jsonrpc: "2.0", id: id2, error: { code: -32600, message: "Invalid request." } };
-  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.3" } });
+  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.6" } });
   if (request.method === "ping") return result({});
   if (request.method === "tools/list") return result({ tools });
   if (request.method === "tools/call") {

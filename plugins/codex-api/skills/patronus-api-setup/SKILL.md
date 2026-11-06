@@ -7,6 +7,8 @@ Use the bundled hosted Patronus MCP at https://control.patronus.studio/api/mcp. 
 
 Explain that explicit scans send selected content to the Patronus API and consume the account allowance. This package does not provide automatic interception or pre-model protection. Offer the optional CLI/runtime workflow only when the user wants local repository access or runtime hooks.
 
+At first setup, briefly explain the optional extension: “For automatic prompt and tool-result checks in supported desktop chats, you can also install the local Patronus runtime plugin with reviewed hooks.” Opening the home or connecting OAuth does not install or activate that extension. Offer its setup when the user chooses automatic local protection; do not repeat the offer after every scan. Personal Web/Work Cloud sessions do not gain runtime hooks from this installation.
+
 For the account dashboard and usage, open https://control.patronus.studio with the available browser-opening tool. Let the user sign in there if needed. Do not invent usage figures: the current MCP has no usage tool. Dashboard sign-in and the host MCP connection are distinct sessions.
 
 If OAuth connection fails, report the host's actual error and point to Patronus support. Do not substitute anonymous scan_text for the authenticated scan workflow. Do not modify local providers, install software or trust hooks during onboarding.

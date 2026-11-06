@@ -333,27 +333,35 @@ Every host checks a shell command line before it runs. The scanner classifies on
 string with Ark's `cat-shell-risk-commander` (L1, ~2.5 MB, prepared by `assets prepare`); it never
 executes, parses or expands it. Prompts and results never go through this model.
 
+The runtime keeps the model current by itself: when the bundle is missing or from another pinned
+revision (for example after an upgrade to a new Ark release), it downloads the pinned revision once
+in the background and answers `unavailable` with `shell_model_updating` until it is in place. A
+failed download is retried at most every 10 minutes.
+
 ```mermaid
 flowchart LR
   C[Agent wants to run a command] --> K[Shell hook]
   K -->|check_command| R[Runtime]
   R -->|approved| RUN[Command runs]
   R -->|unavailable| RUN
-  R -->|dangerous| ASK[User decides]
+  R -->|dangerous, low| RUN
+  R -->|dangerous, medium| ASK[User decides]
 ```
 
 | Score | Risk | Decision |
 | --- | --- | --- |
-| below the model threshold (1.15) | none | Runs. |
-| at or above the threshold | `medium` | The user decides: Claude and Copilot `permissionDecision: "ask"` (Copilot denies it in prompt mode and autopilot), Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
+| at or below `external_commands_1pct_fpr` (0.475) | none | Runs. |
+| above it, at or below `block_0_1pct_fpr` (2.518) | `low` | Runs. Routine developer work such as `npm install`, `git push --force` or `rm -rf build/` lands here or below. |
+| above `block_0_1pct_fpr` | `medium` | The user decides: Claude and Copilot `permissionDecision: "ask"` (Copilot denies it in prompt mode and autopilot), Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
 
-Patronus never blocks a command on its own. The model's scores do not separate attacks from
-destructive developer work well enough for a block tier: `cat ~/.ssh/id_rsa` scores 1.2 next to
-`npm install` at 2.5, and `curl … | jq` 4.9 next to `curl … | sh` at 11.5.
+Patronus never blocks a command on its own. The thresholds are the two policies in the pinned
+model; a model without `block_0_1pct_fpr` keeps every flagged command at `medium`. Above it the
+scores do not separate attacks from destructive developer work well enough for a block tier:
+a reverse shell and `git reset --hard` score close together.
 
-Measured scores (QA corpus `qa/hooks/shell.json`): ordinary commands score below the threshold;
-`npm install` 2.5, `rm -rf node_modules` 2.0 and `git reset --hard` 3.7 are medium; exfiltration,
-reverse shells, `curl … | sh` and `sudo rm -rf /` score 6.4 to 11.5. A missing model or runtime
+Measured scores (QA corpus `qa/hooks/shell.json`, Ark 0.1.13): ordinary commands and `npm install`
+stay at or below `block_0_1pct_fpr` and run; `rm -rf node_modules` 2.8 and `git reset --hard` 4.1
+are medium; exfiltration, reverse shells, `curl … | sh` and `sudo rm -rf /` score 6.4 to 15.5. A missing model or runtime
 fails open. The `shell_command` hook setting (`plugins hook shell_command false`) and a paused
 chat turn the gate off.
 

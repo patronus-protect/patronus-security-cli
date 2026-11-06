@@ -55,6 +55,12 @@ test('medium risk asks the user on Claude and Cursor', async () => {
   assert.equal(cursor.permission, 'ask')
 })
 
+test('low risk runs on every host without asking or holding', async () => {
+  const low = verdict('dangerous', 'low', 1.8)
+  for (const [host, value] of [['claude', pre('Bash', 'npm install')], ['codex', pre('Bash', 'npm install')], ['cursor', cursorShell('npm install')]] as const)
+    assert.deepEqual(await hook(host, value.hook_event_name, value, low), {})
+})
+
 test('Codex holds a medium-risk command until the user sends the one-time token', async () => {
   const medium = verdict('dangerous', 'medium', 2.5)
   const held = await hook('codex', 'PreToolUse', pre('Bash', 'rm -rf node_modules'), medium)

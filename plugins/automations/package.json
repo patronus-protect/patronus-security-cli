@@ -7,7 +7,7 @@
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && npm run typecheck && node --test tests/*.test.cjs",
-    "audit": "npm audit --audit-level=low"
+    "audit": "node scripts/audit.mjs"
   },
   "overrides": {
     "form-data": "4.0.6",
@@ -16,7 +16,10 @@
     "expr-eval": "npm:expr-eval-fork@3.0.3",
     "deepmerge-ts": "8.0.2",
     "ai": "6.0.301",
-    "axios": "1.20.0"
+    "axios": "1.20.0",
+    "undici": "6.29.1",
+    "@activepieces/pieces-framework": { "zod": "4.6.7" },
+    "@activepieces/shared": { "zod": "4.6.7" }
   },
   "devDependencies": {
     "@activepieces/pieces-framework": "0.32.0",

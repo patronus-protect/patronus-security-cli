@@ -97,7 +97,7 @@ export class LocalClient implements RuntimeClient {
   async checkCommand(params: CommandParams, signal?: AbortSignal): Promise<CommandResult> {
     const value = await this.rpc('check_command', params, signal)
     if (!record(value) || value.category !== 'shell_command' || !['approved', 'dangerous', 'unavailable'].includes(String(value.status)) ||
-        (value.risk !== undefined && value.risk !== 'medium') ||
+        (value.risk !== undefined && value.risk !== 'low' && value.risk !== 'medium') ||
         (value.decision_score !== undefined && typeof value.decision_score !== 'number')) throw failure()
     return value as unknown as CommandResult
   }

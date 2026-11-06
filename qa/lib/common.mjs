@@ -58,10 +58,12 @@ export const sha256 = value => createHash('sha256').update(value).digest('hex')
 
 /**
  * One QA finding. `key` must be stable across runs (no timestamps or counts) so the
- * issue upsert can find the open issue again.
+ * issue upsert can find the open issue again. Findings that share a root cause across hosts or
+ * steps pass the same `group` ({ key, title }); the upsert files them as one issue.
  */
-export function finding(area, severity, key, title, { evidence = '', suggestion = '', metric } = {}) {
-  return { area, severity, fingerprint: `qa:${area}:${sha256(key).slice(0, 16)}`, title, evidence, suggestion, ...(metric ? { metric } : {}) }
+export function finding(area, severity, key, title, { evidence = '', suggestion = '', metric, group } = {}) {
+  return { area, severity, fingerprint: `qa:${area}:${sha256(key).slice(0, 16)}`, title, evidence, suggestion, ...(metric ? { metric } : {}),
+    ...(group ? { group: { fingerprint: `qa:${area}:${sha256('group:' + group.key).slice(0, 16)}`, title: group.title } } : {}) }
 }
 
 export const severities = ['critical', 'high', 'medium', 'low']
