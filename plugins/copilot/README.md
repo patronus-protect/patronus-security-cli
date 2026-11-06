@@ -4,7 +4,7 @@ Patronus Runtime Protection adds security hooks to GitHub Copilot CLI (`copilot`
 
 ## Protection level: full (tool and MCP results)
 
-Copilot hands every tool result to one hook as text (`textResultForLlm`), and the hook can replace it before the model sees it. The table was verified against the real `@github/copilot` 1.0.103 binary, re-checked with 1.0.106,, running offline with a scripted model ([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)):
+Copilot hands every tool result to one hook as text (`textResultForLlm`), and the hook can replace it before the model sees it. The table was verified against the real `@github/copilot` 1.0.103 binary, re-checked with 1.0.106, running offline with a scripted model ([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)):
 
 | What reaches the agent | Copilot hook | Patronus behavior |
 | --- | --- | --- |
