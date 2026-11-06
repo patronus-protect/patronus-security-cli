@@ -28,7 +28,7 @@
       "id": "copilot",
       "name": "GitHub Copilot (CLI and coding agent)",
       "status": "pr_open",
-      "notes": "Full for tool and MCP results: every built-in and MCP tool result replaced (postToolUse modifiedResult), prompts replaced (userPromptTransformed modifiedTransformedPrompt), shell commands asked before they run (preToolUse ask; denied in copilot -p and autopilot). Failed-tool error text warned only; custom instructions, skills, attachments and MCP resources unscanned; cloud coding agent not covered. Verified against the real copilot 1.0.103 binary offline with a scripted BYOK model (contract test 4/4, e2e matrix). Interactive ask prompt not verified.",
+      "notes": "Full for tool and MCP results: every built-in and MCP tool result replaced (postToolUse modifiedResult), prompts replaced (userPromptTransformed modifiedTransformedPrompt), shell commands asked before they run (preToolUse ask; denied in copilot -p and autopilot). Failed-tool error text warned only; custom instructions, skills, attachments and MCP resources unscanned; cloud coding agent not covered. Verified against the real copilot 1.0.103 and 1.0.106 binaries offline with a scripted BYOK model (contract test 4/4, e2e matrix). Interactive ask prompt not verified.",
       "pr": "https://github.com/patronus-protect/patronus-security-cli/pull/82",
       "protection": "full"
     },

@@ -4,7 +4,7 @@ Patronus Runtime Protection adds security hooks to GitHub Copilot CLI (`copilot`
 
 ## Protection level: full (tool and MCP results)
 
-Copilot hands every tool result to one hook as text (`textResultForLlm`), and the hook can replace it before the model sees it. The table was verified against the real `@github/copilot` 1.0.103 binary, running offline with a scripted model ([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)):
+Copilot hands every tool result to one hook as text (`textResultForLlm`), and the hook can replace it before the model sees it. The table was verified against the real `@github/copilot` 1.0.103 binary, re-checked with 1.0.106,, running offline with a scripted model ([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)):
 
 | What reaches the agent | Copilot hook | Patronus behavior |
 | --- | --- | --- |
@@ -91,6 +91,6 @@ patronus-security-scanner integration copilot uninstall
 
 `disable` keeps the hook file but sets `disableAllHooks: true` in it, which switches off only the Patronus hooks.
 
-Requires GitHub Copilot CLI with hooks (1.0.103 was used for the contract), Node.js 22.19 or newer, and the matching Patronus Security CLI release.
+Requires GitHub Copilot CLI with hooks (the contract was verified with 1.0.103 and 1.0.106), Node.js 22.19 or newer, and the matching Patronus Security CLI release.
 
 Licensed under Apache-2.0. The release archive includes `LICENSE` and `THIRD_PARTY_NOTICES.md`.
