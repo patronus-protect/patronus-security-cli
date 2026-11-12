@@ -133,7 +133,7 @@ async function copilotSessions(web, configs) {
     const since = Date.now()
     const session = await copilotSession({ root: join(sandbox, `ph-${variant}`), cwd, env, plugin: variant === 'protected', binary })
     let turn
-    try { turn = await session.work(model, task) } finally { await session.close() }
+    try { out.version ??= await session.version(); turn = await session.work(model, task) } finally { await session.close() }
     const rows = evaluate(plan, model.records, session.requests, { protected: variant === 'protected' })
     const denied = model.records.filter(record => (record.received ?? '').includes(copilotAskDenied)).map(record => record.id)
     out[variant] = { ...turn, requests: session.requests, rows, testsPass: await testsPass(cwd), events: await journal(env.PATRONUS_DATA_DIR, since),
@@ -404,6 +404,7 @@ try {
       metrics.hosts[host] = { ...summary, matrix: Object.fromEntries(session.protected.rows.map(row => [row.id, row])),
         baseline_matrix: Object.fromEntries(session.baseline.rows.map(({ id, first, final, ms, expected_present }) => [id, { first, final, ms, expected_present }])),
         prompt_gate_phases: session.gate?.phases, ...(session.protected.emulated ? { host_runtime: 'emulated cursor-agent 2026.10.14 hook contract' } : {}),
+        ...(session.version ? { host_version: session.version } : {}),
         ...(limitations[host] ? { known_limitations: { uncovered_steps: [...limitations[host].uncovered], no_disclosure_steps: [...limitations[host].noDisclosure], warn_only_steps: [...limitations[host].warnOnly] } } : {}) }
     }
   }

@@ -127,6 +127,17 @@ export async function copilotSession({ root, cwd, env, plugin, binary }) {
       }
       return out
     },
+    /** The version that runs in this sandbox. With the user's home, the launcher may start a newer auto-updated build than the installed package. */
+    async version() {
+      const result = await new Promise(resolve => {
+        const child = spawn(binary, ['--version'], { cwd, env: hostEnv, stdio: ['ignore', 'pipe', 'ignore'] })
+        let stdout = ''
+        child.stdout.on('data', chunk => { stdout += chunk })
+        child.on('close', () => resolve(stdout))
+        child.on('error', () => resolve(''))
+      })
+      return /\d+\.\d+\.\d+(?:-\d+)?/.exec(result)?.[0]
+    },
     close: () => server.close(),
   }
 }
