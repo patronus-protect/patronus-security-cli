@@ -142,6 +142,7 @@ pub fn detected_hosts() -> Vec<&'static str> {
         ("claude", "claude"),
         ("deepseek", "dsh"),
         ("cursor", "cursor-agent"),
+        ("copilot", "copilot"),
     ]
     .into_iter()
     .filter_map(|(host, bin)| {
@@ -265,6 +266,7 @@ pub fn install(host: &str, source: Option<PathBuf>) -> Result<()> {
         "codex" => IntegrationHost::Codex,
         "deepseek" => IntegrationHost::Deepseek,
         "cursor" => IntegrationHost::Cursor,
+        "copilot" => IntegrationHost::Copilot,
         _ => return Err(fail("Unknown plugin host")),
     };
     crate::integrations::execute(IntegrationArgs {
@@ -431,7 +433,7 @@ pub fn execute(status_only: bool, format: OutputFormat) -> Result<i32> {
     if agent_setup == AgentSetup::Cli {
         println!("No agent integration selected.");
     } else if hosts.is_empty() {
-        println!("No supported agent host was detected. You can rerun onboarding after installing Codex, Claude Code, dsh or the Cursor CLI.");
+        println!("No supported agent host was detected. You can rerun onboarding after installing Codex, Claude Code, dsh, the Cursor CLI or GitHub Copilot CLI.");
     } else {
         println!("Detected agent hosts: {}", hosts.join(", "));
         let answer = ask(
@@ -476,7 +478,7 @@ pub fn start_job(action: &str, host: Option<String>, source: Option<PathBuf>) ->
     if action == "install"
         && !matches!(
             host.as_deref(),
-            Some("claude" | "codex" | "deepseek" | "cursor")
+            Some("claude" | "codex" | "deepseek" | "cursor" | "copilot")
         )
     {
         return Err(fail("Select a plugin host"));

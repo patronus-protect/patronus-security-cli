@@ -22,7 +22,7 @@ const control = process.env.PATRONUS_QA_CONTROL_URL ?? 'https://control.patronus
 // Host CLI versions against the versions the release gate pins.
 const pinned = Object.fromEntries((await readFile(join(repository, '.github/release-host-versions.env'), 'utf8'))
   .split('\n').map(line => line.split('=')).filter(([name, value]) => name && value))
-const hostCommands = { codex: ['codex', 'CODEX_RELEASE_VERSION'], claude: ['claude', 'CLAUDE_RELEASE_VERSION'], deepseek: ['dsh', 'DEEPSEEK_RELEASE_VERSION'], cursor: ['cursor-agent', 'CURSOR_RELEASE_VERSION'] }
+const hostCommands = { codex: ['codex', 'CODEX_RELEASE_VERSION'], claude: ['claude', 'CLAUDE_RELEASE_VERSION'], deepseek: ['dsh', 'DEEPSEEK_RELEASE_VERSION'], cursor: ['cursor-agent', 'CURSOR_RELEASE_VERSION'], copilot: ['copilot', 'COPILOT_RELEASE_VERSION'] }
 const semver = text => /(\d+)\.(\d+)\.(\d+)/.exec(text ?? '')?.slice(1).map(Number)
 metrics.hosts = {}
 for (const [host, [command, variable]] of Object.entries(hostCommands)) {
@@ -45,7 +45,7 @@ for (const [host, [command, variable]] of Object.entries(hostCommands)) {
 
 // Plugin manifests must agree with the CLI version.
 const cliVersion = /^version = "(.+)"/m.exec(await readFile(join(repository, 'Cargo.toml'), 'utf8'))[1]
-for (const path of ['plugins/claude/.claude-plugin/plugin.json', 'plugins/codex/.codex-plugin/plugin.json', 'plugins/codex-api/.codex-plugin/plugin.json', '.claude-plugin/marketplace.json', 'plugins/cursor/.cursor-plugin/plugin.json', '.cursor-plugin/marketplace.json']) {
+for (const path of ['plugins/claude/.claude-plugin/plugin.json', 'plugins/codex/.codex-plugin/plugin.json', 'plugins/codex-api/.codex-plugin/plugin.json', '.claude-plugin/marketplace.json', 'plugins/cursor/.cursor-plugin/plugin.json', '.cursor-plugin/marketplace.json', 'plugins/copilot/plugin.json', '.github/plugin/marketplace.json']) {
   const text = await readFile(join(repository, path), 'utf8')
   const versions = [...text.matchAll(/"version"\s*:\s*"([^"]+)"/g)].map(match => match[1])
   const ok = versions.every(version => version === cliVersion)
@@ -57,7 +57,7 @@ for (const path of ['plugins/claude/.claude-plugin/plugin.json', 'plugins/codex/
 const probe = await run(scanner, ['probe'], { env, timeout: 30_000 })
 check('runtime probe emits the fixed text', probe.code === 0 && probe.stdout.startsWith('PATRONUS_RUNTIME_PROBE_V1'), probe.stdout.slice(0, 60))
 metrics.status = {}
-for (const host of ['claude', 'codex', 'deepseek', 'cursor']) {
+for (const host of ['claude', 'codex', 'deepseek', 'cursor', 'copilot']) {
   const result = await run(scanner, ['integration', host, 'status', '--format', 'json'], { env, timeout: 60_000 })
   let status
   try { status = JSON.parse(result.stdout) } catch {}

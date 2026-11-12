@@ -337,6 +337,7 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
                 Some("claude") => crate::cli::IntegrationHost::Claude,
                 Some("deepseek") => crate::cli::IntegrationHost::Deepseek,
                 Some("cursor") => crate::cli::IntegrationHost::Cursor,
+                Some("copilot") => crate::cli::IntegrationHost::Copilot,
                 _ => return Err(fail("Unknown integration")),
             };
             let action = match data["action"].as_str() {

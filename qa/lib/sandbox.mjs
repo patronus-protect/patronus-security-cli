@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { percentile, rate, run, scanner, sha256 } from './common.mjs'
 
-export const hosts = ['claude', 'codex', 'cursor']
+export const hosts = ['claude', 'codex', 'cursor', 'copilot']
 export const bin = name => [join(homedir(), '.local/bin', name), `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find(existsSync) ?? name
 export const hostPath = () => `${join(homedir(), '.local/bin')}:${process.env.PATH}`
 
@@ -13,6 +13,7 @@ const globalFiles = [
   '.claude/settings.json', '.claude/plugins/installed_plugins.json', '.claude/plugins/known_marketplaces.json',
   '.codex/config.toml', '.codex/hooks.json',
   '.cursor/hooks.json', '.cursor/mcp.json',
+  '.copilot/hooks/patronus-security.json', '.copilot/mcp-config.json',
 ].map(path => join(homedir(), path))
 
 /** Hashes of the global host config files plus each host's Patronus integration state. */

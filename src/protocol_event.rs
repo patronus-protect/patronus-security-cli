@@ -49,7 +49,7 @@ impl ProtocolEvent {
         bounded_token("host", &self.host, 32)?;
         if !matches!(
             self.host.as_str(),
-            "codex" | "claude" | "deepseek" | "cursor"
+            "codex" | "claude" | "deepseek" | "cursor" | "copilot"
         ) {
             return invalid("unsupported host");
         }
