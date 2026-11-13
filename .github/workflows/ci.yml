@@ -84,8 +84,24 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # ort-sys 2.0.0-rc.13 copies DirectML into each Cargo output folder.
-          New-Item -ItemType Directory -Force target/debug/examples,target/debug/deps,target/release/examples,target/release/deps | Out-Null
+          # Cargo 1.98 adds a level to OUT_DIR; ort-sys rc.13 consequently copies
+          # DLLs into profile/build instead of profile. Prepare both layouts.
+          foreach ($profile in @('target/debug', 'target/release')) {
+            New-Item -ItemType Directory -Force "$profile/examples","$profile/deps","$profile/build/examples","$profile/build/deps" | Out-Null
+          }
+      - name: Build and stage the Windows runtime companion
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Windows bootstrap build failed' }
+          $source = 'target/debug/build/DirectML.dll'
+          if (!(Test-Path $source)) { $source = 'target/debug/DirectML.dll' }
+          foreach ($destination in @('target/debug/DirectML.dll', 'target/debug/deps/DirectML.dll', 'target/debug/examples/DirectML.dll')) {
+            if ([IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
+              Copy-Item -Force $source $destination
+            }
+          }
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-targets --all-features

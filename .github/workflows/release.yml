@@ -99,8 +99,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force target/debug/examples,target/debug/deps,"target/${{ matrix.target }}/release/examples","target/${{ matrix.target }}/release/deps" | Out-Null
+          foreach ($profile in @('target/debug', 'target/${{ matrix.target }}/release')) {
+            New-Item -ItemType Directory -Force "$profile/examples","$profile/deps","$profile/build/examples","$profile/build/deps" | Out-Null
+          }
       - run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Stage Windows runtime beside the executables
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $profile = 'target/${{ matrix.target }}/release'
+          $source = "$profile/build/DirectML.dll"
+          if (!(Test-Path $source)) { $source = "$profile/DirectML.dll" }
+          foreach ($destination in @("$profile/DirectML.dll", "$profile/deps/DirectML.dll", "$profile/examples/DirectML.dll")) {
+            if ([IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
+              Copy-Item -Force $source $destination
+            }
+          }
       - name: Verify ONNX Runtime is statically linked (macOS)
         if: runner.os == 'macOS'
         run: '! otool -L target/${{ matrix.target }}/release/patronus-security-scanner | grep -i onnxruntime'
@@ -118,7 +132,7 @@ jobs:
         run: cargo run --locked --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner ${{ matrix.target }} dist ${{ matrix.target == 'x86_64-unknown-linux-gnu' && '--include-plugins' || '' }}
       - name: Package plugins (Windows)
         if: runner.os == 'Windows'
-        run: cargo run --locked --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner.exe ${{ matrix.target }} dist
+        run: cargo run --locked --release --target ${{ matrix.target }} --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner.exe ${{ matrix.target }} dist
       - name: Smoke-test the unpacked Windows CLI
         if: runner.os == 'Windows'
         shell: pwsh
