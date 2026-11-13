@@ -54,6 +54,15 @@ jobs:
       - run: node plugins/native/scripts/typecheck.mjs
       - run: git diff --exit-code -- plugins/codex/scripts/patronus.mjs plugins/claude/scripts/patronus.mjs
       - run: node plugins/native/scripts/test.mjs
+      - run: node plugins/codex-api/build-home.mjs
+      - run: npm ci --ignore-scripts
+        working-directory: plugins/codex-api/tests
+      - run: npx playwright install --with-deps chromium
+        working-directory: plugins/codex-api/tests
+      - run: npm test
+        working-directory: plugins/codex-api/tests
+      - run: node tests/dashboard-browser.cjs
+      - run: node tests/mcp-local-guide.cjs
       - run: node plugins/deepseek/scripts/test.mjs
       - run: node plugins/deepseek/scripts/test.mjs --local
       - name: Stage DeepSeek release notices

@@ -184,6 +184,8 @@ pub struct SubmitParams {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CheckCommandParams {
+    #[serde(default)]
+    pub host: Option<String>,
     pub session: String,
     pub tool: String,
     pub call_id: String,

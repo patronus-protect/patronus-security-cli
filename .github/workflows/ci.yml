@@ -138,6 +138,8 @@ jobs:
         working-directory: plugins/codex-api/tests
       - run: npm test
         working-directory: plugins/codex-api/tests
+      - run: node tests/dashboard-browser.cjs
+      - run: node tests/mcp-local-guide.cjs
       - run: node plugins/deepseek/scripts/test.mjs
       - run: node plugins/deepseek/scripts/test.mjs --local
       - run: cp THIRD_PARTY_NOTICES.md plugins/deepseek/THIRD_PARTY_NOTICES.md

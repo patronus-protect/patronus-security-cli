@@ -26,7 +26,7 @@ export interface SubmitParams {
   payload: TextPayload
 }
 export interface JobParams { session: string; scan_id: string }
-export interface CommandParams { session: string; tool: string; call_id: string; command: string }
+export interface CommandParams { host?: string; session: string; tool: string; call_id: string; command: string }
 /** Pre-execution shell command check; `risk` is set for a dangerous command. */
 export interface CommandResult { status: 'approved' | 'dangerous' | 'unavailable'; category: 'shell_command'; risk?: 'low' | 'medium'; decision_score?: number; threshold?: number; reason?: string }
 export interface ScanResult {

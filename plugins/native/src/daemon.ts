@@ -205,7 +205,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
       await privateDirectory(join(directory, 'scanner'))
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir })
       const connected = await runtimeSessions.runtime(id, shutdown.signal)
-      if (connected.hello.ark_version !== '0.1.13') { await runtimeSessions.close(); throw brokerFailure('runtime_version_mismatch') }
+      if (connected.hello.ark_version !== '0.1.16') { await runtimeSessions.close(); throw brokerFailure('runtime_version_mismatch') }
       if (connected.hello.provider !== frozen.provider) { await runtimeSessions.close(); throw brokerFailure('runtime_start_failed') }
       return connected
     })()
@@ -281,7 +281,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
       // Synchronous and stateless: the scanner classifies the command line, nothing is stored.
       const budget = AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs ?? hello.runtime.request_timeout_ms)])
       if (!client.checkCommand) return { status: 'unavailable', category: 'shell_command', reason: 'runtime_version_mismatch' }
-      return await client.checkCommand({ session, tool: request.tool, call_id: request.callId, command: request.command }, budget) as unknown as JsonValue
+      return await client.checkCommand({ host: config.host, session, tool: request.tool, call_id: request.callId, command: request.command }, budget) as unknown as JsonValue
     }
     if (request.method !== 'request' && request.method !== 'response') throw brokerFailure()
     if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable('payload_too_large')

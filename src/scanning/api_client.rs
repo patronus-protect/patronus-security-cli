@@ -82,6 +82,22 @@ pub fn has_token(config: &Config) -> bool {
         || crate::auth::access_token().is_ok()
 }
 
+/// Public API 1.2.0 accepts rule/model gates, but not native scoring modes.
+/// Explicit API-native callers can validate that limitation with this helper.
+/// Automatic inference keeps native detection local and does not use this check.
+pub fn validate_modes(config: &Config) -> Result<()> {
+    use patronus_ark::ScoreMode;
+    for (category, mode) in [
+        ("pii", config.analysis.pii_mode),
+        ("dlp", config.analysis.dlp_mode),
+    ] {
+        if config.ark.categories.iter().any(|c| c == category) && mode != ScoreMode::Strict {
+            return Err(error("Balanced/Recall PII and DLP modes currently require local processing; the public API contract supports only Strict. No content was submitted."));
+        }
+    }
+    Ok(())
+}
+
 pub fn submit(config: &Config, body: Value, allow_anonymous: bool) -> Result<Vec<Value>> {
     config.validate()?;
     let timeout = Duration::from_millis(config.runtime.scan_timeout_ms);

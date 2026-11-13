@@ -13,17 +13,31 @@ pub struct Rule {
     pub category: String,
     pub description: String,
     pub default_enabled: bool,
+    #[serde(default = "all_modes")]
+    pub modes: Vec<String>,
 }
 
 /// PII/DLP inventory comes directly from the pinned Ark dependency. Injection
 /// metadata uses its canonical gate IDs (several patterns share one rule).
-/// Snapshot source: patronus-ark 0.1.13, detectors/injection/rules/*.json,
-/// GPL-3.0-only. Refresh the metadata when upgrading the pinned dependency.
+/// Snapshot source: patronus-ark-core 0.1.16, detectors/injection/rules/*.json,
+/// MIT OR Apache-2.0. Refresh the metadata when upgrading the pinned dependency.
+fn all_modes() -> Vec<String> {
+    ["strict", "balanced", "recall"]
+        .into_iter()
+        .map(String::from)
+        .collect()
+}
+
 pub fn rules() -> Vec<Rule> {
     let mut rules: Vec<Rule> = serde_json::from_str(include_str!("l1_injection_rules.json"))
         .expect("embedded Ark rule metadata");
     for p in PII_PATTERNS {
         rules.push(Rule {
+            modes: if p.scored_only {
+                vec!["balanced".into(), "recall".into()]
+            } else {
+                all_modes()
+            },
             id: p.name.into(),
             category: "pii".into(),
             description: p.entity_group.replace('_', " "),
@@ -32,6 +46,7 @@ pub fn rules() -> Vec<Rule> {
     }
     for p in DLP_PATTERNS {
         rules.push(Rule {
+            modes: all_modes(),
             id: p.name.into(),
             category: "dlp".into(),
             description: p.entity_group.replace('_', " "),
@@ -46,6 +61,7 @@ pub fn rules() -> Vec<Rule> {
         ("dlp_destructive_operation", "Destructive operation in text"),
     ] {
         rules.push(Rule {
+            modes: all_modes(),
             id: id.into(),
             category: "dlp".into(),
             description: description.into(),
@@ -54,7 +70,7 @@ pub fn rules() -> Vec<Rule> {
     }
     let defaults = patronus_ark::ScanGateMatrix::default();
     for rule in &mut rules {
-        rule.default_enabled = defaults.allows_rule(&rule.id);
+        rule.default_enabled = defaults.native.allows_rule(&rule.id);
     }
     rules.sort_by(|a, b| (&a.category, &a.id).cmp(&(&b.category, &b.id)));
     rules

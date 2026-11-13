@@ -44,14 +44,3 @@ on('setup-check','click',()=>startSetupJob('check'));
 on('setup-login','click',async()=>{const login=await api('/api/auth/start',{});const target=new URL(login.authorization_url);if(target.origin!=='https://control.patronus.studio')throw new Error('Unexpected login origin');setupHandoff=login.handoff_id;$('setup-login-link').href=target.href;$('setup-login-link').hidden=false;$('setup-login-form').hidden=false;message('Continue in the browser to sign in or register, then enter its one-time code here.');});
 on('setup-login-form','submit',async event=>{event.preventDefault();const code=$('setup-code').value;$('setup-code').value='';try{await api('/api/auth/complete',{handoff_id:setupHandoff,code});$('setup-login-form').hidden=true;$('setup-login-link').hidden=true;await loadSetup();await refreshUsage();}catch(error){setupHandoff=undefined;throw error;}});
 on('setup-logout','click',async()=>{await api('/api/auth/logout',{});await loadSetup();await refreshUsage();});
-
-function filterActivity(){
- const query=$('activity-search').value.toLowerCase(),kind=$('activity-type').value,status=$('activity-result').value;
- for(const row of document.querySelectorAll('.activity-content tbody tr')){
-  const text=row.textContent.toLowerCase(),section=row.closest('section'),heading=section.querySelector('h2')?.textContent||'';
-  const source=row.dataset.remoteKind||(heading==='Protocol sessions'?'runtime':'file');
-  const matches=status==='approved'?text.includes('approved')||text.includes('clean'):status==='findings'?text.includes('dangerous')||text.includes('findings'):!status||text.includes(status);
-  row.hidden=!!((kind&&kind!==source)||!matches||!text.includes(query));
- }
-}
-for(const id of ['activity-search','activity-type','activity-result'])on(id,id==='activity-search'?'input':'change',filterActivity);

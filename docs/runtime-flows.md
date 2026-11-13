@@ -309,8 +309,10 @@ flowchart TD
 
 ## 7. Shell gate (before a command runs)
 
+CLI 0.1.7 uses Cat K26 (Ark 0.1.16) with bundled and user Cedar policies. `ask_behavior` maps Cat ask to low (default) or host approval; block continues to request approval. The optional `check_command.host` selects a complete per-host override, with omitted/unconfigured hosts using the global shell policy. See [Shell and Cedar configuration](configuration.md#shell-and-cedar). The older measured scores below describe Ark 0.1.13 and are not a K26 calibration claim.
+
 Every host checks a shell command line before it runs. The scanner classifies only the command
-string with Ark's `cat-shell-risk-commander` (L1, ~2.5 MB, prepared by `assets prepare`); it never
+string with Ark's `cat-shell-risk-commander` (L1, ~4.4 MB, prepared by `assets prepare`); it never
 executes, parses or expands it. Prompts and results never go through this model.
 
 The runtime keeps the model current by itself: when the bundle is missing or from another pinned

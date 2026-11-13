@@ -151,16 +151,21 @@ impl ArkAnalyzer {
                 .push(ark_category(category).map_err(ScannerError::Ark)?);
             let gates = patronus_ark::ScanGateMatrix {
                 l1: policy.l1.get(&normalized).copied(),
-                rules: policy
-                    .l1_rules
-                    .iter()
-                    .map(|(id, enabled)| (id.clone(), *enabled))
-                    .collect(),
-                models: policy
-                    .l1_detectors
-                    .iter()
-                    .map(|(name, enabled)| (format!("native:{name}"), *enabled))
-                    .collect(),
+                native: patronus_ark::NativeGates {
+                    pii_mode: policy.pii_mode,
+                    dlp_mode: policy.dlp_mode,
+                    rules: policy
+                        .l1_rules
+                        .iter()
+                        .map(|(id, enabled)| (id.clone(), *enabled))
+                        .collect(),
+                    models: policy
+                        .l1_detectors
+                        .iter()
+                        .map(|(name, enabled)| (format!("native:{name}"), *enabled))
+                        .collect(),
+                    ..Default::default()
+                },
                 ..Default::default()
             };
             policies.insert(normalized, (level, gates));
@@ -538,7 +543,7 @@ mod tests {
             "recommendation": {"accepted": false, "final_arbitration": "default", "operating_point": "best_f1", "acceptance_threshold": 0.99},
             "candidates": [],
             "terminality": {"completion": "complete", "degraded": false, "degradation_reason": null},
-            "provenance": {"ark_version": "0.1.13", "schema_version": "1", "model": "fixture"}
+            "provenance": {"ark_version": "0.1.16", "schema_version": "1", "model": "fixture"}
         })).unwrap();
         let result = patronus_ark::SecurityScanResult {
             category: "injection".into(),

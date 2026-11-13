@@ -20,7 +20,8 @@ pub fn save(config: &Config) -> Result<()> {
     crate::dashboard::ensure_directory(&root)?;
     let bytes = toml::to_string_pretty(config).map_err(|e| invalid(&e.to_string()))?;
     crate::output::atomic_write(&root.join("config.toml"), bytes.as_bytes())?;
-    crate::dashboard::rebuild_index(&root, &root.join("output"))?;
+    let page = crate::dashboard::render_dashboard_shell(&root);
+    crate::output::atomic_write(&root.join("index.html"), page.as_bytes())?;
     println!("Settings saved. Restart agent sessions to activate them; reload index.html.");
     Ok(())
 }

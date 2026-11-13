@@ -1557,7 +1557,7 @@ async function serveBroker(input) {
       await privateDirectory(join6(directory2, "scanner"));
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir });
       const connected = await runtimeSessions.runtime(id2, shutdown.signal);
-      if (connected.hello.ark_version !== "0.1.13") {
+      if (connected.hello.ark_version !== "0.1.16") {
         await runtimeSessions.close();
         throw brokerFailure("runtime_version_mismatch");
       }
@@ -1642,7 +1642,7 @@ async function serveBroker(input) {
     if (request.method === "command") {
       const budget2 = AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs ?? hello.runtime.request_timeout_ms)]);
       if (!client.checkCommand) return { status: "unavailable", category: "shell_command", reason: "runtime_version_mismatch" };
-      return await client.checkCommand({ session, tool: request.tool, call_id: request.callId, command: request.command }, budget2);
+      return await client.checkCommand({ host: config.host, session, tool: request.tool, call_id: request.callId, command: request.command }, budget2);
     }
     if (request.method !== "request" && request.method !== "response") throw brokerFailure();
     if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable("payload_too_large");
@@ -2720,7 +2720,7 @@ async function handleMcp(value, session) {
   const id2 = typeof request.id === "number" && Number.isSafeInteger(request.id) || typeof request.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(request.id) ? request.id : null;
   const result = (data) => ({ jsonrpc: "2.0", id: id2, result: data });
   if (request.jsonrpc !== "2.0" || id2 === null) return { jsonrpc: "2.0", id: id2, error: { code: -32600, message: "Invalid request." } };
-  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.6" } });
+  if (request.method === "initialize") return result({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "patronus-native", version: "0.1.7" } });
   if (request.method === "ping") return result({});
   if (request.method === "tools/list") return result({ tools });
   if (request.method === "tools/call") {
