@@ -51,6 +51,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
     let mut archive = zip::ZipWriter::new(File::create(&cli_archive)?);
     add_file(&mut archive, &binary, Path::new(executable), true)?;
+    if target.contains("windows") {
+        let runtime = binary
+            .parent()
+            .ok_or("missing binary directory")?
+            .join("DirectML.dll");
+        add_file(&mut archive, &runtime, Path::new("DirectML.dll"), false)?;
+        add_file(
+            &mut archive,
+            Path::new("licenses/DirectML-LICENSE.txt"),
+            Path::new("licenses/DirectML-LICENSE.txt"),
+            false,
+        )?;
+    }
     for name in ["LICENSE", "THIRD_PARTY_NOTICES.md"] {
         add_file(&mut archive, Path::new(name), Path::new(name), false)?;
     }

@@ -7,6 +7,7 @@
 - Refresh the local dashboard with the Control Plane palette, responsive navigation, mode controls, a Cedar editor/import and a saved-settings command classifier that never executes commands. Hosted MCP pages explain local settings and link to the official CLI installer; they do not access local settings.
 - Load the dashboard shell and settings immediately, with verified activity loaded separately in the background. Paginate and filter activity tables without rewriting historical reports on a page request or settings save.
 - Align all seven local dashboard pages with the current Control Plane layout, including grouped sidebar navigation, consistent forms, mobile actions and Cedar empty states.
+- Keep Windows builds compatible with the updated ONNX Runtime and include its required DirectML companion DLL and license in the Windows archive; smoke-test the unpacked CLI. Update the automation build dependency `follow-redirects` to its patched release.
 - Publish unchanged API clients as 0.1.7 with the CLI, keeping the release manifests aligned.
 
 - Upgrade the pinned local engine to `patronus-ark 0.1.16`, including Ark Core, the shared native gate API and updated PII/DLP detection. Shell checks use the pinned K26 bundle and its Cedar policy score; the existing host mapping remains `low` through the block cut and `medium` above it. Runtime plugins require Ark 0.1.16. The runtime refreshes a missing or stale shell bundle in the background; offline installations should run `assets prepare` before upgrading.

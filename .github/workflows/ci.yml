@@ -80,6 +80,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Prepare Windows ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # ort-sys 2.0.0-rc.13 copies DirectML into each Cargo output folder.
+          New-Item -ItemType Directory -Force target/debug/examples,target/debug/deps,target/release/examples,target/release/deps | Out-Null
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-targets --all-features

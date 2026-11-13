@@ -95,6 +95,11 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
+      - name: Prepare Windows ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force target/debug/examples,target/debug/deps,"target/${{ matrix.target }}/release/examples","target/${{ matrix.target }}/release/deps" | Out-Null
       - run: cargo build --locked --release --target ${{ matrix.target }}
       - name: Verify ONNX Runtime is statically linked (macOS)
         if: runner.os == 'macOS'
@@ -114,6 +119,14 @@ jobs:
       - name: Package plugins (Windows)
         if: runner.os == 'Windows'
         run: cargo run --locked --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner.exe ${{ matrix.target }} dist
+      - name: Smoke-test the unpacked Windows CLI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'patronus-cli-smoke'
+          Expand-Archive -Path 'dist/patronus-security-scanner-*-x86_64-pc-windows-msvc.zip' -DestinationPath $destination
+          & (Join-Path $destination 'patronus-security-scanner.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged CLI could not start' }
       - name: Add standalone installer
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |

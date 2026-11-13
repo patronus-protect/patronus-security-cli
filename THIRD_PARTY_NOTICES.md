@@ -20,6 +20,15 @@ See `Cargo.lock` for the exact Rust dependency versions and source metadata used
 by this build. This notice does not attempt to restate the license metadata of
 every transitive dependency.
 
+## Windows inference runtime
+
+The Windows archive also includes `DirectML.dll`, a prerequisite of the pinned
+ONNX Runtime Windows distribution. This Microsoft redistributable is governed by
+the Microsoft DirectML software license, included at
+`licenses/DirectML-LICENSE.txt`; it is not relicensed under Apache-2.0. The license
+is provided by the [Microsoft.AI.DirectML package](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4).
+ONNX Runtime itself remains statically linked.
+
 ## Compatibility marks
 
 The documentation displays the Codex app, Claude, DeepSeek, n8n, Make, Zapier,

@@ -91,3 +91,7 @@ patronus-security-scanner maintenance uninstall --all --yes
 ```
 
 Reports, settings and credentials remain on the device unless you remove them separately.
+
+### Windows archive
+
+Keep `DirectML.dll` beside `patronus-security-scanner.exe` when extracting the Windows ZIP. The pinned ONNX Runtime links statically, but its Windows build requires this companion DLL. Its Microsoft license is included under `licenses/`.
