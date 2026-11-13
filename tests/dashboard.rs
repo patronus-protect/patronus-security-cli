@@ -46,8 +46,10 @@ fn protocol_append_writes_safe_session_html_and_shared_index() {
     let index = std::fs::read_to_string(root.join("index.html")).unwrap();
     assert!(index.contains("Protocol sessions"));
     assert!(index.contains("codex"));
-    assert!(index.contains("for=\"tab-get-started\">Setup"));
-    assert!(index.contains("for=\"tab-api\">Scan"));
+    assert!(
+        index.contains("for=\"tab-get-started\" tabindex=\"0\" role=\"button\" title=\"Setup\"")
+    );
+    assert!(index.contains("for=\"tab-api\" tabindex=\"0\" role=\"button\" title=\"Scan\""));
     assert!(index.contains("id=\"scan-form\""));
     assert!(index.contains("id=\"account-action\" href=\"#sign-in\">Connect Control Plane"));
     assert!(index.contains("id=\"upgrade-cta\" hidden"));
@@ -284,7 +286,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
         "status": "FINDINGS",
         "scan_root": scan_root,
         "scanner_version": env!("CARGO_PKG_VERSION"),
-        "ark_version": "0.1.13",
+        "ark_version": "0.1.16",
         "artifact_hashes": {
             "report.json": report_hash
         },
@@ -332,7 +334,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
             "status": "FINDINGS",
             "scan_root": newer_attestation.scan_root.clone(),
             "scanner_version": env!("CARGO_PKG_VERSION"),
-            "ark_version": "0.1.13",
+            "ark_version": "0.1.16",
             "artifact_hashes": {"report.json": newer_hash},
             "attestation": newer_attestation,
             "authentication": newer_authentication
@@ -426,7 +428,7 @@ fn sample_report() -> Report {
         target_kind: TargetKind::Repo,
         target: ".".into(),
         scanner_version: env!("CARGO_PKG_VERSION").into(),
-        ark_version: "0.1.13".into(),
+        ark_version: "0.1.16".into(),
         ark_categories: vec!["prompt_injection".into()],
         ark_max_level: "l1".into(),
         ark_category_levels: Default::default(),
@@ -517,4 +519,19 @@ fn disclosure_events_record_fixed_pii_types_and_never_values() {
     let valid = event(serde_json::json!(["email", "ip_address"])).unwrap();
     valid.validate().unwrap();
     assert!(event(serde_json::json!(["ada@example.com"])).is_err());
+}
+
+#[test]
+fn live_shell_defers_activity_and_retains_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    // An unusable activity directory must not prevent navigation or settings.
+    std::fs::write(dir.path().join("protocol"), "not a directory").unwrap();
+    std::fs::write(dir.path().join("output"), "not a directory").unwrap();
+    let page = patronus_security_scanner::dashboard::render_dashboard_shell(dir.path());
+    assert!(page.contains("aria-busy=\"true\""));
+    assert!(page.contains("Loading verified activity"));
+    assert!(page.contains("id=\"save-shell\""));
+    assert!(page.contains("id=\"policy-list\""));
+    assert!(!page.contains("No session activity yet"));
+    assert!(!page.contains("No scans yet"));
 }

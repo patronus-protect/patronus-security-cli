@@ -80,6 +80,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Prepare Windows ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Cargo 1.98 adds a level to OUT_DIR; ort-sys rc.13 consequently copies
+          # DLLs into profile/build instead of profile. Prepare both layouts.
+          foreach ($profile in @('target/debug', 'target/release')) {
+            New-Item -ItemType Directory -Force "$profile/examples","$profile/deps","$profile/build/examples","$profile/build/deps" | Out-Null
+          }
+      - name: Build and stage the Windows runtime companion
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Windows bootstrap build failed' }
+          $source = 'target/debug/build/DirectML.dll'
+          if (!(Test-Path $source)) { $source = 'target/debug/DirectML.dll' }
+          foreach ($destination in @('target/debug/DirectML.dll', 'target/debug/deps/DirectML.dll', 'target/debug/examples/DirectML.dll')) {
+            if ([IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
+              Copy-Item -Force $source $destination
+            }
+          }
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-targets --all-features
@@ -138,6 +160,8 @@ jobs:
         working-directory: plugins/codex-api/tests
       - run: npm test
         working-directory: plugins/codex-api/tests
+      - run: node tests/dashboard-browser.cjs
+      - run: node tests/mcp-local-guide.cjs
       - run: node plugins/deepseek/scripts/test.mjs
       - run: node plugins/deepseek/scripts/test.mjs --local
       - run: cp THIRD_PARTY_NOTICES.md plugins/deepseek/THIRD_PARTY_NOTICES.md

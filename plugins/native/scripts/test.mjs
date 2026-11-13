@@ -7,6 +7,8 @@ import { createServer } from 'node:net'
 import { root, bundle } from './builder.mjs'
 
 const scratch = await mkdtemp(join(tmpdir(), 'patronus-native-tests-'))
+// Keep macOS Unix socket paths below sockaddr_un's 104-byte limit.
+const dataRoot = await mkdtemp(join(process.platform === 'darwin' ? '/private/tmp' : tmpdir(), 'pn-'))
 try {
   const available = (await readdir(resolve(root, 'tests'))).filter(name => name.endsWith('.test.ts'))
   const files = process.argv.length > 2 ? process.argv.slice(2) : available
@@ -39,8 +41,8 @@ try {
     outputs.push(output)
   }
   const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...outputs], {
-    stdio: 'inherit', env: { ...process.env, PATRONUS_NATIVE_BUNDLE: resolve(root, 'dist/patronus.mjs') }, timeout: 360_000,
+    stdio: 'inherit', env: { ...process.env, PATRONUS_DATA_DIR: dataRoot, PATRONUS_NATIVE_BUNDLE: resolve(root, 'dist/patronus.mjs') }, timeout: 360_000,
   })
   if (result.error) throw result.error
   process.exitCode = result.status ?? 1
-} finally { await rm(scratch, { recursive: true, force: true }) }
+} finally { await rm(scratch, { recursive: true, force: true }); await rm(dataRoot, { recursive: true, force: true }) }

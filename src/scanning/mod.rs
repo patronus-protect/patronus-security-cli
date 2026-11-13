@@ -12,3 +12,5 @@ pub mod remote_scan;
 pub mod report;
 pub mod shell_check;
 pub mod target;
+
+pub mod shell_config;

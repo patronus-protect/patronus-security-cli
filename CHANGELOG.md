@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.1.7 - 2026-11-13
+
+- Configure PII and DLP scoring independently (Strict, Balanced, Recall), globally or per plugin text surface; existing profiles inherit the global modes. Show scored-only rules as inactive in Strict. All native rules and PII/DLP modes stay local in every provider mode; only Wolf model stages use the API.
+- Configure Cat ask verdicts as low (the existing default) or host approval, globally or per host. Add and validate named Cedar sources, absolute policy directories, bundle-default allowlists and Cat rule gates. Invalid settings do not replace the saved configuration.
+- Refresh the local dashboard with the Control Plane palette, responsive navigation, mode controls, a Cedar editor/import and a saved-settings command classifier that never executes commands. Hosted MCP pages explain local settings and link to the official CLI installer; they do not access local settings.
+- Load the dashboard shell and settings immediately, with verified activity loaded separately in the background. Paginate and filter activity tables without rewriting historical reports on a page request or settings save.
+- Align all seven local dashboard pages with the current Control Plane layout, including grouped sidebar navigation, consistent forms, mobile actions and Cedar empty states.
+- Keep Windows builds compatible with the updated ONNX Runtime and include its required DirectML companion DLL and license in the Windows archive; smoke-test the unpacked CLI. Update the automation build dependency `follow-redirects` to its patched release.
+- Publish unchanged API clients as 0.1.7 with the CLI, keeping the release manifests aligned.
+
+- Upgrade the pinned local engine to `patronus-ark 0.1.16`, including Ark Core, the shared native gate API and updated PII/DLP detection. Shell checks use the pinned K26 bundle and its Cedar policy score; the existing host mapping remains `low` through the block cut and `medium` above it. Runtime plugins require Ark 0.1.16. The runtime refreshes a missing or stale shell bundle in the background; offline installations should run `assets prepare` before upgrading.
 
 - Shell check: the runtime client now accepts the `low` risk band introduced in 0.1.6. Until now it rejected every low-band verdict as an invalid response, so commands such as `npm install` or `cat .env` ran through the fail-open path, the hooks journaled `broker_unavailable` and the score was lost. Medium-risk commands were not affected.
 

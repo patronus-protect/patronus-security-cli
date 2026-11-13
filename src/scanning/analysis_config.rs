@@ -8,6 +8,8 @@ use crate::config::ArkConfig;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AnalysisConfig {
+    pub pii_mode: patronus_ark::ScoreMode,
+    pub dlp_mode: patronus_ark::ScoreMode,
     pub category_levels: BTreeMap<String, String>,
     pub l1: BTreeMap<String, bool>,
     pub l1_detectors: BTreeMap<String, bool>,

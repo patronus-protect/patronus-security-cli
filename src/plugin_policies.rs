@@ -19,6 +19,10 @@ pub struct Assessment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pii_mode: Option<patronus_ark::ScoreMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dlp_mode: Option<patronus_ark::ScoreMode>,
     pub l1_rules: BTreeMap<String, bool>,
     pub injection: Assessment,
     pub threat: Assessment,
@@ -74,6 +78,8 @@ impl Profile {
             }
         };
         Self {
+            pii_mode: None,
+            dlp_mode: None,
             l1_rules: rules()
                 .into_iter()
                 .map(|r| {
@@ -118,6 +124,8 @@ impl Profile {
         config.ark.categories = self.l1_categories();
         config.ark.max_level = "l1".into();
         config.analysis = crate::analysis_config::AnalysisConfig {
+            pii_mode: self.pii_mode.unwrap_or(base.analysis.pii_mode),
+            dlp_mode: self.dlp_mode.unwrap_or(base.analysis.dlp_mode),
             l1_rules: self.l1_rules.clone(),
             user_prompt_pii: true,
             ..Default::default()

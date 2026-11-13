@@ -21,7 +21,7 @@ pub struct Runtime {
     worker: Worker,
     config: Config,
     fingerprint: String,
-    shell: crate::shell_check::ShellCheck,
+    shell: std::collections::BTreeMap<String, crate::shell_check::ShellCheck>,
 }
 
 impl Runtime {
@@ -34,7 +34,7 @@ impl Runtime {
         let fingerprint = blake3::hash(
             &serde_json::to_vec(&json!({
                 "scanner": crate::VERSION, "ark_version": crate::ARK_VERSION,
-                "policy": ANALYSIS_POLICY_VERSION, "plugin_policies": config.plugin_policies, "ark": config.ark, "analysis": config.analysis, "chunking": config.chunking, "provider": config.provider,
+                "policy": ANALYSIS_POLICY_VERSION, "plugin_policies": config.plugin_policies, "shell": config.shell, "ark": config.ark, "analysis": config.analysis, "chunking": config.chunking, "provider": config.provider,
             }))
             .map_err(|_| "invalid scanner configuration".to_string())?,
         )
@@ -53,7 +53,18 @@ impl Runtime {
         store.recover(&fingerprint)?;
         let store = Arc::new(Mutex::new(store));
         let worker = Worker::start(store.clone(), config.clone(), fingerprint.clone())?;
-        let shell = crate::shell_check::ShellCheck::self_updating(config.ark.model_dir.clone());
+        let shell = std::iter::once((String::new(), &config.shell.default))
+            .chain(config.shell.hosts.iter().map(|(h, p)| (h.clone(), p)))
+            .map(|(host, policy)| {
+                (
+                    host,
+                    crate::shell_check::ShellCheck::self_updating(
+                        crate::shell_check::model_directory(config.ark.model_dir.as_deref()),
+                    )
+                    .with_policy(policy.clone()),
+                )
+            })
+            .collect();
         Ok(Self {
             store,
             worker,
@@ -99,7 +110,18 @@ impl Runtime {
                 {
                     return Err("invalid_params".into());
                 }
-                serde_json::to_value(self.shell.check(&params.command))
+                if params
+                    .host
+                    .as_ref()
+                    .is_some_and(|h| !crate::plugin_policies::HOSTS.contains(&h.as_str()))
+                {
+                    return Err("invalid_params".into());
+                }
+                let shell = self
+                    .shell
+                    .get(params.host.as_deref().unwrap_or(""))
+                    .unwrap_or(&self.shell[""]);
+                serde_json::to_value(shell.check(&params.command))
                     .map_err(|_| "invalid_result".into())
             }
             "prepare_disclosure" => {

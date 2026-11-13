@@ -1,6 +1,6 @@
 # Third-party notices
 
-This distribution uses exactly `patronus-ark 0.1.13`. The corresponding crate
+This distribution uses exactly `patronus-ark 0.1.16`. The corresponding crate
 currently published through crates.io declares `GPL-3.0-only` in its package
 metadata and includes its own `LICENSE`, `LICENSE-COMMERCIAL.md`, and `NOTICE`
 files. Casdo Labs GmbH / Patronus owns ARK and has authorized its inclusion in
@@ -19,6 +19,15 @@ License. Their notices are provided in `src/dashboard/assets/Inter-OFL.txt` and
 See `Cargo.lock` for the exact Rust dependency versions and source metadata used
 by this build. This notice does not attempt to restate the license metadata of
 every transitive dependency.
+
+## Windows inference runtime
+
+The Windows archive also includes `DirectML.dll`, a prerequisite of the pinned
+ONNX Runtime Windows distribution. This Microsoft redistributable is governed by
+the Microsoft DirectML software license, included at
+`licenses/DirectML-LICENSE.txt`; it is not relicensed under Apache-2.0. The license
+is provided by the [Microsoft.AI.DirectML package](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4).
+ONNX Runtime itself remains statically linked.
 
 ## Compatibility marks
 
