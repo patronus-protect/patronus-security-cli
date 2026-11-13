@@ -6,12 +6,22 @@ on:
       release_version:
         description: Version matching Cargo and plugin manifests (without v)
         required: true
+      publish_release:
+        description: Build the existing version tag and publish after all release gates
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
 
 permissions:
   contents: read
+
+env:
+  # Recovery runs use the immutable tag as source, even when the workflow itself
+  # is dispatched from a newer branch to repair runner/infrastructure failures.
+  PATRONUS_RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release && format('refs/tags/v{0}', inputs.release_version) || github.ref }}
+  PATRONUS_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.release_version) || github.ref_name }}
 
 jobs:
   validate:
@@ -24,6 +34,8 @@ jobs:
       DSH_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/checkout@v4
         with:
           repository: deepseek-ai/deepseek-harness
@@ -84,12 +96,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: macos-latest, target: aarch64-apple-darwin }
           - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -183,6 +197,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/checkout@v4
         with:
           repository: deepseek-ai/deepseek-harness
@@ -247,12 +263,14 @@ jobs:
           if-no-files-found: error
 
   publish-rust-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: release-e2e
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Publish Rust API client
         env:
@@ -260,7 +278,7 @@ jobs:
         run: cargo publish -p patronus-api-client --locked
 
   publish-npm-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: release-e2e
     runs-on: ubuntu-latest
     environment: npm
@@ -272,6 +290,8 @@ jobs:
         working-directory: sdk/typescript
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -282,11 +302,13 @@ jobs:
       - run: npm publish
 
   build-python-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: release-e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -299,7 +321,7 @@ jobs:
           if-no-files-found: error
 
   publish-python-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: build-python-client
     runs-on: ubuntu-latest
     environment: pypi
@@ -313,13 +335,15 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: [build, release-e2e, publish-rust-client, publish-npm-client, publish-python-client]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/download-artifact@v4
         with:
           pattern: patronus-security-*
@@ -328,4 +352,4 @@ jobs:
       - name: Publish prebuilt CLI and plugin archives
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/* --verify-tag --generate-notes
+        run: gh release create "$PATRONUS_RELEASE_TAG" dist/* --verify-tag --generate-notes
