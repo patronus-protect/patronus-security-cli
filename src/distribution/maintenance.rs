@@ -50,6 +50,7 @@ pub fn execute(command: MaintenanceCommand) -> Result<()> {
                     IntegrationHost::Claude,
                     IntegrationHost::Deepseek,
                     IntegrationHost::Cursor,
+                    IntegrationHost::Copilot,
                 ] {
                     if let Err(error) = crate::integrations::execute(IntegrationArgs {
                         host,

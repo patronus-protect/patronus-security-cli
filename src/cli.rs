@@ -117,6 +117,7 @@ pub enum IntegrationHost {
     Claude,
     Deepseek,
     Cursor,
+    Copilot,
 }
 
 #[derive(Debug, Clone, Copy, Subcommand, PartialEq, Eq)]
@@ -481,13 +482,13 @@ pub enum PluginCommand {
     },
     /// Pause runtime scans for a native host chat ID.
     Pause {
-        #[arg(value_parser = ["codex", "claude", "deepseek", "cursor"])]
+        #[arg(value_parser = ["codex", "claude", "deepseek", "cursor", "copilot"])]
         host: String,
         chat: String,
     },
     /// Resume scans of future input/results; earlier unscanned history remains.
     Resume {
-        #[arg(value_parser = ["codex", "claude", "deepseek", "cursor"])]
+        #[arg(value_parser = ["codex", "claude", "deepseek", "cursor", "copilot"])]
         host: String,
         chat: String,
     },

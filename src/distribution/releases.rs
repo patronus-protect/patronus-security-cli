@@ -141,7 +141,7 @@ fn extract(bytes: Vec<u8>, root: &Path) -> Result<()> {
     Ok(())
 }
 pub fn plugin_source(host: &str) -> Result<PathBuf> {
-    if !["codex", "claude", "deepseek", "cursor"].contains(&host) {
+    if !["codex", "claude", "deepseek", "cursor", "copilot"].contains(&host) {
         return Err(fail("Unknown plugin host"));
     }
     let release = latest()?;

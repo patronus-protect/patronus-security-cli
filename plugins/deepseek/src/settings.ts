@@ -8,16 +8,16 @@ export const patronusRoot = () => {
   return root
 }
 export type Surface = 'user_input' | 'tool_result' | 'mcp_result' | 'shell_command'
-export type PluginHost = 'codex' | 'claude' | 'deepseek' | 'cursor'
+export type PluginHost = 'codex' | 'claude' | 'deepseek' | 'cursor' | 'copilot'
 export interface PluginSettings {
   schema_version: 1
   enabled: boolean
   /** `shell_command` (pre-execution check) is optional and defaults to on, so settings files and
    * bundles from before it stay compatible. */
   hooks: Record<Exclude<Surface, 'shell_command'>, boolean> & { shell_command?: boolean }
-  /** `cursor` is optional so settings written before Cursor support stay valid, and the
-   * scanner omits it while empty so older plugin bundles keep reading new settings. */
-  disabled_chats: Record<Exclude<PluginHost, 'cursor'>, string[]> & { cursor?: string[] }
+  /** `cursor` and `copilot` are optional so settings written before their support stay valid, and
+   * the scanner omits them while empty so older plugin bundles keep reading new settings. */
+  disabled_chats: Record<Exclude<PluginHost, 'cursor' | 'copilot'>, string[]> & { cursor?: string[]; copilot?: string[] }
 }
 export const defaultSettings = (): PluginSettings => ({
   schema_version: 1, enabled: true,
@@ -45,7 +45,7 @@ export function readPluginSettings(path = process.env.PATRONUS_PLUGIN_SETTINGS ?
   if (Object.keys(hooks).some(key => ![...Object.keys(defaults.hooks), 'shell_command'].includes(key)) || Object.keys(defaults.hooks).some(key => typeof hooks[key] !== 'boolean') ||
       (hooks.shell_command !== undefined && typeof hooks.shell_command !== 'boolean')) throw Error('Invalid Patronus hooks.')
   const hosts = Object.keys(value.disabled_chats)
-  if (Object.keys(defaults.disabled_chats).some(host => !hosts.includes(host)) || hosts.some(host => !['codex', 'claude', 'deepseek', 'cursor'].includes(host))) throw Error('Invalid Patronus chat settings.')
+  if (Object.keys(defaults.disabled_chats).some(host => !hosts.includes(host)) || hosts.some(host => !['codex', 'claude', 'deepseek', 'cursor', 'copilot'].includes(host))) throw Error('Invalid Patronus chat settings.')
   for (const host of hosts) {
     const ids = value.disabled_chats[host]
     if (!Array.isArray(ids) || ids.length > 1000 || ids.some(id => typeof id !== 'string' || !/^[A-Za-z0-9_.:-]{1,256}$/.test(id))) throw Error('Invalid Patronus chat ID.')

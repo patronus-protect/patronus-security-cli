@@ -6,14 +6,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{IoContext, Result, ScannerError};
 
+/// Hosts added after the settings format; their chat lists may be absent.
+const OPTIONAL_HOSTS: [&str; 2] = ["cursor", "copilot"];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PluginSettings {
     pub schema_version: u32,
     pub enabled: bool,
     pub hooks: Hooks,
-    /// `cursor` is optional and omitted while empty, so plugin bundles released before
-    /// Cursor support keep accepting settings this version writes.
+    /// `cursor` and `copilot` are optional and omitted while empty, so plugin bundles released
+    /// before their support keep accepting settings this version writes.
     pub disabled_chats: BTreeMap<String, Vec<String>>,
 }
 
@@ -78,10 +81,9 @@ impl PluginSettings {
             || ["codex", "claude", "deepseek"]
                 .iter()
                 .any(|host| !self.disabled_chats.contains_key(*host))
-            || self
-                .disabled_chats
-                .keys()
-                .any(|host| !["codex", "claude", "deepseek", "cursor"].contains(&host.as_str()))
+            || self.disabled_chats.keys().any(|host| {
+                !["codex", "claude", "deepseek", "cursor", "copilot"].contains(&host.as_str())
+            })
             || self
                 .disabled_chats
                 .values()
@@ -109,12 +111,14 @@ impl PluginSettings {
         let result = (|| {
             let mut file = options.open(&staging).at(&staging)?;
             let mut stored = self.clone();
-            if stored
-                .disabled_chats
-                .get("cursor")
-                .is_some_and(Vec::is_empty)
-            {
-                stored.disabled_chats.remove("cursor");
+            for optional in OPTIONAL_HOSTS {
+                if stored
+                    .disabled_chats
+                    .get(optional)
+                    .is_some_and(Vec::is_empty)
+                {
+                    stored.disabled_chats.remove(optional);
+                }
             }
             let bytes =
                 serde_json::to_vec_pretty(&stored).map_err(|_| invalid("invalid settings"))?;
@@ -198,7 +202,7 @@ pub fn execute(command: crate::cli::PluginCommand) -> Result<()> {
             if !valid_chat(&chat) {
                 return Err(invalid("invalid chat ID"));
             }
-            let ids = if host == "cursor" {
+            let ids = if OPTIONAL_HOSTS.contains(&host.as_str()) {
                 settings.disabled_chats.entry(host).or_default()
             } else {
                 settings
@@ -216,7 +220,7 @@ pub fn execute(command: crate::cli::PluginCommand) -> Result<()> {
             }
             if let Some(ids) = settings.disabled_chats.get_mut(&host) {
                 ids.retain(|id| id != &chat);
-            } else if host != "cursor" {
+            } else if !OPTIONAL_HOSTS.contains(&host.as_str()) {
                 return Err(invalid("unknown host"));
             }
         }
