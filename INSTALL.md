@@ -20,7 +20,7 @@ The installer fetches only the artifact of its own release, verifies it against 
 To verify the installer itself before running it, pin a release and check its published checksum:
 
 ```sh
-version=v0.1.6
+version=v0.1.7
 base="https://github.com/patronus-protect/patronus-security-cli/releases/download/$version"
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' 0 HUP INT TERM
@@ -91,3 +91,7 @@ patronus-security-scanner maintenance uninstall --all --yes
 ```
 
 Reports, settings and credentials remain on the device unless you remove them separately.
+
+### Windows archive
+
+Keep `DirectML.dll` beside `patronus-security-scanner.exe` when extracting the Windows ZIP. The pinned ONNX Runtime links statically, but its Windows build requires this companion DLL. Its Microsoft license is included under `licenses/`.

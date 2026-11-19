@@ -64,6 +64,9 @@ max_pending_jobs = 64
 
 # Overrides are optional; unspecified categories use ark.max_level.
 [analysis]
+# Local scoring modes: strict, balanced or recall (independent).
+pii_mode = "strict"
+dlp_mode = "strict"
 user_prompt_pii = false
 
 [analysis.category_levels]
@@ -81,3 +84,7 @@ user_prompt_pii = false
 # hidden_html_instruction = true
 # unicode_confusable = true
 # secret_transfer = true
+
+# Cat ask verdicts run as low by default; use "ask" for host approval.
+[shell.default]
+ask_behavior = "low"

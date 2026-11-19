@@ -22,7 +22,7 @@ describe('DeepSeek pre-execution shell command check', () => {
     expect(shellCommandOf(exec('read', { path: '/x' }))).toBeUndefined()
     const calls: CommandParams[] = []
     await checkCommand(exec('bash', { command: 'git status' }), gate({ status: 'approved', category: 'shell_command' }, calls), on)
-    expect(calls).toEqual([{ session: 'session-capability-0000000000000731', tool: 'bash', call_id: 'call-731', command: 'git status' }])
+    expect(calls).toEqual([{ host: 'deepseek', session: 'session-capability-0000000000000731', tool: 'bash', call_id: 'call-731', command: 'git status' }])
   })
 
   it('asks even for a high score: Patronus never blocks a command on its own', async () => {

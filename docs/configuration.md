@@ -2,7 +2,7 @@
 
 The compiled defaults come from `config/defaults.toml`. Precedence is: compiled defaults, legacy per-user platform config, `~/.patronus-security-scanner/config.toml`, repository `.patronus-security-scanner.toml` for repo scans, explicit `--config`, then applicable CLI flags. Unknown keys and schema versions other than `1` are rejected. `--no-repo-config` skips repository configuration.
 
-`provider.mode` accepts `local`, `api`, and `hybrid`. API mode sends scan text to `https://control.patronus.studio/api/v1/scan`, using the environment variable named by `provider.api_key_env` or the CLI login token. Hybrid keeps user prompts local. Tool/MCP results and files with at most 2048 cl100k_base tokens run locally; larger results/files send every analysis chunk to the API. Repository scans apply this decision independently to each file. Explicit public URL and MCP server audits always use the API, including when the processing mode is `local`; URL scans fall back to the daily anonymous allowance when no credential exists, while MCP remains authenticated. `scan file` follows the configured processing mode; `--anonymous-api` explicitly selects an anonymous document upload. Token counts cover all raw text blocks in a result or all extracted text in a file before chunking; envelope keys, metadata and media are excluded. Incomplete, failed, malformed and timed-out API scans never produce approval. Only two API failures fall back to a local scan, and the result says so: an exhausted usage or rate limit (hybrid and API mode) and a missing, expired or rejected login (hybrid mode only). If local scanning is unavailable too, the scan fails with the public reason `usage_limit_reached`, `authentication_missing`, `authentication_expired` or `authentication_rejected`. Direct audit commands report the failure; runtime plugins preserve tool execution with explicit degraded context. `config init --provider <mode>` selects an initial mode. The retired hosted-browser provider is rejected; its unused legacy origin field is discarded when loading old configuration.
+`provider.mode` accepts `local`, `api`, and `hybrid` and controls **Wolf model analysis**, not the native detectors. All L1 rules, PII, DLP and Cat run locally, with every selected native mode preserved. API mode sends text only for enabled Injection/Threat model stages (L2/L3). Hybrid keeps prompts and results/files of at most 2048 tokens local and can use the API for Wolf on larger results/files. Wolf API failures retain the existing usage-limit/authentication fallback behavior. Explicit URL/MCP service audits and explicitly requested API document uploads remain separate workflows; they are not automatic native-detector routing.
 
 Reports default to `~/.patronus-security-scanner/output`; protocol journals and runtime sessions use the same shared user directory. `PATRONUS_DATA_DIR` relocates this root for tests or managed deployments. Explicit output/state overrides are honored. The old `.patronus-security-scanner/output` configuration default is normalized to the shared root; existing repository reports are not moved automatically.
 
@@ -37,7 +37,7 @@ max_store_bytes = 536870912
 max_pending_jobs = 64
 ```
 
-The runtime requires local mode and uses **Ark 0.1.13** with downloads disabled. The default L1 profile works without model downloads. Prepare assets required by an L2/L3 profile separately for that version. Missing required assets, a different provider or invalid limits prevent startup; the plugin does not install a scanner or change providers. Scanning never triggers model or tokenizer downloads.
+The runtime requires local mode and uses **Ark 0.1.16** with downloads disabled. The default L1 profile works without model downloads. Prepare assets required by an L2/L3 profile separately for that version. Missing required assets, a different provider or invalid limits prevent startup; the plugin does not install a scanner or change providers. Scanning never triggers model or tokenizer downloads.
 
 | Runtime key | Meaning and valid range |
 | --- | --- |
@@ -82,3 +82,57 @@ Run `patronus-security-scanner dashboard`. `[plugin_policies."<host>.<surface>"]
 `policy show`, `policy validate <policies.json>` and `policy import <policies.json>` manage the nine scopes. `policy rules` lists the L1 inventory. `policy check <check.json>` accepts `host`, `surface` and `text`. `assets prepare` includes levels required by plugin policies. Restart active sessions after saving settings.
 
 The earlier `[analysis]` configuration still applies to file scans and clients without plugin scope metadata. Its `l1_rules` are direct Ark gates. `analysis.confidence` supports Injection/Threat model thresholds; the plugin UI manages the corresponding scoped settings instead.
+
+
+## PII and DLP modes (CLI 0.1.7)
+
+Every local PII/DLP rule is listed by `policy rules` and in the local dashboard's **Detection rules** page. Each category independently supports `strict`, `balanced` and `recall`. Strict retains structural rule acceptance; scored modes apply Ark's calibrated scoring and enable the rules marked as requiring a scored mode. A rule switch does not override its supported modes. New rules are migrated into existing profiles with their Ark defaults, preserving existing switches.
+
+```toml
+[analysis]
+pii_mode = "recall"
+dlp_mode = "balanced"
+
+[analysis.l1_rules]
+pii_imei = true
+dlp_deepseek_key = true
+
+# Add pii_mode = "strict" inside a complete existing
+# [plugin_policies."codex.tool_result"] profile to override it.
+# Omitted profile modes inherit the global analysis modes.
+```
+
+The mode keys are optional in saved plugin profiles. Global settings apply to ordinary CLI scans; plugin profiles select the host and user-input/tool-result/MCP-result scope. Changes take effect in new agent sessions. No scoring threshold is invented by the CLI.
+
+PII/DLP scoring does not depend on the public API supporting these modes: they always execute locally. Selecting API or Hybrid for Wolf therefore does not disable or reject Balanced/Recall native detection. Only enabled Wolf model stages are submitted by the automatic CLI/plugin pipeline; native rule gates and scoring modes are not sent to that endpoint.
+
+## Shell and Cedar
+
+Cat K26 is prepared by `assets prepare`; the runtime refreshes a missing or stale pinned bundle in the background. The dashboard classifier only uses already prepared assets. The default model directory is the shared Patronus Desktop model directory unless `ark.model_dir` overrides it. The pinned manifest and bundle checksums are verified when loaded.
+
+```toml
+[shell.default]
+ask_behavior = "low" # or "ask"
+policy_dirs = []     # absolute local directories containing .cedar files
+
+[shell.default.cedar_policies]
+"kubectl.cedar" = '''
+@id("user.no_kubectl_delete")
+@decision("block")
+@title("No kubectl deletes")
+forbid (principal, action == Action::"segment", resource)
+when { context.program == "kubectl" && context.verb == "DELETE" };
+'''
+
+[shell.hosts.claude]
+ask_behavior = "ask"
+# Host overrides are complete policies. Hosts without an override inherit shell.default.
+```
+
+An `allow` verdict runs; `ask` maps to low (runs without asking) by default or to medium (host approval) when configured as `ask`. Cat `block` remains medium, requesting host approval: Patronus does not introduce a new unconditional host block tier. Codex uses its existing held-command/one-time-token mechanism. The shell hook switch and per-chat pause still apply.
+
+Named sources may contain one or more policies and are compiled against Ark's Cedar schema before configuration is saved. The dashboard imports `.cedar` files, edits sources and rejects invalid changes without replacing the saved configuration. `policy_dirs` are loaded in file-name order; keep them outside scanned/untrusted repositories. Source files are revalidated at startup. Invalid or unavailable runtime policy/model processing remains fail-open with an explicit unavailable reason.
+
+`shell.default.rules` (and the equivalent host override) maps `cat.<policy id>` to booleans. `allowlist` maps a loaded bundle-default policy ID to `"ask"`; it cannot lower core policies or create an allow verdict. Preparing the pinned model is required to validate an allowlist. User sources, directories, allowlists and rule gates are local configuration, never sent to the hosted API.
+
+Run `patronus-security-scanner dashboard` to edit all of this locally. The server binds only to loopback and keeps its existing token, origin, bounded-input and revision checks. Its Shell & Cedar command classifier never executes the submitted command and returns both Cat's decision and its mapped runtime action. The hosted MCP home only explains these settings and links to the official CLI installation guide; it cannot edit local settings.

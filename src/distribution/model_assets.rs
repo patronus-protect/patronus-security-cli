@@ -16,7 +16,7 @@ pub fn default_directory() -> Result<PathBuf> {
     let root = home.data_local_dir().join("com.patronus.desktop");
     Ok(root.join("patronus-ark/models"))
 }
-/// The pre-execution shell command check (Ark cat-shell-risk-commander, ~2.5 MB) always runs
+/// The pre-execution shell command check (Ark cat-shell-risk-commander, ~4.4 MB) always runs
 /// locally, also when text scans use the API.
 pub fn prepare_shell(config: &mut Config) -> Result<()> {
     if config.ark.model_dir.is_none() {

@@ -1,6 +1,6 @@
 //! Pre-execution shell command check with Ark's `cat-shell-risk-commander` (L1, native).
 //!
-//! The classifier scores the command string only; it never executes, parses or expands it.
+//! Cat scores the command and applies its bundled Cedar policies; it never executes it.
 //! It is one signal before a host runs a command, next to the host's own sandbox and
 //! permission policy. It is deliberately separate from the text analysis of prompts and
 //! results: those never go through the shell model.
@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use patronus_ark::assets::SHELL_COMMAND_ASSET;
-use patronus_ark::detectors::shell::shell_risk::ShellRiskPipeline;
+use patronus_ark::detectors::shell::{ShellConfig, ShellRiskPipeline};
 use serde::Serialize;
 
 /// Commands longer than this are not a single command line; they are not classified.
@@ -19,11 +19,10 @@ pub struct CommandVerdict {
     /// `approved`, `dangerous` or `unavailable`.
     pub status: &'static str,
     pub category: &'static str,
-    /// `low` or `medium` for a dangerous command. `low` stays at or below the model's 0.1% FPR
-    /// threshold, where only routine developer work scored (`npm install`, `git push --force`);
-    /// hosts let it run. `medium` lies above it: hosts ask the user and never block on their own.
-    /// The scores do not separate attacks from destructive developer work well enough for a
-    /// block tier (a reverse shell and `git reset --hard` score close together).
+    /// `low` or `medium` for a dangerous command. The bundle score includes Cedar policy
+    /// floors. At or below Cat's block cut it maps to `low` and hosts let it run; above
+    /// that cut it maps to `medium` and hosts ask the user. This preserves the host
+    /// confirmation policy even when Cat's verdict is `block`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub risk: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,6 +44,12 @@ impl CommandVerdict {
             reason: Some(reason),
         }
     }
+}
+
+pub fn model_directory(configured: Option<&Path>) -> Option<PathBuf> {
+    configured
+        .map(Path::to_path_buf)
+        .or_else(|| crate::model_assets::default_directory().ok())
 }
 
 pub fn bundle_dir(model_dir: &Path) -> PathBuf {
@@ -71,6 +76,7 @@ pub struct ShellCheck {
     model_dir: Option<PathBuf>,
     updates: bool,
     download: fn(&Path) -> Result<(), String>,
+    policy: crate::scanning::shell_config::ShellPolicy,
     pipeline: OnceLock<Result<ShellRiskPipeline, &'static str>>,
     update: Arc<Mutex<Update>>,
 }
@@ -89,6 +95,7 @@ impl ShellCheck {
     pub fn new(model_dir: Option<PathBuf>) -> Self {
         Self {
             model_dir,
+            policy: Default::default(),
             updates: false,
             download: download_assets,
             pipeline: OnceLock::new(),
@@ -104,6 +111,12 @@ impl ShellCheck {
         }
     }
 
+    pub fn with_policy(mut self, policy: crate::scanning::shell_config::ShellPolicy) -> Self {
+        self.policy = policy;
+        self.pipeline = OnceLock::new();
+        self
+    }
+
     fn pipeline(&self) -> Result<&ShellRiskPipeline, &'static str> {
         if let Some(loaded) = self.pipeline.get() {
             return loaded.as_ref().map_err(|reason| *reason);
@@ -114,8 +127,19 @@ impl ShellCheck {
         }
         self.pipeline
             .get_or_init(|| {
-                ShellRiskPipeline::from_bundle_dir(&bundle_dir(dir))
-                    .map_err(|_| "shell_model_invalid")
+                let config = ShellConfig::new(bundle_dir(dir));
+                let pipeline = ShellRiskPipeline::from_pinned_bundle_dir(
+                    &config.bundle_dir,
+                    &config.manifest_sha256,
+                )
+                .map_err(|_| "shell_model_invalid")?;
+                let policies = self.policy.compile().map_err(|_| "shell_policy_invalid")?;
+                if !policies.user_policies.is_empty() || !policies.allowlist.is_empty() {
+                    pipeline
+                        .configure(&policies)
+                        .map_err(|_| "shell_policy_invalid")?;
+                }
+                Ok(pipeline)
             })
             .as_ref()
             .map_err(|reason| *reason)
@@ -161,6 +185,25 @@ impl ShellCheck {
         "shell_model_updating"
     }
 
+    /// Local dashboard details; this does not change the host protocol reply.
+    pub fn explain(&self, command: &str) -> serde_json::Value {
+        let runtime = self.check(command);
+        let cat = if runtime.decision_score.is_some() {
+            self.pipeline()
+                .ok()
+                .and_then(|p| {
+                    p.verdict(command, None, &[], |id| {
+                        self.policy.rules.get(id).copied().unwrap_or(true)
+                    })
+                    .ok()
+                })
+                .map(|v| v.to_json(false))
+        } else {
+            None
+        };
+        serde_json::json!({"runtime": runtime, "cat": cat})
+    }
+
     pub fn check(&self, command: &str) -> CommandVerdict {
         if command.trim().is_empty() {
             return CommandVerdict {
@@ -177,22 +220,27 @@ impl ShellCheck {
         }
         match self.pipeline() {
             Ok(pipeline) => {
-                let score = pipeline.score(command);
+                let verdict = match pipeline.verdict(command, None, &[], |id| {
+                    self.policy.rules.get(id).copied().unwrap_or(true)
+                }) {
+                    Ok(verdict) => verdict,
+                    Err(_) => return CommandVerdict::unavailable("shell_policy_invalid"),
+                };
+                let flagged = verdict.decision != patronus_ark::detectors::shell::Decision::Allow;
                 CommandVerdict {
-                    status: if score.flagged {
-                        "dangerous"
-                    } else {
-                        "approved"
-                    },
+                    status: if flagged { "dangerous" } else { "approved" },
                     category: "shell_command",
-                    risk: score.flagged.then(|| {
-                        risk_band(
-                            score.decision_score,
-                            pipeline.model().threshold(MEDIUM_THRESHOLD_POLICY),
-                        )
+                    risk: flagged.then(|| {
+                        if self.policy.ask_behavior
+                            == crate::scanning::shell_config::AskBehavior::Ask
+                        {
+                            "medium"
+                        } else {
+                            risk_band(verdict.score, Some(verdict.block_cut))
+                        }
                     }),
-                    decision_score: Some(round(score.decision_score)),
-                    threshold: Some(round(score.threshold)),
+                    decision_score: Some(round(verdict.score)),
+                    threshold: Some(round(verdict.ask_cut)),
                     reason: None,
                 }
             }
@@ -200,9 +248,6 @@ impl ShellCheck {
         }
     }
 }
-
-/// Threshold policy above which a flagged command is `medium`; at or below it, `low`.
-const MEDIUM_THRESHOLD_POLICY: &str = "block_0_1pct_fpr";
 
 /// A model without the stricter policy keeps every flagged command at `medium`.
 fn risk_band(decision_score: f64, medium_threshold: Option<f64>) -> &'static str {

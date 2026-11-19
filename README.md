@@ -90,7 +90,7 @@ require an account for local protection.
 To pin a specific release, replace the version in this URL:
 
 ```sh
-curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.6/install.sh | sh
+curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.7/install.sh | sh
 ```
 
 Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.
@@ -196,7 +196,7 @@ To check a live Codex or Claude session, ask the agent to run `patronus-security
 
 Patronus checks supported text for prompt injection, sensitive data and configured Ark classifications. Plugin protection covers user-prompt text, tool-result text and MCP text blocks. It does not scan tool requests, paths, metadata or media bytes.
 
-MCP appears in three distinct places: the Patronus tools expose explicit scans, pending-result checks and redacted reads; runtime integrations protect text returned by foreign MCP servers; and an explicit audit of a public MCP server is a remote scan. Public URLs use the rate-limited anonymous API when no account credential is available. MCP-server audits remain authenticated. File, directory and repository scans extract UTF-8/UTF-16 text plus text from PDF and DOCX files on-device. In hybrid mode, every chunk from a file above 2048 tokens is analyzed through the API. Add `--anonymous-api` only when you explicitly want to upload one complete TXT, Markdown, HTML, PDF, or DOCX document.
+MCP appears in three distinct places: the Patronus tools expose explicit scans, pending-result checks and redacted reads; runtime integrations protect text returned by foreign MCP servers; and an explicit audit of a public MCP server is a remote scan. Public URLs use the rate-limited anonymous API when no account credential is available. MCP-server audits remain authenticated. File, directory and repository scans extract UTF-8/UTF-16 text plus text from PDF and DOCX files on-device. In hybrid mode, native rules and PII/DLP analysis stay local; only enabled Wolf model stages for files above 2048 tokens use the API. Add `--anonymous-api` only when you explicitly want to upload one complete TXT, Markdown, HTML, PDF, or DOCX document.
 
 Patronus is not a general SAST, dependency, CVE, malware or runtime-behaviour scanner. A clean result is useful evidence, not proof that arbitrary software is safe.
 
@@ -205,3 +205,8 @@ For exact behavior, see [configuration](docs/configuration.md), [privacy](docs/p
 ## License
 
 The Patronus Security CLI and its first-party integrations are the Apache-2.0-licensed community project. The CLI depends on the separately licensed first-party `patronus-ark` engine, which remains GPL-3.0-only and is explicitly approved by the repository's package-scoped license policy. Third-party components and model assets retain their own terms; see [licensing notes](docs/licensing.md), [`deny.toml`](deny.toml), and `THIRD_PARTY_NOTICES.md`.
+
+
+### Local rules, modes and shell policies
+
+Run `patronus-security-scanner dashboard` for the local Control Plane-style dashboard. Configure every PII/DLP rule and independent Strict/Balanced/Recall modes globally or per plugin text surface. Configure Cat K26 ask handling (low by default, optionally host approval), add Cedar policies and test command verdicts without executing commands. Settings apply to new agent sessions. PII/DLP and their scoring modes always run locally; API/Hybrid controls only Wolf model analysis. The hosted MCP dashboard links to CLI installation and explains local configuration; it does not modify settings on your computer. See [configuration](docs/configuration.md#pii-and-dlp-modes-cli-017).

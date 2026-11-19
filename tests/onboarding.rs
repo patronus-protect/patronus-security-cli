@@ -162,7 +162,7 @@ fn dashboard_has_setup_and_remote_activity_after_restart() {
         assert!(html.contains("Set up Patronus"));
         assert!(html.contains("URL &amp; MCP scans"));
         assert!(html.contains("24 ms"));
-        assert!(html.contains(">Commands</label>"));
+        assert!(html.contains(">Commands</span></label>"));
         assert!(!html.contains("Access Rules"));
     }
 }

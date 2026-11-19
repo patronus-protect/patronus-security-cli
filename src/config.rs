@@ -13,6 +13,8 @@ pub const DEFAULTS: &str = include_str!("../config/defaults.toml");
 pub struct Config {
     #[serde(default)]
     pub plugin_policies: std::collections::BTreeMap<String, crate::plugin_policies::Profile>,
+    #[serde(default)]
+    pub shell: crate::scanning::shell_config::ShellSettings,
     pub schema_version: u32,
     pub provider: ProviderConfig,
     pub scan: ScanConfig,
@@ -182,6 +184,9 @@ impl Config {
             message,
         };
         self.runtime.validate().map_err(invalid)?;
+        self.shell
+            .validate(crate::shell_check::model_directory(self.ark.model_dir.as_deref()).as_deref())
+            .map_err(invalid)?;
         self.analysis.validate(&self.ark).map_err(invalid)?;
         for (scope, profile) in &self.plugin_policies {
             if !crate::plugin_policies::valid_scope(scope) {

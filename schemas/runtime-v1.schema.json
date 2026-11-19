@@ -68,6 +68,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["session", "tool", "call_id", "command"],
       "properties": {
+        "host": { "enum": ["codex", "claude", "cursor", "deepseek"] },
         "session": { "$ref": "#/$defs/session" },
         "tool": { "type": "string", "minLength": 1, "maxLength": 512 },
         "call_id": { "type": "string", "minLength": 1, "maxLength": 512 },

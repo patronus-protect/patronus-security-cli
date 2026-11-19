@@ -162,9 +162,44 @@ fn prune_completed_reports_locked(output_root: &Path, keep_per_target: usize) ->
     Ok(())
 }
 
+/// The HTTP view verifies existing activity without rewriting every historical page.
+/// Reports are atomic and incomplete protocol tails are omitted by the verifier.
+pub fn render_live_index(root: &Path, output_root: &Path) -> Result<String> {
+    let scans = completed_reports(output_root, false)?;
+    let sessions = protocol_summaries(root, &root.join("protocol"), false)?;
+    Ok(render_index(root, &scans, &sessions))
+}
+
+/// Render navigation and controls without opening any activity files.
+pub fn render_dashboard_shell(root: &Path) -> String {
+    let page = render_index_with_remote(root, &[], &[], String::new());
+    let start = page
+        .find("<div class=\"tab-content activity-content\">")
+        .unwrap();
+    let end = page[start..]
+        .find("</div><!--activity-end-->")
+        .map(|i| start + i);
+    if let Some(end) = end {
+        format!("{}<div class=\"tab-content activity-content\" aria-busy=\"true\"><section class=\"panel\"><div class=\"panel-head\"><div><h2>Activity</h2><p>Loading verified activity… Settings are ready independently.</p></div></div></section>{}", &page[..start], &page[end..])
+    } else {
+        page
+    }
+}
+
+pub fn render_activity(root: &Path) -> Result<String> {
+    let page = render_live_index(root, &root.join("output"))?;
+    let marker = "<div class=\"tab-content activity-content\">";
+    let start = page.find(marker).unwrap() + marker.len();
+    let end = page[start..]
+        .find("</div><!--activity-end-->")
+        .map(|i| start + i)
+        .ok_or_else(|| ScannerError::Output("Missing activity boundary".into()))?;
+    Ok(page[start..end].to_owned())
+}
+
 fn rebuild_index_locked(root: &Path, output_root: &Path) -> Result<()> {
-    let scans = completed_reports(output_root)?;
-    let sessions = protocol_summaries(root, &root.join("protocol"))?;
+    let scans = completed_reports(output_root, true)?;
+    let sessions = protocol_summaries(root, &root.join("protocol"), true)?;
     atomic_write(
         &root.join("index.html"),
         render_index(root, &scans, &sessions).as_bytes(),
@@ -184,7 +219,7 @@ struct StoredManifest {
     authentication: String,
 }
 
-fn completed_reports(output_root: &Path) -> Result<Vec<(PathBuf, Report)>> {
+fn completed_reports(output_root: &Path, render_pages: bool) -> Result<Vec<(PathBuf, Report)>> {
     let reports = verified_reports(output_root)?;
     let workspace = workspace_root(output_root);
     let index_href = if workspace == output_root {
@@ -196,10 +231,12 @@ fn completed_reports(output_root: &Path) -> Result<Vec<(PathBuf, Report)>> {
         .into_iter()
         .map(|(run, report)| {
             let html_path = run.join("report.html");
-            atomic_write(
-                &html_path,
-                render_report_with_index(&report, index_href).as_bytes(),
-            )?;
+            if render_pages {
+                atomic_write(
+                    &html_path,
+                    render_report_with_index(&report, index_href).as_bytes(),
+                )?;
+            }
             Ok((html_path, report))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -301,7 +338,11 @@ struct ProtocolRecord {
     authentication: String,
 }
 
-fn protocol_summaries(root: &Path, protocol_root: &Path) -> Result<Vec<ProtocolSummary>> {
+fn protocol_summaries(
+    root: &Path,
+    protocol_root: &Path,
+    render_pages: bool,
+) -> Result<Vec<ProtocolSummary>> {
     let mut summaries = Vec::new();
     let entries = match std::fs::read_dir(protocol_root) {
         Ok(entries) => entries,
@@ -342,7 +383,9 @@ fn protocol_summaries(root: &Path, protocol_root: &Path) -> Result<Vec<ProtocolS
             continue;
         }
         let html_path = path.with_extension("html");
-        atomic_write(&html_path, render_protocol(&events).as_bytes())?;
+        if render_pages {
+            atomic_write(&html_path, render_protocol(&events).as_bytes())?;
+        }
         summaries.push(ProtocolSummary {
             html_path,
             host: last.host.clone(),
@@ -538,6 +581,15 @@ fn render_protocol(events: &[ProtocolEvent]) -> String {
 }
 
 fn render_index(root: &Path, scans: &[(PathBuf, Report)], sessions: &[ProtocolSummary]) -> String {
+    render_index_with_remote(root, scans, sessions, remote_scan_rows(root))
+}
+
+fn render_index_with_remote(
+    root: &Path,
+    scans: &[(PathBuf, Report)],
+    sessions: &[ProtocolSummary],
+    remote: String,
+) -> String {
     let scan_rows = scans.iter().map(|(path, report)| format!(
         "<tr><td><a class=\"mono\" href=\"{}\">{}</a><small>{}</small></td><td><span class=\"status {}\">{:?}</span></td><td>{}</td><td>{}/{}</td><td>{}</td></tr>",
         relative_href(root, path), html(&report.run_id), html(&report.target), status_class(report.status), report.status,
@@ -565,26 +617,27 @@ fn render_index(root: &Path, scans: &[(PathBuf, Report)], sessions: &[ProtocolSu
     let controls = include_str!("dashboard_controls.html");
     let onboarding = include_str!("dashboard_onboarding.html");
     let api_panel = include_str!("dashboard_api.html");
-    let remote = remote_scan_rows(root);
+    let navigation = local_navigation();
     page_with_account(
         "Patronus activity",
         &format!(
-            r##"<main>
-      <div class="hero"><div><span class="eyebrow">Patronus Scanner</span><h1>Security activity</h1><p>Scan results and checks from your agent plugins, stored on this device.</p></div><span class="pill">Local dashboard</span></div>
+            r##"{navigation}<main>
+      <div class="hero"><div><span class="eyebrow">Patronus Local</span><h1>Local protection</h1><p>Manage your agent protection and review activity on this device.</p></div><span class="pill">Local dashboard</span><div class="hero-actions"><button class="button" data-open-tab="tab-api">Scan content →</button><button class="button secondary" data-open-tab="tab-policies">Configure protection</button></div></div>
       <div class="dashboard-tabs">
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-overview" checked><label for="tab-overview">Activity</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-api"><label for="tab-api">Scan</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-policies"><label for="tab-policies">Protection</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-get-started"><label for="tab-get-started">Setup</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-settings"><label for="tab-settings">Settings</label>
-      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-commands"><label for="tab-commands">Commands</label>
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-overview" checked>
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-api">
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-policies">
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-shell">
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-get-started">
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-settings">
+      <input class="tab-radio" type="radio" name="dashboard-tab" id="tab-commands">
       <div class="tab-content activity-content">
       <div class="metrics"><div class="metric"><span>Scanned targets</span><strong>{}</strong></div><div class="metric"><span>Recorded findings</span><strong>{}</strong></div><div class="metric"><span>Agent sessions</span><strong>{}</strong></div><div class="metric"><span>Protocol events</span><strong>{}</strong></div></div>
       <div class="control-toolbar"><label>Search activity<input id="activity-search" type="search" placeholder="Host, category or scan"></label><label>Source<select id="activity-type"><option value="">All sources</option><option value="runtime">Plugin runtime</option><option value="file">Files &amp; repositories</option><option value="url">URL</option><option value="mcp">MCP server</option></select></label><label>Result<select id="activity-result"><option value="">All results</option><option value="approved">Approved</option><option value="findings">Findings</option><option value="failed">Failed</option><option value="incomplete">Incomplete</option><option value="pending">Pending</option></select></label></div>
       <section class="panel"><div class="panel-head"><div><h2>Static scans</h2><p>Latest result for each file or repository you explicitly checked</p></div><span class="pill">{} targets</span></div><div class="table-wrap"><table><thead><tr><th>Scan / target</th><th>Status</th><th>Started</th><th>Files checked</th><th>Findings</th></tr></thead><tbody>{}</tbody></table></div></section>
       <section class="panel"><div class="panel-head"><div><h2>Protocol sessions</h2><p>Input and result checks across your agents</p></div><span class="pill">{} sessions</span></div><div class="table-wrap"><table><thead><tr><th>Host</th><th>Session</th><th>Last activity</th><th>Last status</th><th>Events</th></tr></thead><tbody>{}</tbody></table></div></section>
       <section class="panel" data-scan-kind="remote"><div class="panel-head"><div><h2>URL &amp; MCP scans</h2><p>Explicit API checks of public content</p></div></div><div class="table-wrap"><table><thead><tr><th>Recorded</th><th>Type</th><th>Result</th><th>Categories</th><th>Findings</th><th>Latency</th></tr></thead><tbody>{remote}</tbody></table></div></section>
-      </div>{onboarding}{api_panel}{controls}<div class="tab-content commands-content"><section class="panel"><div class="panel-head"><div><h2>Use Patronus in your chat</h2><p>Automatic text protection and explicit security scans</p></div></div><div class="settings"><div><h3>Ask for a scan</h3><p>Check this file, folder or repository.<br>Check this URL: https://example.org<br>Check this MCP server: its HTTPS URL or configuration file and server name.</p><p>URL and MCP scans use the API. Local stdio MCP processes are not started by the scanner.</p></div><div><h3>Control protection</h3><p><code>patronus on / off / status</code> controls the current chat. Pending scan receipts mean the source tool already ran; the agent retrieves the scan result instead of repeating the action.</p><p>Select the <strong>Setup</strong> tab or run <code>patronus-security-scanner onboarding</code>.</p></div></div></section><section class="panel"><div class="panel-head"><div><h2>Scanner commands</h2><p>Every command in this scanner build, with its description and options</p></div></div><div class="command-list">{commands}</div></section></div></div>
+      </div><!--activity-end-->{onboarding}{api_panel}{controls}<div class="tab-content commands-content"><section class="panel"><div class="panel-head"><div><h2>Use Patronus in your chat</h2><p>Automatic text protection and explicit security scans</p></div></div><div class="settings"><div><h3>Ask for a scan</h3><p>Check this file, folder or repository.<br>Check this URL: https://example.org<br>Check this MCP server: its HTTPS URL or configuration file and server name.</p><p>URL and MCP scans use the API. Local stdio MCP processes are not started by the scanner.</p></div><div><h3>Control protection</h3><p><code>patronus on / off / status</code> controls the current chat. Pending scan receipts mean the source tool already ran; the agent retrieves the scan result instead of repeating the action.</p><p>Select the <strong>Setup</strong> tab or run <code>patronus-security-scanner onboarding</code>.</p></div></div></section><section class="panel"><div class="panel-head"><div><h2>Scanner commands</h2><p>Every command in this scanner build, with its description and options</p></div></div><div class="command-list">{commands}</div></section></div></div>
     </main>"##,
             scans.len(),
             findings,
@@ -596,6 +649,27 @@ fn render_index(root: &Path, scans: &[(PathBuf, Report)], sessions: &[ProtocolSu
             session_rows
         ),
         Some(root),
+    ).replacen("<body>", "<body class=\"local-dashboard\">", 1)
+}
+
+fn local_navigation() -> String {
+    use base64::Engine;
+    let icon = base64::engine::general_purpose::STANDARD
+        .encode(include_bytes!("../../plugins/codex/assets/icon.png"));
+    let mut links = String::new();
+    for (group, items) in [
+        ("Start", vec![("overview", "Overview & activity", "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"), ("api", "Scan", "M9 3h6 M10 3v6l-6 10a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3 M8 14h8")]),
+        ("Protection", vec![("policies", "Detection rules", "M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6"), ("shell", "Shell & Cedar", "M4 6l6 6-6 6 M12 18h8")]),
+        ("Manage", vec![("get-started", "Setup", "M8 3v4H4v6h4v4h6v-4h4V7h-4V3z"), ("settings", "Settings", "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M12 2v3 M12 19v3 M2 12h3 M19 12h3 M5 5l2 2 M17 17l2 2 M5 19l2-2 M17 7l2-2"), ("commands", "Commands", "M4 4h7a3 3 0 0 1 3 3v14a4 4 0 0 0-4-2H4z M14 7a3 3 0 0 1 3-3h3v15h-3a4 4 0 0 0-3 2")]),
+    ] {
+        links.push_str(&format!("<div class=\"local-nav-group\"><span class=\"nav-group-label\">{group}</span>"));
+        for (id, label, path) in items {
+            links.push_str(&format!("<label for=\"tab-{id}\" tabindex=\"0\" role=\"button\" title=\"{label}\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"{path}\"/></svg><span>{label}</span></label>"));
+        }
+        links.push_str("</div>");
+    }
+    format!(
+        r##"<button id="local-menu" class="button secondary" aria-label="Open navigation" aria-expanded="false" aria-controls="local-sidebar">☰</button><button id="local-backdrop" aria-label="Close navigation" hidden></button><aside class="local-sidebar" id="local-sidebar" aria-label="Local dashboard navigation"><div class="sidebar-brand"><a class="brand" href="/"><img src="data:image/png;base64,{icon}" alt=""><span>Patronus<small>Local</small></span></a><button id="local-collapse" aria-label="Collapse sidebar" aria-expanded="true">◧</button></div><nav class="local-nav" aria-label="Dashboard sections">{links}</nav><div class="sidebar-footer"><span class="device-avatar">P</span><span>On this device<small>Local protection</small></span></div></aside>"##
     )
 }
 
@@ -736,7 +810,11 @@ patronus-security-scanner auth logout</pre><p>This HTML file is a snapshot. Logi
     format!(
         r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"><link rel="icon" href="data:image/png;base64,{icon}"><title>{}</title><style>{fonts}{}</style></head><body><header><div class="topbar"><div class="brand"><img alt="Patronus" src="data:image/png;base64,{icon}"><span>Patronus<span style="font-weight:400;color:var(--muted)"> / Scanner</span></span></div><div class="header-actions"><span class="local">Local activity</span>{account_link}</div></div></header>{login}{}<footer>Patronus Security · This is a saved activity snapshot. Raw runtime payloads are not included in protocol logs.</footer></body></html>"##,
         html(title),
-        include_str!("dashboard.css"),
+        concat!(
+            include_str!("dashboard.css"),
+            "\n",
+            include_str!("dashboard_layout.css")
+        ),
         body
     )
 }

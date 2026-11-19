@@ -6,12 +6,22 @@ on:
       release_version:
         description: Version matching Cargo and plugin manifests (without v)
         required: true
+      publish_release:
+        description: Build the existing version tag and publish after all release gates
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
 
 permissions:
   contents: read
+
+env:
+  # Recovery runs use the immutable tag as source, even when the workflow itself
+  # is dispatched from a newer branch to repair runner/infrastructure failures.
+  PATRONUS_RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release && format('refs/tags/v{0}', inputs.release_version) || github.ref }}
+  PATRONUS_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.release_version) || github.ref_name }}
 
 jobs:
   validate:
@@ -24,6 +34,8 @@ jobs:
       DSH_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/checkout@v4
         with:
           repository: deepseek-ai/deepseek-harness
@@ -54,6 +66,15 @@ jobs:
       - run: node plugins/native/scripts/typecheck.mjs
       - run: git diff --exit-code -- plugins/codex/scripts/patronus.mjs plugins/claude/scripts/patronus.mjs
       - run: node plugins/native/scripts/test.mjs
+      - run: node plugins/codex-api/build-home.mjs
+      - run: npm ci --ignore-scripts
+        working-directory: plugins/codex-api/tests
+      - run: npx playwright install --with-deps chromium
+        working-directory: plugins/codex-api/tests
+      - run: npm test
+        working-directory: plugins/codex-api/tests
+      - run: node tests/dashboard-browser.cjs
+      - run: node tests/mcp-local-guide.cjs
       - run: node plugins/deepseek/scripts/test.mjs
       - run: node plugins/deepseek/scripts/test.mjs --local
       - name: Stage DeepSeek release notices
@@ -75,18 +96,39 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: macos-14, target: aarch64-apple-darwin }
+          - { os: macos-latest, target: aarch64-apple-darwin }
           - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
           - { os: windows-latest, target: x86_64-pc-windows-msvc }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
+      - name: Prepare Windows ONNX Runtime DLL destinations
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($profile in @('target/debug', 'target/${{ matrix.target }}/release')) {
+            New-Item -ItemType Directory -Force "$profile/examples","$profile/deps","$profile/build/examples","$profile/build/deps" | Out-Null
+          }
       - run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Stage Windows runtime beside the executables
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $profile = 'target/${{ matrix.target }}/release'
+          $source = "$profile/build/DirectML.dll"
+          if (!(Test-Path $source)) { $source = "$profile/DirectML.dll" }
+          foreach ($destination in @("$profile/DirectML.dll", "$profile/deps/DirectML.dll", "$profile/examples/DirectML.dll")) {
+            if ([IO.Path]::GetFullPath($source) -ne [IO.Path]::GetFullPath($destination)) {
+              Copy-Item -Force $source $destination
+            }
+          }
       - name: Verify ONNX Runtime is statically linked (macOS)
         if: runner.os == 'macOS'
         run: '! otool -L target/${{ matrix.target }}/release/patronus-security-scanner | grep -i onnxruntime'
@@ -104,7 +146,15 @@ jobs:
         run: cargo run --locked --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner ${{ matrix.target }} dist ${{ matrix.target == 'x86_64-unknown-linux-gnu' && '--include-plugins' || '' }}
       - name: Package plugins (Windows)
         if: runner.os == 'Windows'
-        run: cargo run --locked --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner.exe ${{ matrix.target }} dist
+        run: cargo run --locked --release --target ${{ matrix.target }} --bin package-plugins -- target/${{ matrix.target }}/release/patronus-security-scanner.exe ${{ matrix.target }} dist
+      - name: Smoke-test the unpacked Windows CLI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'patronus-cli-smoke'
+          Expand-Archive -Path 'dist/patronus-security-scanner-*-x86_64-pc-windows-msvc.zip' -DestinationPath $destination
+          & (Join-Path $destination 'patronus-security-scanner.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged CLI could not start' }
       - name: Add standalone installer
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
@@ -147,6 +197,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/checkout@v4
         with:
           repository: deepseek-ai/deepseek-harness
@@ -211,12 +263,14 @@ jobs:
           if-no-files-found: error
 
   publish-rust-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: release-e2e
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Publish Rust API client
         env:
@@ -224,7 +278,7 @@ jobs:
         run: cargo publish -p patronus-api-client --locked
 
   publish-npm-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: release-e2e
     runs-on: ubuntu-latest
     environment: npm
@@ -236,6 +290,8 @@ jobs:
         working-directory: sdk/typescript
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -246,11 +302,13 @@ jobs:
       - run: npm publish
 
   build-python-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: release-e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -263,7 +321,7 @@ jobs:
           if-no-files-found: error
 
   publish-python-client:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: build-python-client
     runs-on: ubuntu-latest
     environment: pypi
@@ -277,13 +335,15 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && vars.PATRONUS_DISTRIBUTION_LICENSE_APPROVED == 'true'
     needs: [build, release-e2e, publish-rust-client, publish-npm-client, publish-python-client]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PATRONUS_RELEASE_REF }}
       - uses: actions/download-artifact@v4
         with:
           pattern: patronus-security-*
@@ -292,4 +352,4 @@ jobs:
       - name: Publish prebuilt CLI and plugin archives
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/* --verify-tag --generate-notes
+        run: gh release create "$PATRONUS_RELEASE_TAG" dist/* --verify-tag --generate-notes

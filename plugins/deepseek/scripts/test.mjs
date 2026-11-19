@@ -63,6 +63,7 @@ export default defineConfig({
     stdio: 'inherit',
     env: {
       ...process.env,
+      PATRONUS_DATA_DIR: join(scratch, 'data'),
       PATRONUS_TEST_FIXTURES_ROOT: resolve(pluginRoot, '../../tests/fixtures/realistic'),
       PATRONUS_PROBE_REPORT: reportPath, PATRONUS_GPT_MODE: mode ?? '', PATRONUS_PROBE_TRANSCRIPT: transcriptPath,
     },

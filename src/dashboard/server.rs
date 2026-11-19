@@ -28,26 +28,37 @@ pub fn serve(port: u16) -> Result<()> {
         rand::random::<u128>()
     );
     println!("Patronus dashboard: http://{host}/\nPress Ctrl+C to stop.");
+    let (send, receive) = std::sync::mpsc::sync_channel::<TcpStream>(16);
+    let receive = std::sync::Arc::new(std::sync::Mutex::new(receive));
+    for _ in 0..4 {
+        let receive = receive.clone();
+        let host = host.clone();
+        let token = token.clone();
+        std::thread::spawn(move || loop {
+            let stream = { receive.lock().unwrap().recv() };
+            let Ok(stream) = stream else { break };
+            serve_connection(stream, &host, &token);
+        });
+    }
     for stream in listener.incoming() {
-        let mut stream = stream.map_err(fail)?;
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .map_err(fail)?;
-        stream
-            .set_write_timeout(Some(Duration::from_secs(5)))
-            .map_err(fail)?;
-        let result = read_request(&mut stream).and_then(|request| handle(request, &host, &token));
-        let (status, content_type, body) = match result {
-            Ok(body) => body,
-            Err(error) => (
-                400,
-                "application/json",
-                json!({"error": error.to_string()}).to_string(),
-            ),
-        };
-        let _ = write!(stream, "HTTP/1.1 {status} {}\r\nContent-Type: {content_type}; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n{body}", if status == 200 { "OK" } else { "Bad Request" }, body.len());
+        send.send(stream.map_err(fail)?).map_err(fail)?;
     }
     Ok(())
+}
+
+fn serve_connection(mut stream: TcpStream, host: &str, token: &str) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+    let result = read_request(&mut stream).and_then(|request| handle(request, host, token));
+    let (status, content_type, body) = match result {
+        Ok(body) => body,
+        Err(error) => (
+            400,
+            "application/json",
+            json!({"error": error.to_string()}).to_string(),
+        ),
+    };
+    let _ = write!(stream, "HTTP/1.1 {status} {}\r\nContent-Type: {content_type}; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n{body}", if status == 200 { "OK" } else { "Bad Request" }, body.len());
 }
 
 fn read_request(stream: &mut TcpStream) -> Result<Request> {
@@ -129,8 +140,7 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
     }
     if request.method == "GET" && (request.path == "/" || request.path == "/index.html") {
         let root = crate::config::user_root()?;
-        crate::dashboard::rebuild_index(&root, &root.join("output"))?;
-        let page = std::fs::read_to_string(root.join("index.html")).map_err(fail)?
+        let page = crate::dashboard::render_dashboard_shell(&root)
             .replace("default-src 'none';", "default-src 'none'; script-src 'self'; connect-src 'self';")
             .replace("</head>", &format!("<meta name=\"patronus-token\" content=\"{token}\"><script src=\"/dashboard.js\" defer></script></head>"));
         return Ok((200, "text/html", page));
@@ -140,6 +150,8 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
             200,
             "text/javascript",
             concat!(
+                include_str!("dashboard_nav.js"),
+                "\n",
                 include_str!("dashboard.js"),
                 "\n",
                 include_str!("dashboard_setup.js"),
@@ -197,6 +209,16 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
     if request.headers.get("x-patronus-token").map(String::as_str) != Some(token) {
         return Err(fail("Missing dashboard authorization"));
     }
+    if request.method == "GET" && request.path == "/api/activity" {
+        let root = crate::config::user_root()?;
+        return Ok((200, "text/html", crate::dashboard::render_activity(&root)?));
+    }
+    static SETTINGS_WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _write_guard = if request.method == "POST" {
+        Some(SETTINGS_WRITE_LOCK.lock().map_err(fail)?)
+    } else {
+        None
+    };
     let mut config = Config::load(None, None)?;
     if request.method == "GET" && request.path == "/api/onboarding" {
         return Ok((
@@ -233,7 +255,7 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
         return Ok((
             200,
             "application/json",
-            json!({"config": config, "rules": crate::policy::rules(), "profiles": crate::plugin_policies::resolved(&config), "data_root": crate::config::user_root()?, "maintenance": {"cargo_install": crate::maintenance::cargo_install(), "standalone_install":crate::releases::standalone_install(),"repository":crate::releases::REPOSITORY}, "version": crate::VERSION, "revision": revision(&config)?})
+            json!({"config": config, "rules": crate::policy::rules(), "profiles": crate::plugin_policies::resolved(&config), "data_root": crate::config::user_root()?, "maintenance": {"cargo_install": crate::maintenance::cargo_install(), "standalone_install":crate::releases::standalone_install(),"repository":crate::releases::REPOSITORY}, "version": crate::VERSION, "ark_version": crate::ARK_VERSION, "shell_model_ready": crate::shell_check::model_directory(config.ark.model_dir.as_deref()).as_deref().is_some_and(crate::shell_check::assets_present), "revision": revision(&config)?})
                 .to_string(),
         ));
     }
@@ -308,6 +330,30 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
             }
         }
 
+        "/api/shell-test" => {
+            let command = data["command"]
+                .as_str()
+                .ok_or_else(|| fail("Missing command"))?;
+            let host = data["host"].as_str().unwrap_or("default");
+            if host != "default" && !crate::plugin_policies::HOSTS.contains(&host) {
+                return Err(fail("Unknown shell host"));
+            }
+            let policy = config
+                .shell
+                .hosts
+                .get(host)
+                .unwrap_or(&config.shell.default)
+                .clone();
+            let check = crate::shell_check::ShellCheck::new(crate::shell_check::model_directory(
+                config.ark.model_dir.as_deref(),
+            ))
+            .with_policy(policy);
+            return Ok((
+                200,
+                "application/json",
+                serde_json::to_string(&check.explain(command)).map_err(fail)?,
+            ));
+        }
         "/api/config" | "/api/policies" => {
             if crate::onboarding::job_status()["state"] == "running" {
                 return Err(fail("Wait for setup to complete before changing settings"));
