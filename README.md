@@ -8,25 +8,29 @@
   Local-first runtime protection and security scans for AI agents.
 </p>
 
-Patronus Security combines the Patronus Security CLI (the `patronus-security-scanner` executable) with optional Runtime Protection integrations for Codex, Claude Code and DeepSeek Harness, and Guard Input steps for n8n, Make, Zapier, Dify and Activepieces. Patronus Ark powers detection. The integrations inspect external text before it reaches the model; completed findings keep dangerous content behind a verifiable receipt.
+Patronus Security combines the Patronus Security CLI (the `patronus-security-scanner` executable) with optional Runtime Protection integrations for Codex, Claude Code, Cursor (partial protection) and DeepSeek Harness, and Guard Input steps for n8n, Make, Zapier, Dify and Activepieces. Patronus Ark powers detection. The integrations inspect external text before it reaches the model; completed findings keep dangerous content behind a verifiable receipt.
 
 ## Plugins
 
 <table>
   <tr>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <a href="plugins/codex/README.md"><img src="docs/img/providers/codex-app.png" width="72" alt="Codex app"><br><strong>Codex</strong></a>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
       <a href="plugins/claude/README.md"><img src="docs/img/providers/claude.svg" width="72" alt="Claude"><br><strong>Claude Code</strong></a>
     </td>
-    <td align="center" width="33%">
+    <td align="center" width="25%">
+      <a href="plugins/cursor/README.md"><strong>Cursor</strong></a>
+    </td>
+    <td align="center" width="25%">
       <a href="plugins/deepseek/README.md"><img src="docs/img/providers/deepseek.svg" width="72" alt="DeepSeek"><br><strong>DeepSeek Harness</strong></a>
     </td>
   </tr>
   <tr>
     <td>Native prompt, tool-result and MCP-result hooks.</td>
     <td>Native lifecycle, prompt and result hooks.</td>
+    <td>Prompt, shell, file-read and MCP-result hooks; partial protection.</td>
     <td>Native Cordis request and response gates.</td>
   </tr>
 </table>
@@ -34,7 +38,7 @@ Patronus Security combines the Patronus Security CLI (the `patronus-security-sca
 Choose the hosts you use during onboarding. Each plugin page explains its hooks, protected flow and degraded behavior.
 
 Patronus Security is an independent project and is not endorsed by OpenAI,
-Anthropic, DeepSeek, n8n, Make, Zapier, Dify or Activepieces. Third-party names and logos identify compatibility only;
+Anthropic, Anysphere (Cursor), DeepSeek, n8n, Make, Zapier, Dify or Activepieces. Third-party names and logos identify compatibility only;
 see [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Automation integrations
@@ -139,6 +143,7 @@ If you install another host later, either rerun onboarding or use one direct com
 ```sh
 patronus-security-scanner integration codex install
 patronus-security-scanner integration claude install
+patronus-security-scanner integration cursor install
 patronus-security-scanner integration deepseek install
 ```
 
