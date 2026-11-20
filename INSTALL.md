@@ -74,6 +74,7 @@ without reading credentials:
 patronus-security-scanner --version
 patronus-security-scanner integration codex status
 patronus-security-scanner integration claude status
+patronus-security-scanner integration cursor status
 patronus-security-scanner integration deepseek status
 ```
 
