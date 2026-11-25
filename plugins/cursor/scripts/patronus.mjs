@@ -1626,7 +1626,7 @@ async function serveBroker(input) {
       };
     }
     if (request.method === "warm") {
-      void boot().then(({ client: client2 }) => client2.warm({ session: sessions.capability(id2), host: config.host })).catch(() => {
+      void boot().then(({ client: client2 }) => client2.warm?.({ session: sessions.capability(id2), host: config.host })).catch(() => {
       });
       return { warming: true };
     }

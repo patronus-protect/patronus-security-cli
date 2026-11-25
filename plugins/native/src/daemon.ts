@@ -242,7 +242,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
     }
     if (request.method === 'warm') {
       // Older runtimes have no `warm`; booting them is still worth it, so a refused warm-up is ignored.
-      void boot().then(({ client }) => client.warm({ session: sessions.capability(id), host: config.host })).catch(() => {})
+      void boot().then(({ client }) => client.warm?.({ session: sessions.capability(id), host: config.host })).catch(() => {})
       return { warming: true }
     }
     const { client, hello } = await boot().catch(error => { throw brokerFailure(failureReason(error) ?? 'runtime_start_failed') })

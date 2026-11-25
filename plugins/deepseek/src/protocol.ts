@@ -97,6 +97,8 @@ export interface RuntimeClient {
   cancel(params: JobParams, signal?: AbortSignal): Promise<unknown>
   /** Scanners before 0.1.10 do not offer it; callers then let the command run. */
   checkCommand?(params: CommandParams, signal?: AbortSignal): Promise<CommandResult>
+  /** Builds a host's per-surface analyzers in the background; older runtimes refuse it. */
+  warm?(params: { session: string; host: string }, signal?: AbortSignal): Promise<void>
   /** Only a trusted adapter calls these, after the host's own approval dialog. */
   prepareDisclosure?(params: DisclosureParams, signal?: AbortSignal): Promise<DisclosureOffer>
   readDisclosed?(params: DisclosedParams, signal?: AbortSignal): Promise<DisclosedResult>
