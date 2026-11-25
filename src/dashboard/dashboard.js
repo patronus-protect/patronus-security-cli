@@ -6,6 +6,17 @@ const clone = value => structuredClone(value);
 const labels = {pii:'PII',dlp:'DLP',injection:'Prompt injection',jailbreak:'Jailbreak',prompt_extraction:'Prompt extraction',tool_poisoning:'Tool poisoning',exfiltration:'Exfiltration',agent_config_tampering:'Agent config tampering',memory_poisoning:'Memory poisoning',unsafe_action:'Unsafe action',resource_exhaustion:'Resource exhaustion',harmful_content:'Harmful content',toxic_language:'Toxic language'};
 // Ark Core's attack classes: each has rules and a built-in L1 model.
 const attackClasses = Object.keys(labels).filter(c=>c!=='pii'&&c!=='dlp');
+const categoryGroups = [
+ ['Personal and sensitive data', ['pii','dlp']],
+ ['Attack classes', ['injection','jailbreak','prompt_extraction','tool_poisoning','exfiltration']],
+ ['More attack classes (off by default)', ['agent_config_tampering','memory_poisoning','unsafe_action','resource_exhaustion','harmful_content','toxic_language']],
+];
+const categoryHints = {pii:'Names, contact data, IDs, payment and account numbers',dlp:'Credentials, secrets and classification markings',
+ injection:'Instructions that override the user or the system',jailbreak:'Framings that switch off safety rules',prompt_extraction:'Requests for the system prompt or hidden instructions',
+ tool_poisoning:'Hidden instructions in tool and MCP descriptions',exfiltration:'Data, secrets or chats sent to an outside target',
+ agent_config_tampering:'Changes to agent rules, settings, hooks or MCP config',memory_poisoning:'Instructions planted in long-term memory',
+ unsafe_action:'Remote execution, credential access, destructive operations',resource_exhaustion:'Requests that exhaust compute or tokens',
+ harmful_content:'Requests for harmful content or actions',toxic_language:'Toxic or abusive language'};
 let messageTimer;
 function message(text,error=false){clearTimeout(messageTimer);messageTimer=setTimeout(()=>$('control-message').hidden=true,10000);$('control-message').hidden=false;$('control-message').textContent=text;$('control-message').classList.toggle('error',error);}
 async function api(path,body){const headers={'X-Patronus-Token':token};if(body!==undefined){headers['Content-Type']='application/json';headers['If-Match']=state?.revision||'';}const response=await fetch(path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed');return data;}
@@ -13,7 +24,7 @@ function on(id,event,fn){$(id).addEventListener(event,async e=>{try{await fn(e);
 function node(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 function button(text,action){const b=node('button',text,'button secondary');b.type='button';b.addEventListener('click',async()=>{try{await action();}catch(error){message(error.message,true);}});return b;}
 function scope(){if($('policy-host').value==='global')return 'global';return `${$('policy-host').value}.${$('policy-surface').value}`;}
-function profiles(){return {...state.profiles,global:{...state.config.analysis,l1_rules:Object.fromEntries(state.rules.map(r=>[r.id,state.config.analysis.l1_rules[r.id]??r.default_enabled])),categories:state.config.ark.categories,user_prompt_pii:state.config.analysis.user_prompt_pii}};}
+function profiles(){return {...state.profiles,global:{...state.config.analysis,l1_models:{...(state.config.analysis.l1_models||{})},l1_rules:Object.fromEntries(state.rules.map(r=>[r.id,state.config.analysis.l1_rules[r.id]??r.default_enabled])),categories:[...state.config.ark.categories],wolf:state.config.ark.max_level==='l3',user_prompt_pii:state.config.analysis.user_prompt_pii}};}
 function dirty(){return JSON.stringify(draft)!==JSON.stringify(profiles()) || (shellDraft&&JSON.stringify(shellDraft)!==JSON.stringify(state.config.shell));}
 function updateDraft(){$('draft-status').textContent=dirty()?'Unsaved changes':'No unsaved changes';renderRules();}
 function renderFilter(){
@@ -32,32 +43,49 @@ function renderRules(){
   const summary=node('div');summary.append(node('strong',rule.id),node('small',rule.description));if(!supported)summary.append(node('small','Requires scored mode — inactive in Strict','rule-note'));row.append(toggle,summary);list.append(row);
  }
 }
-function renderAssessments(){
- const grid=$('assessment-rules');grid.replaceChildren();
- const global=scope()==='global',profile=draft[scope()];
- $('policy-surface').disabled=global;$('global-analysis-options').hidden=!global;grid.closest('section').hidden=global;
- for(const key of ['pii','dlp']){const select=$(`${key}-mode`);select.options[0].disabled=global;select.value=profile[`${key}_mode`]||(global?'strict':'');}
- $('mode-summary').textContent=`Effective modes: PII ${profile.pii_mode||state.config.analysis.pii_mode} · DLP ${profile.dlp_mode||state.config.analysis.dlp_mode}. PII, DLP and native rules always run locally. API/Hybrid routes only send Wolf model analysis.`;
- if(global){
-  $('global-user-pii').checked=profile.user_prompt_pii;const categories=$('global-categories');categories.replaceChildren();
-  profile.l1_models=profile.l1_models||{};
-  for(const category of Object.keys(labels)){
-   const row=node('div',undefined,'category-row'),label=node('label'),input=node('input');input.type='checkbox';input.checked=profile.categories.includes(category);
-   input.addEventListener('change',()=>{profile.categories=profile.categories.filter(c=>c!==category);if(input.checked)profile.categories.push(category);updateDraft();renderAssessments();});
-   label.append(input,document.createTextNode(` ${labels[category]}`));row.append(label);
+function toggle(label,checked,disabled,onChange){
+ const wrap=node('label',undefined,'switch-label'),input=node('input');input.type='checkbox';input.checked=checked;input.disabled=disabled;input.setAttribute('aria-label',label);
+ input.addEventListener('change',()=>onChange(input.checked));wrap.append(input,node('span',label.startsWith('Scan ')?'On':label.startsWith('L1 model')?'L1 model':label));return wrap;
+}
+function renderCategories(global){
+ const table=$('global-categories');table.replaceChildren();
+ const base=draft.global,editable=global;
+ $('categories-note').textContent=editable
+  ?"Each category runs Ark Core's rules; attack classes also run their built-in L1 model. Switch a category or its model off here."
+  :'Categories and L1 models apply to every plugin. Change them under CLI defaults; this plugin adds its own rules, modes and Wolf.';
+ for(const [title,members] of categoryGroups){
+  table.append(node('div',title,'category-group'));
+  for(const category of members){
+   const enabled=base.categories.includes(category),row=node('div',undefined,'category-row');row.setAttribute('role','row');
+   const name=node('div',undefined,'category-name');name.append(node('strong',labels[category]),node('small',categoryHints[category]));
+   const on=toggle(`Scan ${labels[category]}`,enabled,!editable,checked=>{base.categories=base.categories.filter(c=>c!==category);if(checked)base.categories.push(category);if(category==='injection'&&!checked)base.wolf=false;updateDraft();renderAssessments();});
+   row.append(name,on);
    if(attackClasses.includes(category)){
-    const modelLabel=node('label'),model=node('input');model.type='checkbox';model.checked=profile.l1_models[category]!==false;model.disabled=!input.checked;model.setAttribute('aria-label',`L1 model for ${labels[category]}`);
-    model.addEventListener('change',()=>{if(model.checked)delete profile.l1_models[category];else profile.l1_models[category]=false;updateDraft();});
-    modelLabel.append(model,document.createTextNode(' L1 model'));row.append(modelLabel);
-   }
-   categories.append(row);
+    row.append(toggle(`L1 model for ${labels[category]}`,enabled&&base.l1_models[category]!==false,!editable||!enabled,checked=>{if(checked)delete base.l1_models[category];else base.l1_models[category]=false;updateDraft();}));
+   }else row.append(node('span','Rules only','category-muted'));
+   table.append(row);
   }
+ }
+}
+function renderWolf(global){
+ const box=$('assessment-rules');box.replaceChildren();
+ const injection=draft.global.categories.includes('injection'),profile=draft[scope()];
+ const ready=state.wolf_model_ready?'Wolf Edge model is prepared.':'Wolf Edge model is not prepared yet: run Setup → Prepare missing models before saving L3.';
+ if(global){
+  box.append(toggle('Wolf Defender Edge (L3) for prompt injection',injection&&profile.wolf,!injection,checked=>{profile.wolf=checked;updateDraft();renderWolf(true);}));
+  box.append(node('p',injection?ready:'Turn on Prompt injection to use Wolf.','setting-line'));
   return;
  }
- const box=node('div'),label=node('label'),wolf=node('input');wolf.type='checkbox';wolf.checked=profile.wolf===true;wolf.setAttribute('aria-label','Wolf Defender Edge (L3) for prompt injection');
- wolf.addEventListener('change',()=>{profile.wolf=wolf.checked;updateDraft();});
- label.append(wolf,document.createTextNode(' Wolf Defender Edge (L3) for prompt injection'));box.append(label);
- box.append(node('p','Runs only on text the L1 rules and L1 model leave undecided.','setting-line'));grid.append(box);
+ box.append(toggle('Wolf Defender Edge (L3) on this surface for prompt injection',injection&&profile.wolf===true,!injection,checked=>{profile.wolf=checked;updateDraft();}));
+ box.append(node('p',injection?`CLI default: ${draft.global.wolf?'on':'off'}. ${ready}`:'Prompt injection is off under CLI defaults.','setting-line'));
+}
+function renderAssessments(){
+ const global=scope()==='global',profile=draft[scope()];
+ $('policy-surface').disabled=global;$('global-analysis-options').hidden=!global;
+ for(const key of ['pii','dlp']){const select=$(`${key}-mode`);select.options[0].disabled=global;select.value=profile[`${key}_mode`]||(global?'strict':'');}
+ $('mode-summary').textContent=`Effective modes: PII ${profile.pii_mode||state.config.analysis.pii_mode} · DLP ${profile.dlp_mode||state.config.analysis.dlp_mode}. Rules, L1 models, PII and DLP always run locally. API/Hybrid routes only send Wolf analysis.`;
+ if(global)$('global-user-pii').checked=profile.user_prompt_pii;
+ renderCategories(global);renderWolf(global);
 }
 for(const id of ['policy-host','policy-surface'])on(id,'change',()=>{renderAssessments();updateDraft();});
 on('policy-filter','change',renderRules);on('policy-search','input',renderRules);
@@ -67,7 +95,10 @@ on('global-user-pii','change',()=>{draft.global.user_prompt_pii=$('global-user-p
 on('save-policies','click',async()=>{
  const changedProfiles=Object.entries(draft).filter(([key,profile])=>key!=='global'&&JSON.stringify(profile)!==JSON.stringify(state.profiles[key]));
  if(JSON.stringify(draft.global)!==JSON.stringify(profiles().global)){
-  const config=clone(state.config),global=clone(draft.global);config.ark.categories=global.categories;delete global.categories;config.analysis=global;await api('/api/config',config);state=await api('/api/state');
+  const config=clone(state.config),global=clone(draft.global);
+  if(!global.categories.length)throw new Error('Keep at least one category on.');
+  if(global.wolf&&!state.wolf_model_ready)throw new Error('Prepare the Wolf Edge model in Setup before turning on L3.');
+  config.ark.categories=global.categories;config.ark.max_level=global.wolf&&global.categories.includes('injection')?'l3':'l1';delete global.categories;delete global.wolf;config.analysis=global;await api('/api/config',config);state=await api('/api/state');
  }
  for(const [key,profile] of changedProfiles){
   await api('/api/policies',{scope:key,profile});state=await api('/api/state');
