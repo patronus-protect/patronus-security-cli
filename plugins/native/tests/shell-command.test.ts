@@ -16,7 +16,7 @@ const hook = (host: Host, event: string, value: unknown, rpc: (config: any, requ
 const session = 'shell-session-0000000000000000000731'
 const pre = (tool_name: string, command: string) => ({ hook_event_name: 'PreToolUse', session_id: session, cwd: '/private/tmp', tool_name, tool_use_id: 'call-731', tool_input: { command }, permission_mode: 'default' })
 const cursorShell = (command: string) => ({ hook_event_name: 'beforeShellExecution', conversation_id: session, session_id: session, generation_id: 'g', model: 'm',
-  cursor_version: '2026.10.14-0f9edde', workspace_roots: ['/private/tmp'], user_email: null, transcript_path: null, command, cwd: '/private/tmp', sandbox: false, tool_use_id: 'call-731' })
+  cursor_version: '2026.11.19-f005e9d', workspace_roots: ['/private/tmp'], user_email: null, transcript_path: null, command, cwd: '/private/tmp', sandbox: false, tool_use_id: 'call-731' })
 const verdict = (status: string, risk?: string, decision_score?: number) => async (_config: unknown, request: any) =>
   request.method === 'command' ? { status, category: 'shell_command', ...(risk ? { risk } : {}), ...(decision_score ? { decision_score, threshold: 1.15 } : {}) } : { closed: true }
 
