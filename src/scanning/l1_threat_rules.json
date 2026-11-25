@@ -1,0 +1,530 @@
+[
+  {
+    "id": "ark.threat.remote_execution",
+    "category": "unsafe_action",
+    "description": "Handoff shell",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.remote_execution_instruction",
+    "category": "unsafe_action",
+    "description": "Fetch and run",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.decoded_execution",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.decoded_shell_execution",
+    "category": "unsafe_action",
+    "description": "Handoff shell",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.credential_harvesting",
+    "category": "unsafe_action",
+    "description": "Credential access",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.credential_file_access",
+    "category": "unsafe_action",
+    "description": "Credential access",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.secret_exfiltration",
+    "category": "exfiltration",
+    "description": "Secret to sink",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.credential_file_upload",
+    "category": "exfiltration",
+    "description": "Handoff shell",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.environment_exfiltration",
+    "category": "exfiltration",
+    "description": "Handoff shell",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.docker_socket",
+    "category": "unsafe_action",
+    "description": "Handoff shell",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.privileged_container",
+    "category": "unsafe_action",
+    "description": "Handoff shell",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.persistence_payload",
+    "category": "unsafe_action",
+    "description": "Persistence",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.agent_guard_removal",
+    "category": "agent_config_tampering",
+    "description": "Guard removal",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.security_disable",
+    "category": "unsafe_action",
+    "description": "Security disable",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.untrusted_deserialization",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.untrusted_output_execution",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ssrf_metadata",
+    "category": "unsafe_action",
+    "description": "Metadata ssrf",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.session_exfiltration",
+    "category": "exfiltration",
+    "description": "Send directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.environment_post",
+    "category": "exfiltration",
+    "description": "Secret to sink",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.agent_config_exfiltration",
+    "category": "exfiltration",
+    "description": "Send directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.kubernetes_privileged_json",
+    "category": "unsafe_action",
+    "description": "Container escape config",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.kubernetes_privileged_yaml",
+    "category": "unsafe_action",
+    "description": "Container escape config",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.unsafe_tls_code",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.unsafe_shell_input",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.dynamic_ssrf",
+    "category": "unsafe_action",
+    "description": "Metadata ssrf",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.unauthorized_autonomy",
+    "category": "unsafe_action",
+    "description": "Unattended",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.harmful_intent",
+    "category": "harmful_content",
+    "description": "Howto hazard",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.secret_source_transfer",
+    "category": "exfiltration",
+    "description": "Secret to sink",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_credential_store_access",
+    "category": "unsafe_action",
+    "description": "Credential access",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_metadata_fetch",
+    "category": "unsafe_action",
+    "description": "Metadata ssrf",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_destructive_request",
+    "category": "unsafe_action",
+    "description": "Destructive request",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_security_control_disable",
+    "category": "unsafe_action",
+    "description": "Security disable",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_fetch_and_run",
+    "category": "unsafe_action",
+    "description": "Fetch and run",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_runtime_socket_mount",
+    "category": "unsafe_action",
+    "description": "Container escape config",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_host_root_mount_config",
+    "category": "unsafe_action",
+    "description": "Container escape config",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_compose_privileged",
+    "category": "unsafe_action",
+    "description": "Container escape config",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_privilege_widening",
+    "category": "unsafe_action",
+    "description": "Privilege widening",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_unattended_transfer",
+    "category": "unsafe_action",
+    "description": "Unattended",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_persistence",
+    "category": "unsafe_action",
+    "description": "Persistence",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_untrusted_deserialization",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_unsafe_tls_client",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_drain_account",
+    "category": "unsafe_action",
+    "description": "Unattended",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_split_transfer",
+    "category": "unsafe_action",
+    "description": "Unattended",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_redirect_payment",
+    "category": "unsafe_action",
+    "description": "Unattended",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_password_change",
+    "category": "unsafe_action",
+    "description": "Credential access",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_invite_and_remove",
+    "category": "unsafe_action",
+    "description": "Privilege widening",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_delete_by_id",
+    "category": "unsafe_action",
+    "description": "Destructive request",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_cover_tracks",
+    "category": "unsafe_action",
+    "description": "Destructive request",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_system_file_delete",
+    "category": "unsafe_action",
+    "description": "Destructive request",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_destructive_alias",
+    "category": "unsafe_action",
+    "description": "Persistence",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_reverse_shell",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_malware_stub",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ua_harmful_code_request",
+    "category": "unsafe_action",
+    "description": "Unsafe code",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tp_sensitive_file_param",
+    "category": "tool_poisoning",
+    "description": "Sensitive file param",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tp_secrecy",
+    "category": "tool_poisoning",
+    "description": "Secrecy directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tp_shadowing",
+    "category": "tool_poisoning",
+    "description": "Shadowing",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tp_tool_override",
+    "category": "tool_poisoning",
+    "description": "Shadowing",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tp_hidden_markup",
+    "category": "tool_poisoning",
+    "description": "Hidden markup",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tp_side_channel_param",
+    "category": "tool_poisoning",
+    "description": "Side channel param",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.re_recursive_spawn",
+    "category": "resource_exhaustion",
+    "description": "Recursive spawn",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.re_unbounded_repeat",
+    "category": "resource_exhaustion",
+    "description": "Unbounded repeat",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.re_huge_output",
+    "category": "resource_exhaustion",
+    "description": "Huge output",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.re_tool_flood",
+    "category": "resource_exhaustion",
+    "description": "Tool flood",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.re_decoy_compute",
+    "category": "resource_exhaustion",
+    "description": "Decoy compute",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_permission_widening",
+    "category": "agent_config_tampering",
+    "description": "Permission widening",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_guard_removal",
+    "category": "agent_config_tampering",
+    "description": "Guard removal",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_hidden_directive",
+    "category": "agent_config_tampering",
+    "description": "Hidden directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_fetch_run",
+    "category": "agent_config_tampering",
+    "description": "Fetch run",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_mcp_server_injection",
+    "category": "agent_config_tampering",
+    "description": "Mcp server injection",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_persistence",
+    "category": "agent_config_tampering",
+    "description": "Persistence",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_tamper_request",
+    "category": "agent_config_tampering",
+    "description": "Tamper request",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ac_config_write",
+    "category": "agent_config_tampering",
+    "description": "Permission widening",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_markdown_beacon",
+    "category": "exfiltration",
+    "description": "Markdown beacon",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_send_directive",
+    "category": "exfiltration",
+    "description": "Send directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_payment_subject",
+    "category": "exfiltration",
+    "description": "Send directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_collect_and_post",
+    "category": "exfiltration",
+    "description": "Send directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_mail_body",
+    "category": "exfiltration",
+    "description": "Send directive",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_secret_to_sink",
+    "category": "exfiltration",
+    "description": "Secret to sink",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_tool_param_egress",
+    "category": "exfiltration",
+    "description": "Tool param egress",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_dns_channel",
+    "category": "exfiltration",
+    "description": "Dns channel",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.ex_link_smuggling",
+    "category": "exfiltration",
+    "description": "Link smuggling",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tx_insult_addressee",
+    "category": "toxic_language",
+    "description": "Insult addressee",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tx_insult_vocative",
+    "category": "toxic_language",
+    "description": "Insult addressee",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tx_insult_verdict",
+    "category": "toxic_language",
+    "description": "Insult addressee",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tx_group_derogation",
+    "category": "toxic_language",
+    "description": "Group derogation",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tx_dehumanisation",
+    "category": "toxic_language",
+    "description": "Dehumanisation",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tx_threat",
+    "category": "toxic_language",
+    "description": "Threat",
+    "default_enabled": true
+  },
+  {
+    "id": "ark.threat.tx_harassment",
+    "category": "toxic_language",
+    "description": "Harassment",
+    "default_enabled": true
+  }
+]

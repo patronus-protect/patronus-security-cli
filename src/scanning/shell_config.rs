@@ -1,5 +1,5 @@
 //! Local Cat configuration, shared by the CLI, dashboard and runtime hosts.
-use patronus_ark::detectors::shell::{policies::ShellPolicies, ShellPolicyConfig};
+use patronus_ark_core::detectors::shell::{policies::ShellPolicies, ShellPolicyConfig};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -40,7 +40,12 @@ impl ShellPolicy {
         {
             return Err("Cat rules require cat.<policy id>; allowlist values must be ask".into());
         }
-        let mut config = ShellPolicyConfig::load(&self.policy_dirs, &self.allowlist)?;
+        let mut config =
+            ShellPolicyConfig::load(&patronus_ark_core::detectors::shell::ShellConfig {
+                policy_dirs: self.policy_dirs.clone(),
+                allowlist: self.allowlist.clone(),
+                ..Default::default()
+            })?;
         config
             .user_policies
             .extend(self.cedar_policies.values().cloned());
@@ -75,8 +80,8 @@ impl ShellSettings {
             if !policy.allowlist.is_empty() {
                 let root = model_dir
                     .ok_or("Prepare the pinned shell model before configuring its allowlist")?;
-                let pipeline = patronus_ark::detectors::shell::ShellRiskPipeline::from_config(
-                    &patronus_ark::detectors::shell::ShellConfig::new(
+                let pipeline = patronus_ark_core::detectors::shell::ShellRiskPipeline::from_config(
+                    &patronus_ark_core::detectors::shell::ShellConfig::new(
                         crate::shell_check::bundle_dir(root),
                     ),
                 )?;

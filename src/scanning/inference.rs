@@ -29,7 +29,7 @@ fn local_route(mode: ProviderMode, input: &ChunkInput<'_>, user_prompt: bool) ->
                     <= HYBRID_LOCAL_TOKEN_LIMIT))
 }
 
-type ScopedInference = std::collections::BTreeMap<String, (Box<Inference>, Option<Box<Inference>>)>;
+type ScopedInference = std::collections::BTreeMap<String, Box<Inference>>;
 
 pub struct Inference {
     local: std::cell::RefCell<Option<ArkAnalyzer>>,
@@ -68,88 +68,55 @@ impl Inference {
         })
     }
 
+    /// Wolf Defender (L3) is wanted for `injection`.
+    fn wants_wolf(&self) -> bool {
+        self.config.ark.max_level == "l3"
+            && self.config.ark.categories.iter().any(|c| c == "injection")
+    }
+
+    /// API route: every L1 stage (rules and L1 models) runs on this device;
+    /// only Wolf, the L3 of `injection`, is sent to the API, and only for text
+    /// the local injection stages did not detect.
     fn cloud(&self, input: ChunkInput<'_>, user_prompt: bool) -> Result<AnalysisOutcome> {
-        // All native rules and PII/DLP modes stay local, even in API mode.
         let mut outcome = self.local_native(input.clone(), user_prompt)?;
-        let mut api_config = self.config.clone();
-        api_config.ark.categories.retain(|category| {
-            matches!(
-                category.as_str(),
-                "injection" | "prompt_injection" | "threat"
-            ) && self.config.analysis.level(
-                if category == "injection" {
-                    "prompt_injection"
-                } else {
-                    category
-                },
-                &self.config.ark,
-            ) != "l1"
-        });
-        for category in &api_config.ark.categories {
-            let canonical = if category == "injection" {
-                "prompt_injection"
-            } else {
-                category
-            };
-            let api_category = if canonical == "prompt_injection" {
-                "injection"
-            } else {
-                canonical
-            };
-            let level = self.config.analysis.level(canonical, &self.config.ark);
-            let gates = json!({"l1": false});
-            let request = json!({"text": input.content, "config": {
-                "categories": [api_category], "max_level": level.to_uppercase(), "gates":gates
-            }});
-            let jobs = crate::api_client::submit(&api_config, request, false)?;
-            if jobs.len() != 1 {
-                return Err(error("Expected one API text result"));
-            }
-            let job = &jobs[0];
-            outcome.classifications.push(classification(
-                &input,
-                canonical,
-                api_category,
-                job,
-                self.config.output.include_evidence_text,
-            )?);
+        if !self.wants_wolf() {
+            return Ok(outcome);
         }
-        if outcome.classifications.is_empty() {
-            return Err(error("No categories enabled for this surface"));
+        let local_injection = outcome
+            .classifications
+            .iter()
+            .position(|result| result.category == "injection");
+        if local_injection.is_some_and(|index| outcome.classifications[index].matched) {
+            return Ok(outcome);
+        }
+        let request = json!({"text": input.content, "config": {
+            "categories": ["injection"], "max_level": "L3", "gates": {"l1": false}
+        }});
+        let jobs = crate::api_client::submit(&self.config, request, false)?;
+        if jobs.len() != 1 {
+            return Err(error("Expected one API text result"));
+        }
+        let wolf = classification(
+            &input,
+            "injection",
+            "injection",
+            &jobs[0],
+            self.config.output.include_evidence_text,
+        )?;
+        match local_injection {
+            Some(index) => outcome.classifications[index] = wolf,
+            None => outcome.classifications.push(wolf),
         }
         Ok(outcome)
     }
 
+    /// Every category at L1 (rules and L1 models), on this device.
     fn local_native(&self, input: ChunkInput<'_>, user_prompt: bool) -> Result<AnalysisOutcome> {
-        let mut config = self.config.clone();
-        config.ark.categories.retain(|category| {
-            matches!(
-                category.as_str(),
-                "pii" | "dlp" | "injection" | "prompt_injection"
-            ) && config
-                .analysis
-                .l1
-                .get(if category == "injection" {
-                    "prompt_injection"
-                } else {
-                    category
-                })
-                .copied()
-                .unwrap_or(true)
-        });
-        if config.ark.categories.is_empty() {
-            return Ok(AnalysisOutcome {
-                classifications: vec![],
-                failures: vec![],
-                degraded: false,
-                notice: None,
-            });
-        }
-        config.ark.max_level = "l1".into();
-        config.ark.download_files = false;
-        config.analysis.category_levels.clear();
         let mut native = self.native.borrow_mut();
         if native.is_none() {
+            let mut config = self.config.clone();
+            config.ark.max_level = "l1".into();
+            config.ark.download_files = false;
             let mut analyzer = ArkAnalyzer::with_policy(
                 &config.ark,
                 &config.analysis,
@@ -231,7 +198,7 @@ impl Inference {
             }))
     }
 
-    /// Runs a plugin policy's L1 and model analyzers on one route.
+    /// Runs a plugin policy's analyzer on one route.
     fn scoped_scan(
         &self,
         input: ChunkInput<'_>,
@@ -239,71 +206,37 @@ impl Inference {
         profile: &crate::plugin_policies::Profile,
         local: bool,
     ) -> Result<AnalysisOutcome> {
-        let cache_key = self.scoped_analyzers(scope, profile, local)?;
+        let cache_key = self.scoped_analyzer(scope, profile, local)?;
         let scoped = self.scoped.borrow();
-        let (l1, models) = &scoped[&cache_key];
-        let scan = |analyzer: &Inference, input| {
-            if scope.ends_with(".user_input") {
-                analyzer.analyze_user_prompt(input)
-            } else {
-                analyzer.analyze(input)
-            }
-        };
-        let mut outcome = scan(l1, input.clone())?;
-        if let Some(models) = models {
-            let assessed = crate::plugin_policies::assess(scan(models, input)?);
-            outcome.classifications.extend(assessed.classifications);
-            outcome.failures.extend(assessed.failures);
-            outcome.degraded |= assessed.degraded;
+        let analyzer = &scoped[&cache_key];
+        if scope.ends_with(".user_input") {
+            analyzer.analyze_user_prompt(input)
+        } else {
+            analyzer.analyze(input)
         }
-        Ok(outcome)
     }
 }
 
 impl Inference {
-    /// Builds, once per scope and route, the L1 and model analyzers for a plugin policy.
-    fn scoped_analyzers(
+    /// Builds, once per scope and route, the analyzer for a plugin policy.
+    fn scoped_analyzer(
         &self,
         scope: &str,
         profile: &crate::plugin_policies::Profile,
         local: bool,
     ) -> Result<String> {
         let cache_key = format!("{scope}:{local}");
-        let mut base = self.config.clone();
-        base.provider.mode = if local {
-            ProviderMode::Local
-        } else {
-            ProviderMode::Api
-        };
         let mut scoped = self.scoped.borrow_mut();
         if !scoped.contains_key(&cache_key) {
-            let mut l1_config = profile.apply(&base);
-            l1_config.provider.mode = ProviderMode::Local;
-            l1_config.ark.categories = profile.l1_categories();
-            l1_config.analysis.category_levels.clear();
-            l1_config.analysis.confidence.clear();
-            let mut l1 = Inference::new(&l1_config)?;
-            l1.prepare()?;
-            let mut model_config = profile.apply(&base);
-            model_config
-                .ark
-                .categories
-                .retain(|category| match category.as_str() {
-                    "injection" | "prompt_injection" => profile.injection.enabled,
-                    "threat" => profile.threat.enabled,
-                    _ => false,
-                });
-            let models = if model_config.ark.categories.is_empty() {
-                None
+            let mut config = profile.apply(&self.config);
+            config.provider.mode = if local {
+                ProviderMode::Local
             } else {
-                for category in &model_config.ark.categories {
-                    model_config.analysis.l1.insert(category.clone(), false);
-                }
-                let mut models = Inference::new(&model_config)?;
-                models.prepare()?;
-                Some(Box::new(models))
+                ProviderMode::Api
             };
-            scoped.insert(cache_key.clone(), (Box::new(l1), models));
+            let mut analyzer = Inference::new(&config)?;
+            analyzer.prepare()?;
+            scoped.insert(cache_key.clone(), Box::new(analyzer));
         }
         Ok(cache_key)
     }
@@ -449,6 +382,8 @@ pub(crate) fn classification(
     if !["l1", "l2", "l3"].contains(&level.as_str()) {
         return Err(error("Invalid API level"));
     }
+    // The API's model stages answer for Wolf, the L3 of our cascade.
+    let level = if level == "l1" { level } else { "l3".into() };
     let mut evidence = vec![];
     let empty = Vec::new();
     let spans = match item.get("evidence_spans") {

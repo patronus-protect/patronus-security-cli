@@ -135,7 +135,7 @@ it.each([
   let fetches = 0
   try {
     const hello = await client.hello()
-    expect(hello).toMatchObject({ provider: 'local', ark_version: '0.1.16', ready: true })
+    expect(hello).toMatchObject({ provider: 'local', ark_version: '0.1.18', ready: true })
     expect(await promptVerdict(ctx, document)).toBeUndefined()
     const request = await scanUserPrompt(client, document)
     console.log('Full-document prompt evidence:', { filename, documentBytes, requestTimeoutMs: hello.runtime.request_timeout_ms, ...request })
@@ -155,7 +155,7 @@ it.each([
 
     for (const scan of [request, response]) {
       expect(scan.job_status).toBe('completed')
-      expect(scan.findings).toEqual(expect.arrayContaining([expect.objectContaining({ category: 'prompt_injection', level: expect.stringMatching(/^l[123]$/) })]))
+      expect(scan.findings).toEqual(expect.arrayContaining([expect.objectContaining({ category: 'injection', level: expect.stringMatching(/^l[123]$/) })]))
       const coverage = scan.coverage as { complete: boolean; fields_total: number; fields_scanned: number; bytes_total: number; bytes_scanned: number }
       expect(coverage.complete).toBe(true)
       expect(coverage.fields_total).toBeGreaterThan(0)

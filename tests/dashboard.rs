@@ -286,7 +286,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
         "status": "FINDINGS",
         "scan_root": scan_root,
         "scanner_version": env!("CARGO_PKG_VERSION"),
-        "ark_version": "0.1.16",
+        "ark_version": "0.1.18",
         "artifact_hashes": {
             "report.json": report_hash
         },
@@ -334,7 +334,7 @@ fn dashboard_regenerates_report_html_and_rejects_tampered_report_json() {
             "status": "FINDINGS",
             "scan_root": newer_attestation.scan_root.clone(),
             "scanner_version": env!("CARGO_PKG_VERSION"),
-            "ark_version": "0.1.16",
+            "ark_version": "0.1.18",
             "artifact_hashes": {"report.json": newer_hash},
             "attestation": newer_attestation,
             "authentication": newer_authentication
@@ -428,8 +428,8 @@ fn sample_report() -> Report {
         target_kind: TargetKind::Repo,
         target: ".".into(),
         scanner_version: env!("CARGO_PKG_VERSION").into(),
-        ark_version: "0.1.16".into(),
-        ark_categories: vec!["prompt_injection".into()],
+        ark_version: "0.1.18".into(),
+        ark_categories: vec!["injection".into()],
         ark_max_level: "l1".into(),
         ark_category_levels: Default::default(),
         started_at: Utc.with_ymd_and_hms(2026, 9, 4, 8, 0, 0).unwrap(),
@@ -450,7 +450,7 @@ fn sample_report() -> Report {
         findings: vec![Finding {
             finding_id: "id".into(),
             path: "&file.txt".into(),
-            category: "prompt_injection".into(),
+            category: "injection".into(),
             label: "INJECTION".into(),
             confidence: 1.0,
             level: "l1".into(),

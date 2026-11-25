@@ -6,12 +6,13 @@ import { patronusRoot } from './settings.ts'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { executablePath, type LocalClientConfig } from './client.ts'
+import { SCAN_CATEGORIES, SCAN_LEVELS } from './protocol.ts'
 
 const SCHEMA = 'patronus.deepseek.static.v1'
 const MAX_REPORT_BYTES = 8 * 1024 * 1024
 const MAX_FINDINGS = 50
-const categories = ['prompt_injection', 'injection', 'dlp', 'pii', 'threat']
-const levels = ['l1', 'l2', 'l3']
+const categories = SCAN_CATEGORIES
+const levels = SCAN_LEVELS
 const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0
 const failure = () => new Error('Patronus static scan unavailable.')
@@ -26,7 +27,10 @@ function fingerprint(value: Awaited<ReturnType<typeof lstat>>): string {
 /** The CLI prints its complete effective config. Freeze it so repository settings
  * cannot enable downloads, change provider, or retain evidence during this scan. */
 function toml(value: unknown): string {
-  if (typeof value === 'string' || typeof value === 'boolean' || count(value)) return JSON.stringify(value)
+  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value)
+  // Counts and the cascade cuts: probabilities and L1 model logits, which may be negative
+  // and integral (a cut of -4.0 prints as -4).
+  if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(toml).join(', ')}]`
   if (record(value)) return `{ ${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)} = ${toml(item)}`).join(', ')} }`
   throw failure()

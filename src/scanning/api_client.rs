@@ -86,7 +86,7 @@ pub fn has_token(config: &Config) -> bool {
 /// Explicit API-native callers can validate that limitation with this helper.
 /// Automatic inference keeps native detection local and does not use this check.
 pub fn validate_modes(config: &Config) -> Result<()> {
-    use patronus_ark::ScoreMode;
+    use patronus_ark_core::native::ScoreMode;
     for (category, mode) in [
         ("pii", config.analysis.pii_mode),
         ("dlp", config.analysis.dlp_mode),

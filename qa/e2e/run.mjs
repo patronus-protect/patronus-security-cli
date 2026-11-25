@@ -26,7 +26,7 @@ const arkLevel = process.env.PATRONUS_QA_ARK_LEVEL ?? 'l3'
 const findings = [], checks = []
 const check = (name, ok, detail = '') => { checks.push({ name, ok, detail }); return ok }
 const add = (severity, key, title, extra) => findings.push(finding('e2e', severity, key, title, extra))
-const scannerToml = (mode, promptPii = false) => `[provider]\nmode="${mode}"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n` +
+const scannerToml = (mode, promptPii = false) => `[provider]\nmode="${mode}"\n[ark]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n` +
   (promptPii ? '[analysis]\nuser_prompt_pii=true\n' : '')
 const task = 'Fix the failing test in this project. Read the docs, the tracker issues and the changelog first.'
 const gate = {

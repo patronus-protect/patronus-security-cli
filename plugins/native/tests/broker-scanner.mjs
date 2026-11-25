@@ -13,7 +13,7 @@ const canary = 'BROKER_PRIVATE_PROTOCOL_CANARY731'
 if (args[0] === 'config') {
   process.stdout.write(JSON.stringify({ schema_version: 1,
     provider: { mode: options.provider ?? 'local' },
-    ark: { max_level: 'l1', categories: ['prompt_injection'], download_files: options.downloads ?? false },
+    ark: { max_level: 'l1', categories: ['injection'], download_files: options.downloads ?? false },
     scan: {}, ignore: {}, chunking: {}, progress: {}, output: {}, support: {}, runtime: {},
   }))
 } else {
@@ -29,7 +29,7 @@ if (args[0] === 'config') {
     if (options.noise) { process.stdout.write(canary + '\n'); return }
     if (options.error) { process.stdout.write(JSON.stringify({ id, error: { message: canary } }) + '\n'); return }
     if (method === 'hello') {
-      reply({ protocol_version: 1, provider: options.helloProvider ?? 'local', scanner_version: '0.1.0', ark_version: options.arkVersion ?? '0.1.16', ready: true,
+      reply({ protocol_version: 1, provider: options.helloProvider ?? 'local', scanner_version: '0.1.0', ark_version: options.arkVersion ?? '0.1.18', ready: true,
         runtime: { response_wait_ms: 0, request_timeout_ms: 1000, scan_timeout_ms: 60000, max_payload_bytes: options.payloadLimit ?? 10 * 1024 * 1024 } })
     } else if (method === 'submit') {
       const scan_id = randomBytes(16).toString('hex')
@@ -45,7 +45,7 @@ if (args[0] === 'config') {
       const status = Date.now() < job.readyAt ? 'pending' : options.status ?? (dangerous ? 'dangerous' : 'approved')
       reply({ scan_id: params.scan_id, status, coverage, job_status: 'completed', ...(status === 'pending' ? {} : options.extra ?? {}),
         redacted_available: dangerous && job.direction === 'response',
-        findings: dangerous ? [{ category: options.category ?? 'prompt_injection', level: 'l1', confidence: 1, label: canary }] : [],
+        findings: dangerous ? [{ category: options.category ?? 'injection', level: 'l1', confidence: 1, label: canary }] : [],
         error: canary, metadata: canary,
         ...(status === 'approved' && job.direction === 'response' ? { result: job.payload } : {}),
       })

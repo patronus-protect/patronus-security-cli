@@ -18,7 +18,7 @@ export async function nativeFixture(next, overrides = {}, options = {}) {
     assert.equal(ark.code, 0)
     assert.match(host.stdout, /^codex-cli \d+\.\d+\.\d+\s*$/)
     if (process.env.PATRONUS_CODEX_EXPECTED_VERSION) assert.equal(host.stdout.trim(), `codex-cli ${process.env.PATRONUS_CODEX_EXPECTED_VERSION}`)
-    assert(ark.stdout.includes('patronus-ark 0.1.16'))
+    assert(ark.stdout.includes('patronus-ark-core 0.1.18'))
   })
   await versions
   const root = await mkdtemp(join(options.tempRoot ?? tmpdir(), 'patronus-codex-native-'))
@@ -27,7 +27,7 @@ export async function nativeFixture(next, overrides = {}, options = {}) {
   const server = await scriptedServer(next)
   const env = await homeConfig(root, server.url)
   const config = join(root, 'scanner.toml')
-  await writeFile(config, '[provider]\nmode = "local"\n[ark]\ncategories = ["prompt_injection"]\nmax_level = "l1"\ndownload_files = false\n')
+  await writeFile(config, '[provider]\nmode = "local"\n[ark]\ncategories = ["injection"]\nmax_level = "l1"\ndownload_files = false\n')
   Object.assign(env, { PATRONUS_SCANNER_BIN: scanner, PATRONUS_CONFIG: config,
     PATRONUS_NATIVE_STATE_DIR: join(root, 'native-state'), PATRONUS_RESPONSE_WAIT_MS: '0' }, overrides)
   if (options.codeMode) await appendFile(join(env.CODEX_HOME, 'config.toml'), '\n[features]\ncode_mode = true\n' + (options.subagents ? 'multi_agent = true\n' : ''))

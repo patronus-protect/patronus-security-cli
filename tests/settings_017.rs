@@ -1,4 +1,4 @@
-use patronus_ark::ScoreMode;
+use patronus_ark_core::native::ScoreMode;
 use patronus_security_scanner::{
     config::{Config, DEFAULTS},
     plugin_policies::Profile,

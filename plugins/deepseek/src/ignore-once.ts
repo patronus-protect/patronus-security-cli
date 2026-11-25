@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { closeSync, constants, fstatSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { patronusRoot, type PluginHost } from './settings.ts'
-import type { ScanResult, TextPayload } from './protocol.ts'
+import { isAttackClass, type ScanResult, type TextPayload } from './protocol.ts'
 
 const command = /\bignore_once ([A-Za-z0-9_.:-]{1,256})_([a-f0-9]{32})\b/g
 /** The command plus quoting or punctuation people add when pasting it, e.g. `...`, "...", or a final period. */
@@ -20,7 +20,7 @@ export function hasIgnoreOnce(text: TextPayload): boolean { return parts(text).s
 export function injectionFinding(result: ScanResult): boolean {
   return result.status === 'dangerous' && Array.isArray(result.findings) && result.findings.some(finding =>
     finding !== null && typeof finding === 'object' && !Array.isArray(finding) &&
-    (finding.category === 'prompt_injection' || finding.category === 'injection'))
+    isAttackClass(finding.category))
 }
 
 /**

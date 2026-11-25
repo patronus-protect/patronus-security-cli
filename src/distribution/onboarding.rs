@@ -94,11 +94,9 @@ fn local_l3_performance_check() -> Result<Duration> {
     let mut config = Config::load(None, None)?;
     config.provider.mode = ProviderMode::Local;
     config.ark.max_level = "l3".into();
-    config.ark.categories = vec!["threat".into()];
-    config
-        .analysis
-        .category_levels
-        .insert("threat".into(), "l3".into());
+    config.ark.categories = vec!["injection".into()];
+    // Measure Wolf Edge itself: with L1 off, Wolf answers every input.
+    config.analysis.skip_l1 = true;
     let mut analyzer = crate::inference::Inference::new(&config)?;
     analyzer.prepare()?;
     let analyze = |content: &str, chunk_id: &str| -> Result<()> {
@@ -118,7 +116,9 @@ fn local_l3_performance_check() -> Result<Duration> {
                 .iter()
                 .any(|classification| !classification.terminal || classification.level != "l3")
         {
-            return Err(fail("Local L3 performance check did not complete at L3"));
+            return Err(fail(
+                "Local Wolf Edge performance check did not complete at L3",
+            ));
         }
         Ok(())
     };
@@ -187,8 +187,8 @@ pub fn status() -> Result<Value> {
     )
 }
 pub fn configure(mode: ProviderMode, level: &str) -> Result<()> {
-    if !["l1", "l2", "l3"].contains(&level) {
-        return Err(fail("Select L1, L2 or L3"));
+    if !["l1", "l3"].contains(&level) {
+        return Err(fail("Select L1 (rules and L1 models) or L3 (+ Wolf Edge)"));
     }
     let mut config = Config::load(None, None)?;
     config.provider.mode = mode;
@@ -197,21 +197,12 @@ pub fn configure(mode: ProviderMode, level: &str) -> Result<()> {
         config.ark.model_dir = Some(crate::model_assets::default_directory()?);
     }
     config.ark.download_files = false;
-    select_level_categories(&mut config.ark.categories, level);
     crate::local_settings::save(&config)
-}
-
-/// Threat detection is opt-in: onboarding never enables it, keeps an explicit
-/// choice, and removes it at L1 because Ark has no L1 threat detector.
-fn select_level_categories(categories: &mut Vec<String>, level: &str) {
-    if level == "l1" {
-        categories.retain(|c| c != "threat");
-    }
 }
 pub fn check() -> Result<InjectionCheck> {
     let config = Config::load(None, None)?;
     let mut probe = config.clone();
-    probe.ark.categories = vec!["prompt_injection".into()];
+    probe.ark.categories = vec!["injection".into()];
     // Test the actual selected analysis levels/gates, not a fabricated match.
     let mut analyzer = crate::inference::Inference::new(&probe)?;
     analyzer.prepare()?;
@@ -573,29 +564,6 @@ pub fn check_command(format: OutputFormat) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn categories(items: &[&str]) -> Vec<String> {
-        items.iter().map(|item| item.to_string()).collect()
-    }
-    #[test]
-    fn onboarding_leaves_threat_off_by_default_at_every_level() {
-        for level in ["l1", "l2", "l3"] {
-            let mut selected = categories(&["prompt_injection", "dlp", "pii"]);
-            select_level_categories(&mut selected, level);
-            assert_eq!(
-                selected,
-                categories(&["prompt_injection", "dlp", "pii"]),
-                "{level}"
-            );
-        }
-    }
-    #[test]
-    fn onboarding_keeps_an_explicit_threat_opt_in_except_at_l1() {
-        for (level, kept) in [("l2", true), ("l3", true), ("l1", false)] {
-            let mut selected = categories(&["prompt_injection", "threat"]);
-            select_level_categories(&mut selected, level);
-            assert_eq!(selected.iter().any(|c| c == "threat"), kept, "{level}");
-        }
-    }
     #[test]
     fn failed_or_partial_probe_is_not_ready() {
         let outcome = crate::ark::AnalysisOutcome {

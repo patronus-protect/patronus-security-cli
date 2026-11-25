@@ -29,7 +29,7 @@ test('pending, incomplete, mixed injection, and malformed coverage never auto-re
   const cases: ScanResult[] = [
     {...dangerous,status:'pending'}, {...dangerous,status:'incomplete'},
     {...dangerous,redacted_available:false}, {...dangerous,findings:[]},
-    {...dangerous,findings:[{category:'pii'},{category:'prompt_injection'}]},
+    {...dangerous,findings:[{category:'pii'},{category:'injection'}]},
     {...dangerous,coverage:{complete:true}},
     {...dangerous,coverage:{complete:true,fields_total:2,fields_scanned:1,bytes_total:42,bytes_scanned:42}},
   ]

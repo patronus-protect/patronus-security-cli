@@ -197,11 +197,11 @@ impl PayloadScan<'_> {
         }
         // Never forward free-form classifier labels, evidence text, paths or
         // exception details into model-visible findings.
-        let (category, label) = match classification.category.as_str() {
-            "prompt_injection" => ("prompt_injection", "unsafe_instruction"),
-            "dlp" => ("dlp", "sensitive_data"),
-            "pii" => ("pii", "personal_data"),
-            "threat" => ("threat", "threat_signal"),
+        let category = classification.category.as_str();
+        let label = match category {
+            "dlp" => "sensitive_data",
+            "pii" => "personal_data",
+            _ if crate::config::is_attack_class(category) => "unsafe_instruction",
             _ => return Err(ScanError::Incomplete("invalid_classification")),
         };
         if !classification.matched {
@@ -212,7 +212,7 @@ impl PayloadScan<'_> {
             };
         }
         let level = match classification.level.as_str() {
-            "l1" | "l2" | "l3" => Some(classification.level.clone()),
+            "l1" | "l3" => Some(classification.level.clone()),
             _ => None,
         };
         let mut push = |start_byte, end_byte, confidence| {
@@ -228,8 +228,12 @@ impl PayloadScan<'_> {
         };
         // A verdict without evidence spans still names its chunk: every other chunk
         // was classified on its own, so masking the whole field would hide text the
-        // scanner judged separately.
-        if classification.evidence.is_empty() {
+        // scanner judged separately. Attack-class evidence marks the words a rule
+        // matched, not the instruction's extent (its payload may follow them), so an
+        // attack finding masks its chunk; on-demand refinement then restores only the
+        // parts the full pipeline approves in context.
+        let attack = crate::config::is_attack_class(category);
+        if attack || classification.evidence.is_empty() {
             push(
                 chunk_start,
                 chunk_start + text.len(),
@@ -244,6 +248,9 @@ impl PayloadScan<'_> {
                 || !valid_confidence(span.confidence)
             {
                 return Err(ScanError::Incomplete("invalid_evidence_span"));
+            }
+            if attack {
+                continue;
             }
             push(
                 chunk_start + span.start,

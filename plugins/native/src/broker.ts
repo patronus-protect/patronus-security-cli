@@ -33,7 +33,8 @@ export type BrokerRequest =
   /** Reaches the broker only after the host allowed the tool call. */
   | { method: 'reveal'; scanId: string; grantId: string }
   | { method: 'static'; kind: 'repo' | 'directory' | 'file' | 'url' | 'mcp'; path: string; server?: string }
-  | { method: 'command'; tool: string; callId: string; command: string }
+  /** `cwd` is the command's working directory from the host hook, the harness context for Cat. */
+  | { method: 'command'; tool: string; callId: string; command: string; cwd?: string }
   /** Starts the session runtime in the background (SessionStart), so the first scans skip the cold start. */
   | { method: 'warm' }
   | { method: 'close' }
@@ -50,7 +51,7 @@ export const failureReason = (error: unknown): string | undefined => record(erro
 const text = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max && !value.includes('\0')
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 
-async function repositoryRoot(start: string): Promise<string | undefined> {
+export async function repositoryRoot(start: string): Promise<string | undefined> {
   for (let current = start; ; current = dirname(current)) {
     try { await lstat(join(current, '.git')); return current }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw brokerFailure() }
@@ -95,8 +96,9 @@ export function validRequest(value: unknown): value is BrokerRequest {
       if (typeof value.kind !== 'string' || !['repo', 'directory', 'file', 'url', 'mcp'].includes(value.kind) || !text(value.path, 8192) || (!(value.kind === 'url' || value.kind === 'mcp' && value.path.startsWith('https://')) && !isAbsolute(value.path))) return false
       break
     case 'command':
-      keys = ['method', 'tool', 'callId', 'command']
+      keys = ['method', 'tool', 'callId', 'command', 'cwd']
       if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== 'string' || Buffer.byteLength(value.command) > 64 * 1024) return false
+      if (value.cwd !== undefined && (!text(value.cwd, 4096) || !isAbsolute(value.cwd))) return false
       break
     case 'warm': case 'close': keys = ['method']; break
     default: return false

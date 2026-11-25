@@ -25,8 +25,11 @@ overlap_bytes = 2048
 prefer_line_boundaries = true
 
 [ark]
-categories = ["prompt_injection", "dlp", "pii"]
-max_level = "l1" # TODO(product): select release profile
+# pii, dlp and Ark Core's attack classes. Opt-in classes: agent_config_tampering,
+# memory_poisoning, unsafe_action, resource_exhaustion, harmful_content, toxic_language.
+categories = ["pii", "dlp", "injection", "jailbreak", "prompt_extraction", "tool_poisoning", "exfiltration"]
+# l1: rules and Ark Core's built-in L1 models; l3: + Wolf Defender Edge for injection.
+max_level = "l1"
 download_files = false
 queue_capacity = 8
 
@@ -62,23 +65,43 @@ max_payload_bytes = 10485760
 max_store_bytes = 536870912
 max_pending_jobs = 64
 
-# Overrides are optional; unspecified categories use ark.max_level.
 [analysis]
 # Local scoring modes: strict, balanced or recall (independent).
 pii_mode = "strict"
 dlp_mode = "strict"
 user_prompt_pii = false
 
-[analysis.category_levels]
-# prompt_injection = "l2"
-# pii = "l1"
-# dlp = "l1"
-# threat = "l2" # Threat has no L1 detector in Ark 0.1.7.
+# Ark Core's built-in L1 model per attack class; all on unless set false.
+[analysis.l1_models]
+# jailbreak = false
 
-[analysis.l1]
-# prompt_injection = true
-# pii = true
-# dlp = true
+# Cascade cuts per category (Ark defaults when unset): detect_threshold and
+# clear_threshold of the rules, l1_detect_threshold, l1_clear_threshold and
+# l1_clear_enabled of the L1 model (logit scale).
+#
+# Ark Core's built-in L1 models detect at their 0.1 % FPR cut on Ark's benign
+# set. On developer text (code, docs, tool results) those cuts flagged 8 to 206
+# of 1,109 benign texts per class (tool_poisoning and agent_config_tampering
+# about 17-19 %). The detect cuts below allow at most one false positive per
+# class on that set; the models' clear cuts stay Ark's, except for injection:
+# its model's clear cut (Ark's 1 % FPR cut) cleared 116 of 229 injection attacks
+# before Wolf could see them, so it is off and Wolf answers what the rules leave
+# undecided. Attack classes other
+# than injection also clear text without a rule signal (rules score below
+# 0.05), so their models only judge what the rules found; injection keeps every
+# undecided input for its L1 model and, at L3, Wolf.
+[analysis.cascade]
+injection = { l1_detect_threshold = 8.5, l1_clear_enabled = false }
+jailbreak = { clear_threshold = 0.05, l1_detect_threshold = 6.0 }
+prompt_extraction = { clear_threshold = 0.05, l1_detect_threshold = 8.0 }
+tool_poisoning = { clear_threshold = 0.05, l1_detect_threshold = 1.5 }
+exfiltration = { clear_threshold = 0.05, l1_detect_threshold = 8.0 }
+agent_config_tampering = { clear_threshold = 0.05, l1_detect_threshold = 3.0 }
+memory_poisoning = { clear_threshold = 0.05, l1_detect_threshold = 2.0 }
+unsafe_action = { clear_threshold = 0.05, l1_detect_threshold = 6.5 }
+resource_exhaustion = { clear_threshold = 0.05, l1_detect_threshold = 2.5 }
+harmful_content = { clear_threshold = 0.05 }
+toxic_language = { clear_threshold = 0.05, l1_detect_threshold = 5.0 }
 
 [analysis.l1_detectors]
 # hidden_html_instruction = true

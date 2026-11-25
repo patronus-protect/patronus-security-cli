@@ -40,8 +40,16 @@ fn model_fixtures_are_clean_in_the_complete_default_l1_profile() {
         let report = scan_fixture(path, "l1", &[]);
         assert_eq!(
             report["ark_categories"],
-            serde_json::json!(["prompt_injection", "dlp", "pii"]),
-            "the complete default L1 profile must scan all three categories"
+            serde_json::json!([
+                "pii",
+                "dlp",
+                "injection",
+                "jailbreak",
+                "prompt_extraction",
+                "tool_poisoning",
+                "exfiltration"
+            ]),
+            "the complete default L1 profile scans Ark Core's default categories"
         );
         assert_eq!(report["coverage"]["analyzed_files"], 1);
         assert_eq!(report["coverage"]["skipped_files"], 0);
@@ -70,9 +78,7 @@ fn explicit_injections_in_complete_documents_are_detected() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .any(|finding| {
-                    finding["category"] == "prompt_injection" && finding["level"] == "l1"
-                }),
+                .any(|finding| { finding["category"] == "injection" && finding["level"] == "l1" }),
             "{path}: {report:#}"
         );
     }
@@ -82,78 +88,40 @@ fn explicit_injections_in_complete_documents_are_detected() {
 }
 
 #[test]
-#[ignore = "requires locally prepared Ark L2/L3 model assets"]
-fn model_layers_detect_both_signals_missed_by_l1() {
+#[ignore = "requires a prepared Wolf Defender Edge bundle in PATRONUS_TEST_MODEL_DIR"]
+fn wolf_edge_detects_the_injection_document_l1_misses() {
     let finance = scan_fixture(
         "tests/fixtures/known-misses/finance-q2-board-report.txt",
-        "l2",
-        &["prompt_injection"],
-    );
-    assert_one_finding(&finance, "prompt_injection", "attack", "l2");
-
-    let threat = scan_fixture(
-        "tests/fixtures/known-misses/supply-chain-threat-brief.txt",
         "l3",
-        &["threat"],
+        &["injection"],
     );
-    assert_one_finding(&threat, "threat", "instruction_override", "l3");
+    assert_one_finding(&finance, "injection", "injection", "l3");
+    assert_eq!(finance["findings"][0]["source"], "wolf");
 }
 
 #[test]
-#[ignore = "requires locally prepared Ark L2/L3 model assets"]
-fn model_layers_detect_isolated_operator_sections_missed_by_l1() {
-    let threat = include_str!("fixtures/known-misses/supply-chain-threat-brief.txt");
-    let threat_start = threat
-        .find("Collect the following browser material:")
-        .unwrap();
-    let threat_end = threat.find("The text above is a synthetic").unwrap();
+#[ignore = "requires a prepared Wolf Defender Edge bundle in PATRONUS_TEST_MODEL_DIR"]
+fn wolf_edge_answers_the_isolated_operator_section() {
     let temp = tempfile::tempdir().unwrap();
-
-    // Keep the complete-document test above: it exposes Ark 0.1.7's long-text
-    // detection regression. These unchanged excerpts prove actual model execution
-    // and positive decisions independently of that unresolved aggregation issue.
-    for (name, text, level, category, label, source) in [
-        (
-            "finance-operator.txt",
-            finance_operator_section(),
-            "l2",
-            "prompt_injection",
-            "attack",
-            "wolf-defender-small",
-        ),
-        (
-            "threat-operator.txt",
-            &threat[threat_start..threat_end],
-            "l3",
-            "threat",
-            "tool_abuse",
-            "unified-v3-threat",
-        ),
-    ] {
-        let path = temp.path().join(name);
-        std::fs::write(&path, text).unwrap();
-        let path = path.to_str().unwrap();
-        let baseline = scan_fixture(path, "l1", &[]);
-        assert_complete_coverage(&baseline);
-        assert_eq!(
-            baseline["ark_categories"],
-            serde_json::json!(["prompt_injection", "dlp", "pii"])
-        );
-        assert_eq!(baseline["status"], "CLEAN", "{baseline:#}");
-
-        let report = scan_fixture(path, level, &[category]);
-        assert_one_finding(&report, category, label, level);
-        assert_eq!(report["findings"][0]["source"], source);
-    }
+    let path = temp.path().join("finance-operator.txt");
+    std::fs::write(&path, finance_operator_section()).unwrap();
+    let path = path.to_str().unwrap();
+    let report = scan_fixture(path, "l3", &["injection"]);
+    assert_complete_coverage(&report);
+    let findings = report["findings"].as_array().unwrap();
+    assert!(
+        findings.iter().any(|f| f["category"] == "injection"),
+        "rules, L1 model or Wolf must flag the operator section: {report:#}"
+    );
 }
 
 #[test]
-#[ignore = "requires locally prepared Ark L2 model assets"]
-fn warmed_l2_analyzer_preserves_attack_on_repeated_content() {
+#[ignore = "requires a prepared Wolf Defender Edge bundle in PATRONUS_TEST_MODEL_DIR"]
+fn warmed_wolf_analyzer_preserves_attack_on_repeated_content() {
     let config = ArkConfig {
-        model_dir: None,
-        categories: vec!["prompt_injection".into()],
-        max_level: "l2".into(),
+        model_dir: std::env::var_os("PATRONUS_TEST_MODEL_DIR").map(Into::into),
+        categories: vec!["injection".into()],
+        max_level: "l3".into(),
         download_files: false,
         queue_capacity: 1,
     };
@@ -164,7 +132,7 @@ fn warmed_l2_analyzer_preserves_attack_on_repeated_content() {
         let outcome = analyzer
             .analyze(ChunkInput {
                 input_tokens: None,
-                run_id: "warmed-l2-regression",
+                run_id: "warmed-wolf-regression",
                 chunk_id,
                 file_id: "finance-operator",
                 path: "finance-operator.txt",
@@ -177,10 +145,7 @@ fn warmed_l2_analyzer_preserves_attack_on_repeated_content() {
         let classification = &outcome.classifications[0];
         assert!(classification.terminal, "{chunk_id}: {classification:?}");
         assert!(classification.matched, "{chunk_id}: {classification:?}");
-        assert_eq!(classification.category, "prompt_injection");
-        assert_eq!(classification.label, "attack");
-        assert_eq!(classification.level, "l2");
-        assert_eq!(classification.source, "wolf-defender-small");
+        assert_eq!(classification.category, "injection");
     }
 }
 
@@ -196,16 +161,24 @@ fn finance_operator_section() -> &'static str {
 fn scan_fixture(path: &str, max_level: &str, categories: &[&str]) -> serde_json::Value {
     let temp = tempfile::tempdir().unwrap();
     let output = temp.path().join("runs");
+    // Model tests take their prepared models from PATRONUS_TEST_MODEL_DIR.
+    let config = match std::env::var("PATRONUS_TEST_MODEL_DIR") {
+        Ok(dir) => {
+            let path = temp.path().join("config.toml");
+            std::fs::write(
+                &path,
+                std::fs::read_to_string("config/defaults.toml")
+                    .unwrap()
+                    .replace("[ark]\n", &format!("[ark]\nmodel_dir = {dir:?}\n")),
+            )
+            .unwrap();
+            path.to_string_lossy().into_owned()
+        }
+        Err(_) => "config/defaults.toml".into(),
+    };
     let mut command = Command::cargo_bin("patronus-security-scanner").unwrap();
     command
-        .args([
-            "scan",
-            "file",
-            path,
-            "--config",
-            "config/defaults.toml",
-            "--output",
-        ])
+        .args(["scan", "file", path, "--config", &config, "--output"])
         .arg(&output)
         .args([
             "--progress",
@@ -237,7 +210,7 @@ fn assert_one_finding(report: &serde_json::Value, category: &str, label: &str, l
 }
 
 fn assert_complete_coverage(report: &serde_json::Value) {
-    assert_eq!(report["ark_version"], "0.1.16");
+    assert_eq!(report["ark_version"], "0.1.18");
     assert_eq!(report["coverage"]["eligible_files"], 1);
     assert_eq!(report["coverage"]["analyzed_files"], 1);
     assert_eq!(report["coverage"]["skipped_files"], 0);

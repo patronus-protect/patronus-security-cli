@@ -1,5 +1,5 @@
 import type { HookDecision, HookInput, JsonValue } from '../types.ts'
-import type { TextPayload } from '../../../deepseek/src/protocol.ts'
+import { CATEGORY_LABELS, type TextPayload } from '../../../deepseek/src/protocol.ts'
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -21,9 +21,7 @@ function securityContext(text: string): string | undefined {
   } catch { /* Non-receipt decisions need no agent instruction. */ }
 }
 
-const categoryLabels: Record<string, string> = {
-  prompt_injection: 'prompt injection', injection: 'injection', dlp: 'sensitive data', pii: 'personal data', threat: 'threat',
-}
+const categoryLabels = CATEGORY_LABELS
 
 /** Claude shows a blocked prompt's reason verbatim to the user, so receipts become one readable sentence. */
 function promptBlockReason(text: string): string {
