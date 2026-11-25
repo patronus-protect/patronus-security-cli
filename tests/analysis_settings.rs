@@ -81,6 +81,16 @@ fn legacy_categories_levels_and_profiles_migrate_to_ark_core() {
     ] {
         assert!(!saved.contains(legacy), "{legacy} is not written back");
     }
+    // The 0.1.16 injection producer switch maps to Ark Core's injection producers.
+    config
+        .analysis
+        .l1_detectors
+        .insert("injection_l1".into(), false);
+    config.migrate_legacy();
+    assert_eq!(config.analysis.l1_detectors.get("injection_l1"), None);
+    assert!(!config.analysis.l1_detectors["injection_rule_catalog"]);
+    assert!(!config.analysis.l1_detectors["injection_structural"]);
+    config.validate().unwrap();
     // Idempotent.
     let before = config.ark.categories.clone();
     config.migrate_legacy();

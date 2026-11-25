@@ -1033,8 +1033,8 @@ function fingerprint(value) {
   return [value.dev, value.ino, value.size, value.mtimeMs].join(":");
 }
 function toml(value) {
-  if (typeof value === "string" || typeof value === "boolean" || count(value)) return JSON.stringify(value);
-  if (typeof value === "number" && Number.isFinite(value) && !Number.isInteger(value)) return JSON.stringify(value);
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(toml).join(", ")}]`;
   if (record5(value)) return `{ ${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)} = ${toml(item)}`).join(", ")} }`;
   throw failure2();

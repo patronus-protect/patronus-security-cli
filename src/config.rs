@@ -159,6 +159,16 @@ impl Config {
     pub fn migrate_legacy(&mut self) {
         let legacy_levels = std::mem::take(&mut self.analysis.legacy_category_levels);
         let legacy_l1 = std::mem::take(&mut self.analysis.legacy_l1);
+        // Ark 0.1.16 had one injection L1 producer; Ark Core splits it into the
+        // rule catalog and the structural checks.
+        if let Some(enabled) = self.analysis.l1_detectors.remove("injection_l1") {
+            for producer in ["injection_rule_catalog", "injection_structural"] {
+                self.analysis
+                    .l1_detectors
+                    .entry(producer.into())
+                    .or_insert(enabled);
+            }
+        }
         self.analysis.legacy_confidence.clear();
         // A category whose L1 was switched off had only its model stage; with
         // Ark Core its rules and L1 model are what remain, so it stays on.
