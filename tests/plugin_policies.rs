@@ -1,7 +1,6 @@
 use patronus_security_scanner::{
-    ark::{AnalysisOutcome, FinalClassification},
     config::{Config, DEFAULTS},
-    plugin_policies::{self, Profile},
+    plugin_policies::Profile,
     policy::{self, Check, Surface},
     runtime::protocol::Verdict,
 };
@@ -43,73 +42,34 @@ fn per_plugin_surface_rules_change_real_scans_without_affecting_other_scopes() {
     }
 }
 
-fn classification(category: &str, level: &str, confidence: f64) -> FinalClassification {
-    FinalClassification {
-        schema: "test",
-        run_id: "test".into(),
-        chunk_id: "c".into(),
-        file_id: "f".into(),
-        path: "text".into(),
-        category: category.into(),
-        source: "fixture".into(),
-        level: level.into(),
-        terminal: true,
-        matched: true,
-        label: "unsafe".into(),
-        confidence,
-        decision: None,
-        evidence: vec![],
-        duration_ms: 0,
-        warnings: vec![],
-    }
-}
 #[test]
-fn scoped_model_policy_uses_arks_decision_candidate_without_rethresholding() {
-    let mut rejected = classification("prompt_injection", "l2", 0.99);
-    rejected.decision = Some(serde_json::json!({
-        "final_result": {"class_name": "benign", "confidence": 0.0, "source": "default"},
-        "decision_candidate": {
-            "source": "l2", "class_name": "injection", "confidence": 0.97,
-            "acceptance_threshold": 0.99, "accepted": false, "evidence": null
-        }
-    }));
-    let mut accepted = classification("threat", "l3", 0.1);
-    accepted.decision = Some(serde_json::json!({
-        "final_result": {"class_name": "malware", "confidence": 0.91, "source": "l3"},
-        "decision_candidate": {
-            "source": "l3", "class_name": "malware", "confidence": 0.91,
-            "acceptance_threshold": 0.9, "accepted": true, "evidence": null
-        }
-    }));
-    let outcome = AnalysisOutcome {
-        classifications: vec![rejected, accepted, classification("pii", "l2", 0.1)],
-        failures: vec!["incomplete model".into()],
-        degraded: true,
-        notice: None,
-    };
-    let result = plugin_policies::assess(outcome);
-    assert_eq!(
-        result
-            .classifications
-            .iter()
-            .map(|c| (c.matched, c.label.as_str(), c.confidence, c.source.as_str()))
-            .collect::<Vec<_>>(),
-        vec![
-            (false, "injection", 0.97, "l2"),
-            (true, "malware", 0.91, "l3"),
-            (true, "unsafe", 0.1, "fixture"),
-        ]
-    );
-    assert!(result.degraded);
-    assert_eq!(result.failures.len(), 1);
-}
-#[test]
-fn profiles_reject_unknown_scope_rule_and_invalid_confidence() {
+fn wolf_switch_selects_l3_only_where_injection_is_scanned() {
     let mut config: Config = toml::from_str(DEFAULTS).unwrap();
     let mut profile = Profile::current(&config, "tool_result");
-    profile.threat.min_confidence = Some(1.1);
-    assert!(profile.validate().is_err());
-    profile.threat.min_confidence = None;
+    assert!(!profile.wolf, "L1 by default");
+    assert_eq!(profile.apply(&config).ark.max_level, "l1");
+    profile.wolf = true;
+    let applied = profile.apply(&config);
+    assert_eq!(applied.ark.max_level, "l3");
+    assert_eq!(applied.ark.categories, config.ark.categories);
+    applied.validate().unwrap();
+    config.ark.categories.retain(|c| c != "injection");
+    assert_eq!(
+        profile.apply(&config).ark.max_level,
+        "l1",
+        "Wolf only answers injection"
+    );
+    config.ark.max_level = "l3".into();
+    config.ark.categories.push("injection".into());
+    assert!(
+        Profile::current(&config, "mcp_result").wolf,
+        "scopes inherit the global L3"
+    );
+}
+#[test]
+fn profiles_reject_unknown_scope_and_rule() {
+    let mut config: Config = toml::from_str(DEFAULTS).unwrap();
+    let mut profile = Profile::current(&config, "tool_result");
     profile.l1_rules.insert("not-a-rule".into(), true);
     assert!(profile.validate().is_err());
     config
@@ -122,12 +82,21 @@ fn profiles_reject_unknown_scope_rule_and_invalid_confidence() {
 fn frozen_config_preserves_boolean_rules_with_secret_names() {
     let mut config: Config = toml::from_str(DEFAULTS).unwrap();
     let mut profile = Profile::current(&config, "tool_result");
-    profile.injection.min_confidence = Some(0.73);
+    profile.injection = Some(
+        serde_json::from_value(
+            serde_json::json!({"enabled": true, "max_level": "l2", "min_confidence": 0.73}),
+        )
+        .unwrap(),
+    );
     config
         .plugin_policies
         .insert("codex.tool_result".into(), profile);
     let serialized = config.redacted_toml().unwrap();
     assert!(!serialized.contains("min_confidence"));
+    assert!(
+        !serialized.contains("max_level = \"l2\""),
+        "legacy assessments are not written"
+    );
     let restored: Config = toml::from_str(&serialized).unwrap();
     assert_eq!(
         restored.plugin_policies["codex.tool_result"].l1_rules,

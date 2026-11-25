@@ -44,7 +44,7 @@ async function sandboxEnv(dataDir) {
   await mkdir(dataDir, { recursive: true, mode: 0o700 })
   const config = join(sandbox, 'scanner.toml')
   // Production profile: L3 with the models `assets prepare` placed in ~/.patronus-qa/models.
-  if (!existsSync(config)) await writeFile(config, `[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
+  if (!existsSync(config)) await writeFile(config, `[provider]\nmode="local"\n[ark]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
   return {
     ...process.env,
     PATH: hostPath(),
@@ -333,7 +333,7 @@ async function live() {
   // The QA account's data dir has no config of its own, so the CLI default (L1) would apply.
   // Live runs use the QA Ark level in hybrid mode, so remote audits use the QA login.
   env.PATRONUS_CONFIG = join(sandbox, 'live-scanner.toml')
-  await writeFile(env.PATRONUS_CONFIG, `[provider]\nmode="hybrid"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
+  await writeFile(env.PATRONUS_CONFIG, `[provider]\nmode="hybrid"\n[ark]\nmax_level=${JSON.stringify(arkLevel)}\ndownload_files=false\nmodel_dir=${JSON.stringify(join(qaHome, 'models'))}\n`)
   const result = await run(process.execPath, ['--test', '--test-reporter=tap', 'plugins/claude/tests/claude-live.test.mjs'], { env, timeout: 300_000 })
   return { ...tapCounts(result.stdout), code: result.code, ms: result.ms, events: await journal(qaData, since),
     tail: (result.stdout + result.stderr).split('\n').filter(line => /^not ok|inspect|Error/i.test(line)).slice(0, 20).join('\n') }

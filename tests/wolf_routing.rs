@@ -21,7 +21,7 @@ fn api_and_large_hybrid_keep_pii_dlp_and_native_injection_local() {
         config.provider.mode = mode;
         // Poison the endpoint: any API submission must fail before touching the network.
         config.provider.api_base_url = "https://invalid.example".into();
-        config.ark.categories = vec!["pii".into(), "dlp".into(), "prompt_injection".into()];
+        config.ark.categories = vec!["pii".into(), "dlp".into(), "injection".into()];
         config.ark.max_level = "l1".into();
         config.analysis.pii_mode = patronus_ark_core::native::ScoreMode::Recall;
         config.analysis.dlp_mode = patronus_ark_core::native::ScoreMode::Balanced;
@@ -34,7 +34,7 @@ fn api_and_large_hybrid_keep_pii_dlp_and_native_injection_local() {
         assert!(outcome
             .classifications
             .iter()
-            .any(|c| c.category == "prompt_injection" && c.matched));
+            .any(|c| c.category == "injection" && c.matched));
         assert!(outcome.classifications.iter().all(|c| c.level == "l1"));
         let scoped = scanner
             .analyze_scoped(input("IMEI: 490154203237518"), "codex.tool_result")

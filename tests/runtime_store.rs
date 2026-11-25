@@ -955,7 +955,7 @@ fn disclosure_grants_are_superseded_and_policy_bound() {
 fn results_with_any_non_pii_finding_offer_nothing() {
     use patronus_security_scanner::runtime::protocol::RuntimeFinding;
     let (_temp, mut store) = setup();
-    for category in ["prompt_injection", "dlp", "threat"] {
+    for category in ["injection", "dlp", "unsafe_action"] {
         let id = store
             .enqueue(job(json!(format!("{CONTACT} {category}"))))
             .unwrap();

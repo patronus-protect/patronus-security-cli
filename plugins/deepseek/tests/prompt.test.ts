@@ -82,7 +82,7 @@ describe('user prompt gate', () => {
   })
 
   it('sends a prompt with only injection findings and warns the model', async () => {
-    const client = new FakeClient({ async scan() { return { status: 'dangerous', findings: [{ category: 'prompt_injection' }] } } })
+    const client = new FakeClient({ async scan() { return { status: 'dangerous', findings: [{ category: 'injection' }] } } })
     const adapter = new MockAdapter([textResponse('done')])
     const ctx = await createHarness(client, adapter)
     try {
@@ -94,7 +94,7 @@ describe('user prompt gate', () => {
   })
 
   it('blocks sensitive data and offers a one-time release', async () => {
-    const client = new FakeClient({ async scan() { return { status: 'dangerous', findings: [{ category: 'prompt_injection' }, { category: 'dlp' }] } } })
+    const client = new FakeClient({ async scan() { return { status: 'dangerous', findings: [{ category: 'injection' }, { category: 'dlp' }] } } })
     const adapter = new MockAdapter([textResponse('must not run')])
     const ctx = await createHarness(client, adapter)
     try {

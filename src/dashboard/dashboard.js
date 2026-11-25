@@ -3,7 +3,9 @@ const $ = id => document.getElementById(id);
 const token = document.querySelector('meta[name="patronus-token"]').content;
 let state, draft, shellDraft;
 const clone = value => structuredClone(value);
-const labels = {pii:'PII',dlp:'DLP',prompt_injection:'Injection',threat:'Threat'};
+const labels = {pii:'PII',dlp:'DLP',injection:'Prompt injection',jailbreak:'Jailbreak',prompt_extraction:'Prompt extraction',tool_poisoning:'Tool poisoning',exfiltration:'Exfiltration',agent_config_tampering:'Agent config tampering',memory_poisoning:'Memory poisoning',unsafe_action:'Unsafe action',resource_exhaustion:'Resource exhaustion',harmful_content:'Harmful content',toxic_language:'Toxic language'};
+// Ark Core's attack classes: each has rules and a built-in L1 model.
+const attackClasses = Object.keys(labels).filter(c=>c!=='pii'&&c!=='dlp');
 let messageTimer;
 function message(text,error=false){clearTimeout(messageTimer);messageTimer=setTimeout(()=>$('control-message').hidden=true,10000);$('control-message').hidden=false;$('control-message').textContent=text;$('control-message').classList.toggle('error',error);}
 async function api(path,body){const headers={'X-Patronus-Token':token};if(body!==undefined){headers['Content-Type']='application/json';headers['If-Match']=state?.revision||'';}const response=await fetch(path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed');return data;}
@@ -14,6 +16,10 @@ function scope(){if($('policy-host').value==='global')return 'global';return `${
 function profiles(){return {...state.profiles,global:{...state.config.analysis,l1_rules:Object.fromEntries(state.rules.map(r=>[r.id,state.config.analysis.l1_rules[r.id]??r.default_enabled])),categories:state.config.ark.categories,user_prompt_pii:state.config.analysis.user_prompt_pii}};}
 function dirty(){return JSON.stringify(draft)!==JSON.stringify(profiles()) || (shellDraft&&JSON.stringify(shellDraft)!==JSON.stringify(state.config.shell));}
 function updateDraft(){$('draft-status').textContent=dirty()?'Unsaved changes':'No unsaved changes';renderRules();}
+function renderFilter(){
+ const filter=$('policy-filter'),current=filter.value,categories=Object.keys(labels).filter(c=>state.rules.some(r=>r.category===c));
+ filter.replaceChildren(...categories.map(c=>{const o=node('option',labels[c]);o.value=c;return o;}));filter.value=categories.includes(current)?current:categories[0];
+}
 function renderRules(){
  const list=$('policy-list');list.replaceChildren();const search=$('policy-search').value.toLowerCase(),filter=$('policy-filter').value;
  const rules=state.rules.filter(rule=>filter===rule.category&&`${rule.id} ${rule.description}`.toLowerCase().includes(search));
@@ -32,14 +38,26 @@ function renderAssessments(){
  $('policy-surface').disabled=global;$('global-analysis-options').hidden=!global;grid.closest('section').hidden=global;
  for(const key of ['pii','dlp']){const select=$(`${key}-mode`);select.options[0].disabled=global;select.value=profile[`${key}_mode`]||(global?'strict':'');}
  $('mode-summary').textContent=`Effective modes: PII ${profile.pii_mode||state.config.analysis.pii_mode} · DLP ${profile.dlp_mode||state.config.analysis.dlp_mode}. PII, DLP and native rules always run locally. API/Hybrid routes only send Wolf model analysis.`;
- if(global){$('global-user-pii').checked=profile.user_prompt_pii;const categories=$('global-categories');categories.replaceChildren();for(const category of ['pii','dlp','prompt_injection']){const label=node('label'),input=node('input');input.type='checkbox';input.checked=profile.categories.includes(category);input.addEventListener('change',()=>{profile.categories=profile.categories.filter(c=>c!==category);if(input.checked)profile.categories.push(category);updateDraft();});label.append(input,document.createTextNode(` ${labels[category]}`));categories.append(label);}return;}
- for(const [key,title] of [['injection','Injection'],['threat','Threat']]){
-  const rule=draft[scope()][key],box=node('div'),label=node('label'),enabled=node('input');enabled.type='checkbox';enabled.checked=rule.enabled;enabled.setAttribute('aria-label',`Enable ${title} assessment`);
-  enabled.addEventListener('change',()=>{rule.enabled=enabled.checked;updateDraft();});label.append(enabled,document.createTextNode(` ${title}`));box.append(label);
-  const levelLabel=node('label','Analysis'),level=node('select');level.setAttribute('aria-label',`${title} analysis`);
-  for(const [value,text] of [['l2','L2'],['l3','L2 + L3']]){const option=node('option',text);option.value=value;level.append(option);}level.value=rule.max_level;level.addEventListener('change',()=>{rule.max_level=level.value;updateDraft();});levelLabel.append(level);box.append(levelLabel);
-  grid.append(box);
+ if(global){
+  $('global-user-pii').checked=profile.user_prompt_pii;const categories=$('global-categories');categories.replaceChildren();
+  profile.l1_models=profile.l1_models||{};
+  for(const category of Object.keys(labels)){
+   const row=node('div',undefined,'category-row'),label=node('label'),input=node('input');input.type='checkbox';input.checked=profile.categories.includes(category);
+   input.addEventListener('change',()=>{profile.categories=profile.categories.filter(c=>c!==category);if(input.checked)profile.categories.push(category);updateDraft();renderAssessments();});
+   label.append(input,document.createTextNode(` ${labels[category]}`));row.append(label);
+   if(attackClasses.includes(category)){
+    const modelLabel=node('label'),model=node('input');model.type='checkbox';model.checked=profile.l1_models[category]!==false;model.disabled=!input.checked;model.setAttribute('aria-label',`L1 model for ${labels[category]}`);
+    model.addEventListener('change',()=>{if(model.checked)delete profile.l1_models[category];else profile.l1_models[category]=false;updateDraft();});
+    modelLabel.append(model,document.createTextNode(' L1 model'));row.append(modelLabel);
+   }
+   categories.append(row);
+  }
+  return;
  }
+ const box=node('div'),label=node('label'),wolf=node('input');wolf.type='checkbox';wolf.checked=profile.wolf===true;wolf.setAttribute('aria-label','Wolf Defender Edge (L3) for prompt injection');
+ wolf.addEventListener('change',()=>{profile.wolf=wolf.checked;updateDraft();});
+ label.append(wolf,document.createTextNode(' Wolf Defender Edge (L3) for prompt injection'));box.append(label);
+ box.append(node('p','Runs only on text the L1 rules and L1 model leave undecided.','setting-line'));grid.append(box);
 }
 for(const id of ['policy-host','policy-surface'])on(id,'change',()=>{renderAssessments();updateDraft();});
 on('policy-filter','change',renderRules);on('policy-search','input',renderRules);
@@ -79,7 +97,7 @@ async function loadIntegrations(){
 on('refresh-integrations','click',loadIntegrations);
 on('save-settings','click',async()=>{const config=clone(state.config);config.provider.mode=$('inference-mode').value;if(config.provider.mode!=='local')config.provider.api_base_url='https://control.patronus.studio/api/v1';await api('/api/config',config);state=await api('/api/state');renderSettings();message('Inference settings saved. Restart active agent sessions to apply them.');});
 window.addEventListener('beforeunload',event=>{if(state&&dirty()){event.preventDefault();event.returnValue='';}});
-(async()=>{try{state=await api('/api/state');draft=clone(profiles());document.querySelectorAll('.server-note').forEach(el=>el.hidden=true);document.querySelectorAll('.live-controls').forEach(el=>el.hidden=false);document.querySelector('.local').textContent='Local dashboard';document.querySelector('footer').textContent=`Activity stored in ${state.data_root} · Survives CLI restarts.`;shellDraft=clone(state.config.shell);renderShell();renderSettings();renderAssessments();updateDraft();loadIntegrations().catch(error=>message(error.message,true));loadSetup().catch(error=>message(error.message,true));}catch(error){message(error.message,true);}})();
+(async()=>{try{state=await api('/api/state');draft=clone(profiles());document.querySelectorAll('.server-note').forEach(el=>el.hidden=true);document.querySelectorAll('.live-controls').forEach(el=>el.hidden=false);document.querySelector('.local').textContent='Local dashboard';document.querySelector('footer').textContent=`Activity stored in ${state.data_root} · Survives CLI restarts.`;shellDraft=clone(state.config.shell);renderShell();renderSettings();renderFilter();renderAssessments();updateDraft();loadIntegrations().catch(error=>message(error.message,true));loadSetup().catch(error=>message(error.message,true));}catch(error){message(error.message,true);}})();
 
 for(const [id,action,all]of [['update-cli','update',false],['uninstall-cli','uninstall',false],['uninstall-all','uninstall',true]])on(id,'click',async()=>{if(!confirm(action==='update'?'Update the CLI from its public release source?':`Uninstall ${all?'the CLI and all three plugins':'the CLI'}? Reports and settings will be preserved.`))return;message('Maintenance is running. See the CLI terminal for progress.');await api('/api/maintenance',{action,all,confirmed:true});message('Maintenance completed. Stop and restart the dashboard to use an updated CLI.');});
 

@@ -299,7 +299,9 @@ pub fn refine_redaction(
             if region.is_empty() || text.get(region.clone()).is_none() {
                 return None;
             }
-            if finding_item.category == "prompt_injection" {
+            // Attack-class findings may cover a whole chunk (L1 model, Wolf);
+            // narrow them. PII and DLP spans are exact already.
+            if crate::config::is_attack_class(&finding_item.category) {
                 regions.push(region);
             } else {
                 spans.push(finding_item.clone());

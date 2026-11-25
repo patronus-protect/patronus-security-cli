@@ -148,11 +148,42 @@ impl Config {
         ) {
             config.output.root = user_root()?.join("output");
         }
-        for profile in config.plugin_policies.values_mut() {
-            profile.add_missing_rules();
-        }
+        config.migrate_legacy();
         config.validate()?;
         Ok(config)
+    }
+
+    /// Bring settings saved by earlier versions to the Ark Core model: old
+    /// category names, L2 levels and per-category levels. Idempotent; the next
+    /// save writes the migrated form.
+    pub fn migrate_legacy(&mut self) {
+        let legacy_levels = std::mem::take(&mut self.analysis.legacy_category_levels);
+        let legacy_l1 = std::mem::take(&mut self.analysis.legacy_l1);
+        self.analysis.legacy_confidence.clear();
+        // A category whose L1 was switched off had only its model stage; with
+        // Ark Core its rules and L1 model are what remain, so it stays on.
+        let _ = legacy_l1;
+        let wolf = self.ark.max_level == "l2"
+            || legacy_levels.iter().any(|(category, level)| {
+                matches!(category.as_str(), "prompt_injection" | "injection")
+                    && matches!(level.as_str(), "l2" | "l3")
+            });
+        if wolf {
+            self.ark.max_level = "l3".into();
+        }
+        let mut categories: Vec<String> = Vec::new();
+        for category in &self.ark.categories {
+            for migrated in migrate_category(category) {
+                if !categories.iter().any(|c| c == migrated) {
+                    categories.push(migrated.to_owned());
+                }
+            }
+        }
+        self.ark.categories = categories;
+        for profile in self.plugin_policies.values_mut() {
+            profile.migrate_legacy();
+            profile.add_missing_rules();
+        }
     }
 
     pub fn apply_scan_options(&mut self, options: &ScanOptions) -> Result<()> {
@@ -162,6 +193,7 @@ impl Config {
         }
         if !options.category.is_empty() {
             self.ark.categories.clone_from(&options.category);
+            self.migrate_legacy();
         }
         if let Some(level) = options.max_level {
             self.ark.max_level = level.as_str().into();
@@ -241,14 +273,19 @@ impl Config {
                     .into(),
             ));
         }
-        if !matches!(self.ark.max_level.as_str(), "l1" | "l2" | "l3") {
+        if !matches!(self.ark.max_level.as_str(), "l1" | "l3") {
             return Err(invalid(format!(
-                "ark.max_level must be l1, l2, or l3; got {}",
+                "ark.max_level must be l1 (rules and L1 models) or l3 (+ Wolf Edge); got {}",
                 self.ark.max_level
             )));
         }
+        let mut seen = Vec::new();
         for category in &self.ark.categories {
-            ark_categories(category).map_err(invalid)?;
+            let parsed = scan_category(category).map_err(invalid)?;
+            if seen.contains(&parsed) {
+                return Err(invalid(format!("ark.categories lists {category} twice")));
+            }
+            seen.push(parsed);
         }
         Ok(())
     }
@@ -276,64 +313,51 @@ pub fn user_root() -> Result<PathBuf> {
         .ok_or_else(|| ScannerError::Output("cannot resolve the user home directory".into()))
 }
 
-/// Ark classes behind one of our scan categories.
-///
-/// Ark 0.1.18 split its old `injection`, `dlp` and `threat` categories into
-/// attack classes. Each of our categories keeps the detections it had on Ark
-/// 0.1.16 by requesting the classes its rules and model labels now report
-/// under; the results are merged back into our category.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArkClasses {
-    /// Scanned up to the category's configured level.
-    pub primary: &'static [patronus_ark_core::SecurityCategory],
-    /// Scanned with L1 rules only. Their old rules reported under this category,
-    /// but Ark 0.1.18 runs the threat model (formerly the opt-in `threat`
-    /// category) for `unsafe_action` at L2/L3.
-    pub l1_only: &'static [patronus_ark_core::SecurityCategory],
+/// A scan category: `pii`, `dlp` or one of Ark Core's attack classes.
+pub fn scan_category(
+    value: &str,
+) -> std::result::Result<patronus_ark_core::SecurityCategory, String> {
+    use patronus_ark_core::SecurityCategory as Ark;
+    value
+        .parse::<Ark>()
+        .ok()
+        .filter(|category| {
+            matches!(category, Ark::Pii | Ark::Dlp) || Ark::ATTACK_CLASSES.contains(category)
+        })
+        .ok_or_else(|| {
+            format!(
+                "unsupported category {value:?}; use pii, dlp or an Ark attack class ({})",
+                Ark::ATTACK_CLASSES.map(Ark::as_str).join(", ")
+            )
+        })
 }
 
-pub fn ark_categories(value: &str) -> std::result::Result<ArkClasses, String> {
-    use patronus_ark_core::SecurityCategory as Ark;
-    match value {
-        // Rules that reported under `injection` before 0.1.18; see Ark's
-        // detectors/injection/rules/rule_categories.json.
-        "prompt_injection" | "injection" => Ok(ArkClasses {
-            primary: &[
-                Ark::Injection,
-                Ark::Jailbreak,
-                Ark::PromptExtraction,
-                Ark::ToolPoisoning,
-            ],
-            l1_only: &[
-                Ark::Exfiltration,
-                Ark::UnsafeAction,
-                Ark::MemoryPoisoning,
-                Ark::AgentConfigTampering,
-            ],
-        }),
-        // Secret transfers moved to `exfiltration`; destructive operations,
-        // sensitive material and risky MCP calls to `unsafe_action`.
-        "dlp" => Ok(ArkClasses {
-            primary: &[Ark::Dlp],
-            l1_only: &[Ark::Exfiltration, Ark::UnsafeAction],
-        }),
-        "pii" => Ok(ArkClasses {
-            primary: &[Ark::Pii],
-            l1_only: &[],
-        }),
-        // The old threat model now runs under `unsafe_action`; its labels report
-        // under these classes. Its instruction-override label goes to
-        // `injection`, which `prompt_injection` scans with Wolf already.
-        "threat" => Ok(ArkClasses {
-            primary: &[
-                Ark::UnsafeAction,
-                Ark::HarmfulContent,
-                Ark::Exfiltration,
-                Ark::ToxicLanguage,
-            ],
-            l1_only: &[],
-        }),
-        other => Err(format!("unsupported Ark category {other:?}")),
+/// Whether a category is one of Ark's attack classes (not `pii` or `dlp`).
+pub fn is_attack_class(category: &str) -> bool {
+    category
+        .parse::<patronus_ark_core::SecurityCategory>()
+        .is_ok_and(|parsed| patronus_ark_core::SecurityCategory::ATTACK_CLASSES.contains(&parsed))
+}
+
+/// Categories of configurations written before Ark Core 0.1.18: the old names
+/// become the attack classes their rules and models report under now.
+fn migrate_category(category: &str) -> Vec<&str> {
+    match category {
+        "prompt_injection" | "prompt-injection" => {
+            vec![
+                "injection",
+                "jailbreak",
+                "prompt_extraction",
+                "tool_poisoning",
+            ]
+        }
+        "threat" => vec![
+            "unsafe_action",
+            "harmful_content",
+            "exfiltration",
+            "toxic_language",
+        ],
+        other => vec![other],
     }
 }
 

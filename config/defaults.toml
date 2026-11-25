@@ -25,8 +25,11 @@ overlap_bytes = 2048
 prefer_line_boundaries = true
 
 [ark]
-categories = ["prompt_injection", "dlp", "pii"]
-max_level = "l1" # TODO(product): select release profile
+# pii, dlp and Ark Core's attack classes. Opt-in classes: agent_config_tampering,
+# memory_poisoning, unsafe_action, resource_exhaustion, harmful_content, toxic_language.
+categories = ["pii", "dlp", "injection", "jailbreak", "prompt_extraction", "tool_poisoning", "exfiltration"]
+# l1: rules and Ark Core's built-in L1 models; l3: + Wolf Defender Edge for injection.
+max_level = "l1"
 download_files = false
 queue_capacity = 8
 
@@ -62,23 +65,34 @@ max_payload_bytes = 10485760
 max_store_bytes = 536870912
 max_pending_jobs = 64
 
-# Overrides are optional; unspecified categories use ark.max_level.
 [analysis]
 # Local scoring modes: strict, balanced or recall (independent).
 pii_mode = "strict"
 dlp_mode = "strict"
 user_prompt_pii = false
 
-[analysis.category_levels]
-# prompt_injection = "l2"
-# pii = "l1"
-# dlp = "l1"
-# threat = "l2" # Threat has no L1 detector in Ark 0.1.7.
+# Ark Core's built-in L1 model per attack class; all on unless set false.
+[analysis.l1_models]
+# jailbreak = false
 
-[analysis.l1]
-# prompt_injection = true
-# pii = true
-# dlp = true
+# Cascade cuts per category (Ark defaults when unset): detect_threshold and
+# clear_threshold of the rules, l1_detect_threshold, l1_clear_threshold and
+# l1_clear_enabled of the L1 model.
+# Attack classes other than injection: text without a rule signal (score below
+# 0.05) is clear, so their L1 models only judge what the rules found. Without
+# this cut the L1 models flagged plain code and security docs in the hook QA.
+# injection keeps every undecided input for its L1 model and Wolf.
+[analysis.cascade]
+jailbreak = { clear_threshold = 0.05 }
+prompt_extraction = { clear_threshold = 0.05 }
+tool_poisoning = { clear_threshold = 0.05 }
+exfiltration = { clear_threshold = 0.05 }
+agent_config_tampering = { clear_threshold = 0.05 }
+memory_poisoning = { clear_threshold = 0.05 }
+unsafe_action = { clear_threshold = 0.05 }
+resource_exhaustion = { clear_threshold = 0.05 }
+harmful_content = { clear_threshold = 0.05 }
+toxic_language = { clear_threshold = 0.05 }
 
 [analysis.l1_detectors]
 # hidden_html_instruction = true

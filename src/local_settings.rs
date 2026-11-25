@@ -27,7 +27,8 @@ pub fn save(config: &Config) -> Result<()> {
 }
 
 pub fn import_config(path: &Path) -> Result<()> {
-    let config: Config = read(path)?;
+    let mut config: Config = read(path)?;
+    config.migrate_legacy();
     save(&config)
 }
 
@@ -46,12 +47,16 @@ pub fn policy(command: PolicyCommand) -> Result<i32> {
         ),
         PolicyCommand::Validate { path } => {
             config.plugin_policies = read(&path)?;
+            for profile in config.plugin_policies.values_mut() {
+                profile.migrate_legacy();
+            }
             config.validate()?;
             println!("Plugin policies are valid.");
         }
         PolicyCommand::Import { path } => {
             config.plugin_policies = read(&path)?;
             for profile in config.plugin_policies.values_mut() {
+                profile.migrate_legacy();
                 profile.add_missing_rules();
             }
             save(&config)?;

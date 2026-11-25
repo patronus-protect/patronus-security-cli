@@ -429,7 +429,7 @@ fn sample_report() -> Report {
         target: ".".into(),
         scanner_version: env!("CARGO_PKG_VERSION").into(),
         ark_version: "0.1.18".into(),
-        ark_categories: vec!["prompt_injection".into()],
+        ark_categories: vec!["injection".into()],
         ark_max_level: "l1".into(),
         ark_category_levels: Default::default(),
         started_at: Utc.with_ymd_and_hms(2026, 9, 4, 8, 0, 0).unwrap(),
@@ -450,7 +450,7 @@ fn sample_report() -> Report {
         findings: vec![Finding {
             finding_id: "id".into(),
             path: "&file.txt".into(),
-            category: "prompt_injection".into(),
+            category: "injection".into(),
             label: "INJECTION".into(),
             confidence: 1.0,
             level: "l1".into(),

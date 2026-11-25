@@ -11,7 +11,7 @@ const reply = (id, result) => process.stdout.write(JSON.stringify({ id, result }
 
 if (process.argv[2] === 'config') {
   process.stdout.write(JSON.stringify({ schema_version: 1, provider: { mode: 'local' },
-    ark: { max_level: 'l1', categories: ['prompt_injection'], download_files: false },
+    ark: { max_level: 'l1', categories: ['injection'], download_files: false },
     scan: {}, ignore: {}, chunking: {}, progress: {}, output: {}, support: {}, runtime: {} }));
 } else for await (const line of createInterface({ input: process.stdin })) {
   const { id, method, params = {} } = JSON.parse(line);

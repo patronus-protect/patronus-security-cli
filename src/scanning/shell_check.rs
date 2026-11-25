@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use patronus_ark_core::detectors::shell::{ShellConfig, ShellRiskPipeline};
+use patronus_ark_core::detectors::shell::{Facts, ShellConfig, ShellContext, ShellRiskPipeline};
 use patronus_ark_core::warmup::{DownloadPolicy, WarmupOptions};
 use serde::Serialize;
 
@@ -211,30 +211,46 @@ impl ShellCheck {
     }
 
     pub fn check(&self, command: &str) -> CommandVerdict {
+        self.check_in_session(command, &ShellContext::default(), &[])
+            .0
+    }
+
+    /// Cat's verdict with the harness context and the facts of the session's
+    /// earlier commands; also returns this command's facts for the history.
+    pub fn check_in_session(
+        &self,
+        command: &str,
+        context: &ShellContext,
+        prior_facts: &[Facts<'static>],
+    ) -> (CommandVerdict, Option<Facts<'static>>) {
         if command.trim().is_empty() {
-            return CommandVerdict {
-                status: "approved",
-                category: "shell_command",
-                risk: None,
-                decision_score: None,
-                threshold: None,
-                reason: None,
-            };
+            return (
+                CommandVerdict {
+                    status: "approved",
+                    category: "shell_command",
+                    risk: None,
+                    decision_score: None,
+                    threshold: None,
+                    reason: None,
+                },
+                None,
+            );
         }
         if command.len() > MAX_COMMAND_BYTES {
-            return CommandVerdict::unavailable("payload_too_large");
+            return (CommandVerdict::unavailable("payload_too_large"), None);
         }
         match self.pipeline() {
             Ok(pipeline) => {
-                let verdict = match pipeline.verdict(command, None, &[], |id| {
+                let verdict = match pipeline.verdict(command, Some(context), prior_facts, |id| {
                     self.policy.rules.get(id).copied().unwrap_or(true)
                 }) {
                     Ok(verdict) => verdict,
-                    Err(_) => return CommandVerdict::unavailable("shell_policy_invalid"),
+                    Err(_) => return (CommandVerdict::unavailable("shell_policy_invalid"), None),
                 };
                 let flagged =
                     verdict.decision != patronus_ark_core::detectors::shell::Decision::Allow;
-                CommandVerdict {
+                let facts = verdict.facts.clone();
+                let result = CommandVerdict {
                     status: if flagged { "dangerous" } else { "approved" },
                     category: "shell_command",
                     risk: flagged.then(|| {
@@ -249,10 +265,48 @@ impl ShellCheck {
                     decision_score: Some(round(verdict.score)),
                     threshold: Some(round(verdict.ask_cut)),
                     reason: None,
+                };
+                (result, Some(facts))
+            }
+            Err(reason) => (CommandVerdict::unavailable(reason), None),
+        }
+    }
+}
+
+/// Facts of each session's recent commands, kept by the runtime for Cat's
+/// `prior_facts` (for example a download followed by its execution).
+#[derive(Default)]
+pub struct ShellHistory {
+    sessions: std::collections::HashMap<String, std::collections::VecDeque<Facts<'static>>>,
+    order: std::collections::VecDeque<String>,
+}
+
+/// Commands remembered per session and sessions remembered per runtime.
+const HISTORY_COMMANDS: usize = 32;
+const HISTORY_SESSIONS: usize = 256;
+
+impl ShellHistory {
+    pub fn prior(&self, session: &str) -> &[Facts<'static>] {
+        self.sessions
+            .get(session)
+            .map_or(&[], |facts| facts.as_slices().0)
+    }
+
+    pub fn record(&mut self, session: &str, facts: Facts<'static>) {
+        if !self.sessions.contains_key(session) {
+            if self.order.len() >= HISTORY_SESSIONS {
+                if let Some(oldest) = self.order.pop_front() {
+                    self.sessions.remove(&oldest);
                 }
             }
-            Err(reason) => CommandVerdict::unavailable(reason),
+            self.order.push_back(session.to_owned());
         }
+        let history = self.sessions.entry(session.to_owned()).or_default();
+        if history.len() >= HISTORY_COMMANDS {
+            history.pop_front();
+        }
+        history.push_back(facts);
+        history.make_contiguous();
     }
 }
 
@@ -326,6 +380,29 @@ mod tests {
                 assert!(risks.contains(risk));
             }
         }
+    }
+
+    #[test]
+    fn shell_history_keeps_recent_commands_per_session_within_bounds() {
+        use patronus_ark_core::detectors::shell::facts::extract;
+        let mut history = ShellHistory::default();
+        assert!(history.prior("a").is_empty());
+        for index in 0..HISTORY_COMMANDS + 3 {
+            history.record("a", extract(&format!("echo {index}"), None, &[]));
+        }
+        assert_eq!(history.prior("a").len(), HISTORY_COMMANDS);
+        assert!(history.prior("b").is_empty(), "sessions do not share facts");
+        for index in 0..HISTORY_SESSIONS {
+            history.record(&format!("s{index}"), extract("ls", None, &[]));
+        }
+        assert!(
+            history.prior("a").is_empty(),
+            "the oldest session is dropped"
+        );
+        assert_eq!(
+            history.prior(&format!("s{}", HISTORY_SESSIONS - 1)).len(),
+            1
+        );
     }
 
     #[test]

@@ -74,6 +74,37 @@ import { accessSync, constants as constants2, realpathSync, existsSync } from "n
 import { delimiter, isAbsolute as isAbsolute2, join as join2, relative } from "node:path";
 
 // plugins/deepseek/src/protocol.ts
+var ATTACK_CLASSES = [
+  "injection",
+  "jailbreak",
+  "prompt_extraction",
+  "tool_poisoning",
+  "agent_config_tampering",
+  "memory_poisoning",
+  "exfiltration",
+  "unsafe_action",
+  "resource_exhaustion",
+  "harmful_content",
+  "toxic_language"
+];
+var SCAN_CATEGORIES = ["pii", "dlp", ...ATTACK_CLASSES];
+var SCAN_LEVELS = ["l1", "l3"];
+var isAttackClass = (category) => typeof category === "string" && ATTACK_CLASSES.includes(category);
+var CATEGORY_LABELS = {
+  pii: "personal data",
+  dlp: "sensitive data",
+  injection: "prompt injection",
+  jailbreak: "jailbreak attempt",
+  prompt_extraction: "prompt extraction",
+  tool_poisoning: "tool poisoning",
+  agent_config_tampering: "agent configuration tampering",
+  memory_poisoning: "memory poisoning",
+  exfiltration: "data exfiltration",
+  unsafe_action: "unsafe action",
+  resource_exhaustion: "resource exhaustion",
+  harmful_content: "harmful content",
+  toxic_language: "toxic language"
+};
 var PII_TYPES = ["email", "ip_address", "phone", "mac_address", "iban", "credit_card", "swift_code", "financial_account", "date_of_birth", "username", "employee_id", "customer_id", "patient_id", "student_id", "applicant_id", "tax_id", "social_id", "health_insurance_id", "physician_id", "passport_number", "id_card_number", "driver_license", "license_plate", "ssn", "national_id"];
 
 // plugins/deepseek/src/client.ts
@@ -507,8 +538,9 @@ function validRequest(value) {
       if (typeof value.kind !== "string" || !["repo", "directory", "file", "url", "mcp"].includes(value.kind) || !text(value.path, 8192) || !(value.kind === "url" || value.kind === "mcp" && value.path.startsWith("https://")) && !isAbsolute3(value.path)) return false;
       break;
     case "command":
-      keys = ["method", "tool", "callId", "command"];
+      keys = ["method", "tool", "callId", "command", "cwd"];
       if (!text(value.tool, 256) || !text(value.callId, 256) || typeof value.command !== "string" || Buffer.byteLength(value.command) > 64 * 1024) return false;
+      if (value.cwd !== void 0 && (!text(value.cwd, 4096) || !isAbsolute3(value.cwd))) return false;
       break;
     case "warm":
     case "close":
@@ -911,13 +943,7 @@ function knownCursorResult(toolName, response) {
   if (toolName === "Shell") return typeof response.output === "string" || typeof response.shell_id === "string" || response.success === true;
   return true;
 }
-var categoryLabels = {
-  prompt_injection: "prompt injection",
-  injection: "injection",
-  dlp: "sensitive data",
-  pii: "personal data",
-  threat: "threat"
-};
+var categoryLabels = CATEGORY_LABELS;
 function receiptSummary(text2) {
   try {
     const receipt2 = JSON.parse(text2);
@@ -996,8 +1022,8 @@ import { dirname as dirname3, isAbsolute as isAbsolute4, join as join5, relative
 var SCHEMA = "patronus.deepseek.static.v1";
 var MAX_REPORT_BYTES = 8 * 1024 * 1024;
 var MAX_FINDINGS = 50;
-var categories = ["prompt_injection", "injection", "dlp", "pii", "threat"];
-var levels = ["l1", "l2", "l3"];
+var categories = SCAN_CATEGORIES;
+var levels = SCAN_LEVELS;
 var record5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 var count = (value) => Number.isSafeInteger(value) && value >= 0;
 var failure2 = () => new Error("Patronus static scan unavailable.");
@@ -1008,6 +1034,7 @@ function fingerprint(value) {
 }
 function toml(value) {
   if (typeof value === "string" || typeof value === "boolean" || count(value)) return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value) && !Number.isInteger(value)) return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(toml).join(", ")}]`;
   if (record5(value)) return `{ ${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)} = ${toml(item)}`).join(", ")} }`;
   throw failure2();
@@ -1360,6 +1387,12 @@ async function autoRedact(result, read) {
 }
 
 // plugins/native/src/daemon.ts
+import { homedir as homedir2 } from "node:os";
+async function shellContext(cwd) {
+  const home = homedir2();
+  if (!cwd) return home ? { home } : {};
+  return { cwd, ...home ? { home } : {}, ...await repositoryRoot(cwd).then((root) => root ? { repo_root: root } : {}, () => ({})) };
+}
 var IDLE_MS = 30 * 6e4;
 var ARMED_MS = 5 * 6e4;
 var run2 = promisify(execFile);
@@ -1449,7 +1482,8 @@ async function acquire(path, socketPath, depth = 0) {
   }
 }
 function toml2(value) {
-  if (typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return JSON.stringify(value);
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(toml2).join(", ")}]`;
   if (record2(value)) return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${toml2(item)}`).join(",")}}`;
   throw brokerFailure();
@@ -1504,10 +1538,10 @@ function scanResult(value, allowOriginal) {
   if (Array.isArray(value.findings)) {
     const findings = [];
     for (const item of value.findings.slice(0, 100)) {
-      if (!record2(item) || typeof item.category !== "string" || !["prompt_injection", "injection", "dlp", "pii", "threat"].includes(item.category)) return unavailable("invalid_scanner_response");
+      if (!record2(item) || typeof item.category !== "string" || !SCAN_CATEGORIES.includes(item.category)) return unavailable("invalid_scanner_response");
       const finding = { category: item.category };
       if (item.level !== void 0) {
-        if (typeof item.level !== "string" || !["l1", "l2", "l3"].includes(item.level)) return unavailable("invalid_scanner_response");
+        if (typeof item.level !== "string" || !SCAN_LEVELS.includes(item.level)) return unavailable("invalid_scanner_response");
         finding.level = item.level;
       }
       if (typeof item.confidence === "number" && Number.isFinite(item.confidence) && item.confidence >= 0 && item.confidence <= 1) finding.confidence = item.confidence;
@@ -1642,7 +1676,7 @@ async function serveBroker(input) {
     if (request.method === "command") {
       const budget2 = AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs ?? hello.runtime.request_timeout_ms)]);
       if (!client.checkCommand) return { status: "unavailable", category: "shell_command", reason: "runtime_version_mismatch" };
-      return await client.checkCommand({ host: config.host, session, tool: request.tool, call_id: request.callId, command: request.command }, budget2);
+      return await client.checkCommand({ host: config.host, session, tool: request.tool, call_id: request.callId, command: request.command, ...await shellContext(request.cwd) }, budget2);
     }
     if (request.method !== "request" && request.method !== "response") throw brokerFailure();
     if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable("payload_too_large");
@@ -1923,7 +1957,7 @@ var record7 = (value) => value !== null && typeof value === "object" && !Array.i
 var categories2 = (result) => Array.isArray(result.findings) ? result.findings.flatMap((finding) => record7(finding) && typeof finding.category === "string" ? [finding.category] : []) : [];
 function promptDecision(result) {
   const found2 = categories2(result);
-  return result.status === "dangerous" && found2.length > 0 && found2.every((category) => category === "prompt_injection" || category === "injection" || category === "threat") ? "warn" : "block";
+  return result.status === "dangerous" && found2.length > 0 && found2.every(isAttackClass) ? "warn" : "block";
 }
 function sensitiveFinding(result) {
   return result.status === "dangerous" && categories2(result).some((category) => category === "dlp" || category === "pii");
@@ -2023,13 +2057,7 @@ function securityContext(text2) {
   } catch {
   }
 }
-var categoryLabels2 = {
-  prompt_injection: "prompt injection",
-  injection: "injection",
-  dlp: "sensitive data",
-  pii: "personal data",
-  threat: "threat"
-};
+var categoryLabels2 = CATEGORY_LABELS;
 function promptBlockReason(text2) {
   try {
     const receipt2 = JSON.parse(text2);
@@ -2638,7 +2666,7 @@ async function handleHook(host, hostEvent, hostValue, overrides = {}, rpc = call
         trace.outcome = "override";
         return {};
       }
-      const result2 = await scan({ method: "command", tool: input.tool_name, callId: input.tool_use_id, command: command2 });
+      const result2 = await scan({ method: "command", tool: input.tool_name, callId: input.tool_use_id, command: command2, cwd: input.cwd });
       if (!record11(result2) || result2.status === "unavailable") {
         traceFailure(trace, record11(result2) ? result2.reason : "invalid_scanner_response");
         return {};

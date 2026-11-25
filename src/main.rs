@@ -137,7 +137,7 @@ fn execute(cli: Cli) -> Result<i32> {
         Command::SupportUs(args) => patronus_security_scanner::support::execute(args).map(|()| 0),
         Command::Version => {
             println!(
-                "patronus-security-scanner {} (patronus-ark {})",
+                "patronus-security-scanner {} (patronus-ark-core {})",
                 patronus_security_scanner::VERSION,
                 patronus_security_scanner::ARK_VERSION
             );
@@ -491,28 +491,20 @@ fn scan(
         builder,
         report_relative,
     );
+    // Only injection has a model stage (Wolf Edge at L3); every other category is L1.
     report.ark_category_levels = config
         .ark
         .categories
         .iter()
         .map(|category| {
-            let canonical = if category == "injection" {
-                "prompt_injection"
+            let level = if category == "injection" {
+                config.ark.max_level.as_str()
             } else {
-                category
+                "l1"
             };
-            (
-                canonical.to_owned(),
-                config.analysis.level(canonical, &config.ark).to_owned(),
-            )
+            (category.clone(), level.to_owned())
         })
         .collect();
-    report.ark_max_level = report
-        .ark_category_levels
-        .values()
-        .max()
-        .cloned()
-        .unwrap_or(report.ark_max_level);
     output.finalize(&target, &report)?;
     match options.format {
         OutputFormat::Human => println!("{}", terminal_summary(&report)),

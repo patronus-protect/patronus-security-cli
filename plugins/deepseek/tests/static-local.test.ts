@@ -10,12 +10,12 @@ import { StaticScanner } from '../src/static.ts'
 import { createAgent, createHarness, execute } from './harness.ts'
 
 const executable = process.env.PATRONUS_TEST_SCANNER
-if (!executable) throw new Error('Set PATRONUS_TEST_SCANNER to the trusted installed Ark 0.1.18 CLI.')
+if (!executable) throw new Error('Set PATRONUS_TEST_SCANNER to the trusted installed Ark Core 0.1.18 CLI.')
 const signal = () => new AbortController().signal
 
-it('scans clean file/directory/repo and the known dangerous document with installed Ark 0.1.18, without file bytes in model requests', async () => {
+it('scans clean file/directory/repo and the known dangerous document with installed Ark Core 0.1.18, without file bytes in model requests', async () => {
   const version = await promisify(execFile)(executable, ['version'])
-  expect(version.stdout).toContain('patronus-ark 0.1.18')
+  expect(version.stdout).toContain('patronus-ark-core 0.1.18')
   const root = await mkdtemp(join(tmpdir(), 'patronus-static-local-'))
   const target = join(root, 'project')
   await mkdir(target)
@@ -25,9 +25,9 @@ it('scans clean file/directory/repo and the known dangerous document with instal
   await writeFile(clean, cleanBytes)
   // The caller's explicit local config is authoritative, including its scan policy.
   const configPath = join(root, 'local.toml')
-  await writeFile(configPath, '[provider]\nmode = "local"\n[ark]\ncategories = ["prompt_injection"]\nmax_level = "l1"\ndownload_files = true\n[output]\ninclude_chunk_content = true\ninclude_evidence_text = true\n[scan]\ninclude_hidden = false\n')
+  await writeFile(configPath, '[provider]\nmode = "local"\n[ark]\ncategories = ["injection"]\nmax_level = "l1"\ndownload_files = true\n[output]\ninclude_chunk_content = true\ninclude_evidence_text = true\n[scan]\ninclude_hidden = false\n')
   // Repo configuration must not switch provider, level, downloads, or outputs.
-  await writeFile(join(target, '.patronus-security-scanner.toml'), '[provider]\nmode = "api"\napi_base_url = "https://invalid.example"\n[ark]\ncategories = ["threat"]\nmax_level = "l3"\ndownload_files = true\n[output]\ninclude_chunk_content = true\ninclude_evidence_text = true\nroot = "should-not-exist"\n[scan]\ninclude_hidden = true\n')
+  await writeFile(join(target, '.patronus-security-scanner.toml'), '[provider]\nmode = "api"\napi_base_url = "https://invalid.example"\n[ark]\ncategories = ["unsafe_action"]\nmax_level = "l3"\ndownload_files = true\n[output]\ninclude_chunk_content = true\ninclude_evidence_text = true\nroot = "should-not-exist"\n[scan]\ninclude_hidden = true\n')
   const fixtures = process.env.PATRONUS_TEST_FIXTURES_ROOT
   if (!fixtures) throw new Error('Run through scripts/test.mjs --static-local.')
   const dangerous = join(fixtures, 'finance-q2-board-report.txt')
@@ -49,11 +49,11 @@ it('scans clean file/directory/repo and the known dangerous document with instal
     expect(adapter.requests).toHaveLength(5)
     expect(results).toHaveLength(4)
     for (const result of results.slice(0, 3)) {
-      expect(result).toMatchObject({ status: 'CLEAN', approved: true, categories: ['prompt_injection'], max_level: 'l1', coverage: { complete: true, analyzed_files: 1, skipped_files: 0, failures: 0 } })
+      expect(result).toMatchObject({ status: 'CLEAN', approved: true, categories: ['injection'], max_level: 'l1', coverage: { complete: true, analyzed_files: 1, skipped_files: 0, failures: 0 } })
     }
     expect(results[3]).toMatchObject({ status: 'FINDINGS', approved: false, coverage: { complete: true, analyzed_files: 1 } })
     expect(results[3].findings_count).toBeGreaterThan(0)
-    expect(results[3].findings).toEqual(expect.arrayContaining([expect.objectContaining({ category: 'prompt_injection', level: 'l1' })]))
+    expect(results[3].findings).toEqual(expect.arrayContaining([expect.objectContaining({ category: 'injection', level: 'l1' })]))
     const exposed = JSON.stringify([adapter.requests, agent.session.snapshotEvents(), results])
     for (const marker of [cleanBytes, 'STATICCLEANMARKER731', 'EXPECTED_SIGNAL_PI_DOCUMENT_001', 'ignore all previous instructions']) {
       expect(exposed.toLowerCase()).not.toContain(marker.toLowerCase())

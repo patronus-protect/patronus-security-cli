@@ -226,7 +226,7 @@
       "properties": {
         "field_id": { "type": "integer", "minimum": 0 }, "start_byte": { "type": "integer", "minimum": 0 },
         "end_byte": { "type": "integer", "minimum": 0 }, "category": { "type": "string" }, "label": { "type": "string" },
-        "level": { "enum": ["l1", "l2", "l3"] },
+        "level": { "enum": ["l1", "l3"] },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     }

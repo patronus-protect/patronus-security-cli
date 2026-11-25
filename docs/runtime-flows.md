@@ -22,7 +22,7 @@ flowchart LR
   end
   subgraph Local["patronus-security-scanner serve --stdio"]
     Runtime["Runtime service<br/>(RPC, policy fingerprint)"]
-    Worker["Worker<br/>(Ark L1 → L2 → L3)"]
+    Worker["Worker<br/>(Ark Core: rules → L1 model → Wolf Edge)"]
     Store[("Job store<br/>SQLite + 0600 payload files")]
     Cache[("Result cache<br/>config + payload hash")]
   end
@@ -177,7 +177,7 @@ flowchart TD
   I -- no --> S["submit(direction=request)<br/>wait up to request_timeout_ms (30 s)"]
   S --> V{"Verdict"}
   V -- approved --> Send
-  V -- "dangerous: only injection / threat" --> W["Send with warning<br/>(model treats embedded instructions as data)"]
+  V -- "dangerous: only attack classes" --> W["Send with warning<br/>(model treats embedded instructions as data)"]
   V -- "dangerous: PII or DLP" --> X["Block before the model<br/>offer ignore_once (15 min, this chat and text)"]
   V -- "dangerous without named findings" --> Y["Block"]
   V -- "failed / unavailable / timeout" --> F["Send with warning (fail-open)"]
@@ -230,7 +230,7 @@ never a runtime `scan_id`.
 
 A user can let the agent see selected PII types from one redacted result, once.
 Only results whose every finding is PII qualify; with any prompt-injection, DLP
-or threat finding nothing becomes readable.
+or attack-class finding nothing becomes readable.
 
 ```mermaid
 sequenceDiagram

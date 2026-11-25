@@ -1,4 +1,5 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
+import { homedir } from 'node:os'
 import type { CommandResult } from './protocol.ts'
 import type { Gate } from './response.ts'
 
@@ -24,7 +25,7 @@ export async function checkCommand(exec: ToolExecution, gate: Gate, enabled: (ex
   try {
     const runtime = await gate.runtimeFor(exec)
     if (!runtime.client.checkCommand) return undefined
-    const result = await runtime.client.checkCommand({ host: 'deepseek', session: gate.sessionFor(exec), tool: exec.name, call_id: String(exec.callId), command }, AbortSignal.any([exec.signal, gate.signal]))
+    const result = await runtime.client.checkCommand({ host: 'deepseek', session: gate.sessionFor(exec), tool: exec.name, call_id: String(exec.callId), command, cwd: process.cwd(), home: homedir() }, AbortSignal.any([exec.signal, gate.signal]))
     // Low lies within the model's 0.1% FPR threshold, where routine developer work scores.
     if (result.status !== 'dangerous' || result.risk === 'low') return undefined
     return { kind: 'ask', reason: `Patronus flagged this shell command as risky (shell-command risk${score(result)}). Allow it only if you expect this command.` }

@@ -40,7 +40,7 @@ fn clean(input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
             chunk_id: input.chunk_id.into(),
             file_id: input.file_id.into(),
             path: input.path.into(),
-            category: "prompt_injection".into(),
+            category: "injection".into(),
             source: "test".into(),
             level: "l1".into(),
             terminal: true,

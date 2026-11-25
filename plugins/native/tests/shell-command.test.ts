@@ -20,12 +20,13 @@ const cursorShell = (command: string) => ({ hook_event_name: 'beforeShellExecuti
 const verdict = (status: string, risk?: string, decision_score?: number) => async (_config: unknown, request: any) =>
   request.method === 'command' ? { status, category: 'shell_command', ...(risk ? { risk } : {}), ...(decision_score ? { decision_score, threshold: 1.15 } : {}) } : { closed: true }
 
-test('every host sends exactly the shell command line to the check', async () => {
+test('every host sends exactly the shell command line and its working directory to the check', async () => {
   for (const [host, value] of [['claude', pre('Bash', 'npm test')], ['codex', pre('Bash', 'npm test')], ['cursor', cursorShell('npm test')]] as const) {
     const calls: any[] = []
     assert.deepEqual(await hook(host, value.hook_event_name, value, async (config, request) => { calls.push({ config, request }); return { status: 'approved', category: 'shell_command' } }),
       {})
-    assert.deepEqual(calls.map(call => call.request), [{ method: 'command', tool: host === 'cursor' ? 'Shell' : 'Bash', callId: 'call-731', command: 'npm test' }])
+    assert.deepEqual(calls.map(call => call.request), [{ method: 'command', tool: host === 'cursor' ? 'Shell' : 'Bash', callId: 'call-731', command: 'npm test', cwd: value.cwd }])
+    assert.ok(typeof value.cwd === 'string' && value.cwd.startsWith('/'), 'hooks always carry an absolute cwd')
     assert.equal(calls[0].config.sessionId, session)
   }
 })

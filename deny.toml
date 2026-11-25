@@ -18,9 +18,3 @@ allow = [
   "Zlib",
 ]
 
-# Patronus Security is the Apache-2.0 community project. Patronus Ark remains
-# GPL-3.0-only and is intentionally approved as this first-party dependency;
-# the exception does not allow GPL dependencies generally.
-exceptions = [
-  { crate = "patronus-ark", allow = ["GPL-3.0-only"] },
-]

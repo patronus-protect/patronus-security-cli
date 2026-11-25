@@ -40,7 +40,7 @@ fn classify(input: ChunkInput<'_>, spans: Option<Vec<(usize, usize)>>) -> Analys
             chunk_id: input.chunk_id.into(),
             file_id: input.file_id.into(),
             path: input.path.into(),
-            category: "prompt_injection".into(),
+            category: "injection".into(),
             source: "test".into(),
             level: "l1".into(),
             terminal: true,
@@ -88,7 +88,7 @@ fn run(analyzer: &dyn ContentAnalyzer, payload: &Value) -> ScanOutcome {
 fn findings_preserve_model_levels_without_merging_different_stages() {
     let analyzer = Analyzer(|input: ChunkInput<'_>| {
         let mut outcome = classify(input, Some(vec![(0, 6)]));
-        outcome.classifications[0].level = "l2".into();
+        outcome.classifications[0].level = "l1".into();
         let mut later = outcome.classifications[0].clone();
         later.level = "l3".into();
         outcome.classifications.push(later);
@@ -97,7 +97,7 @@ fn findings_preserve_model_levels_without_merging_different_stages() {
     let outcome = run(&analyzer, &json!("abcdef"));
     assert_eq!(outcome.verdict, Some(Verdict::Dangerous));
     assert_eq!(outcome.findings.len(), 2);
-    assert_eq!(outcome.findings[0].level.as_deref(), Some("l2"));
+    assert_eq!(outcome.findings[0].level.as_deref(), Some("l1"));
     assert_eq!(outcome.findings[1].level.as_deref(), Some("l3"));
 }
 
@@ -511,7 +511,7 @@ fn chunk_offsets_include_literal_bom_and_overlap_is_counted_once() {
 fn actual_ark_l1_detects_injection_and_approves_clean_text_without_downloads() {
     let config = ArkConfig {
         model_dir: None,
-        categories: vec!["prompt_injection".into(), "dlp".into(), "pii".into()],
+        categories: vec!["injection".into(), "dlp".into(), "pii".into()],
         max_level: "l1".into(),
         download_files: false,
         queue_capacity: 1,
@@ -535,7 +535,7 @@ fn actual_ark_l1_detects_injection_and_approves_clean_text_without_downloads() {
             .iter()
             .map(|item| item.category.as_str())
             .collect::<Vec<_>>(),
-        ["prompt_injection", "dlp"]
+        ["injection", "dlp"]
     );
     let clean = run(&analyzer, &json!("The sample document describes a garden."));
     assert_eq!(clean.verdict, Some(Verdict::Approved), "{clean:?}");
@@ -842,7 +842,7 @@ fn actual_l3_refinement_preserves_ticket_port_and_removes_injection() {
     let mut analyzer = ArkAnalyzer::new(
         &ArkConfig {
             model_dir: std::env::var_os("PATRONUS_TEST_MODEL_DIR").map(Into::into),
-            categories: vec!["prompt_injection".into()],
+            categories: vec!["injection".into()],
             max_level: "l3".into(),
             download_files: false,
             queue_capacity: 1,
@@ -1109,11 +1109,12 @@ fn only_l1_pii_evidence_becomes_disclosable() {
     };
     let payload = json!("mail ada@example.com now");
     assert_eq!(run(&pii("l1"), &payload).disclosure.len(), 1);
-    for level in ["l2", "l3"] {
-        let outcome = run(&pii(level), &payload);
-        assert_eq!(outcome.verdict, Some(Verdict::Dangerous));
-        assert!(outcome.disclosure.is_empty(), "{level}");
-    }
+    let outcome = run(&pii("l3"), &payload);
+    assert_eq!(outcome.verdict, Some(Verdict::Dangerous));
+    assert!(
+        outcome.disclosure.is_empty(),
+        "model-level spans stay locked"
+    );
 }
 
 #[test]

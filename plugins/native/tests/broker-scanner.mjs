@@ -13,7 +13,7 @@ const canary = 'BROKER_PRIVATE_PROTOCOL_CANARY731'
 if (args[0] === 'config') {
   process.stdout.write(JSON.stringify({ schema_version: 1,
     provider: { mode: options.provider ?? 'local' },
-    ark: { max_level: 'l1', categories: ['prompt_injection'], download_files: options.downloads ?? false },
+    ark: { max_level: 'l1', categories: ['injection'], download_files: options.downloads ?? false },
     scan: {}, ignore: {}, chunking: {}, progress: {}, output: {}, support: {}, runtime: {},
   }))
 } else {
@@ -45,7 +45,7 @@ if (args[0] === 'config') {
       const status = Date.now() < job.readyAt ? 'pending' : options.status ?? (dangerous ? 'dangerous' : 'approved')
       reply({ scan_id: params.scan_id, status, coverage, job_status: 'completed', ...(status === 'pending' ? {} : options.extra ?? {}),
         redacted_available: dangerous && job.direction === 'response',
-        findings: dangerous ? [{ category: options.category ?? 'prompt_injection', level: 'l1', confidence: 1, label: canary }] : [],
+        findings: dangerous ? [{ category: options.category ?? 'injection', level: 'l1', confidence: 1, label: canary }] : [],
         error: canary, metadata: canary,
         ...(status === 'approved' && job.direction === 'response' ? { result: job.payload } : {}),
       })

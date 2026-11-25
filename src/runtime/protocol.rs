@@ -190,6 +190,14 @@ pub struct CheckCommandParams {
     pub tool: String,
     pub call_id: String,
     pub command: String,
+    /// Harness context for Cat: the command's working directory, the user's
+    /// home and the repository root. Absent fields are unset.
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub home: Option<String>,
+    #[serde(default)]
+    pub repo_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

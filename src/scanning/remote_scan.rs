@@ -182,30 +182,22 @@ pub fn scan(
         .ark
         .categories
         .iter()
-        .map(|c| {
-            if c == "prompt_injection" {
-                "injection".into()
-            } else {
-                c.clone()
-            }
-        })
-        .filter(|category: &String| !anonymous || matches!(category.as_str(), "injection" | "dlp"))
+        .filter(|category| !anonymous || matches!(category.as_str(), "injection" | "dlp"))
+        .cloned()
         .collect();
     // Categories with identical gates share one fetch. Per-category overrides
     // get their own request so no disabled L1 gate or model level is lost.
     let mut groups: Vec<(Value, Vec<String>)> = Vec::new();
     for category in categories.iter().filter(|_| !anonymous) {
-        let canonical = if category == "injection" {
-            "prompt_injection"
-        } else {
-            category
-        };
-        let mut gates = json!({"rules":config.analysis.l1_rules,
+        let gates = json!({"rules":config.analysis.l1_rules,
             "models":config.analysis.l1_detectors.iter().map(|(k,v)| (format!("native:{k}"), *v)).collect::<std::collections::BTreeMap<_,_>>()});
-        if let Some(enabled) = config.analysis.l1.get(canonical) {
-            gates["l1"] = json!(enabled);
-        }
-        let settings = json!({"max_level":config.analysis.level(canonical, &config.ark).to_uppercase(), "gates":gates});
+        // Only injection has a model stage (Wolf, L3); the other classes are L1.
+        let level = if category == "injection" {
+            config.ark.max_level.as_str()
+        } else {
+            "l1"
+        };
+        let settings = json!({"max_level": level.to_uppercase(), "gates":gates});
         if let Some((_, members)) = groups
             .iter_mut()
             .find(|(candidate, _)| *candidate == settings)
@@ -243,22 +235,7 @@ pub fn scan(
         let jobs = crate::api_client::submit(config, body, kind == "url")?;
         let partial = summarize(kind, &members, &jobs)?;
         report.jobs += partial.jobs;
-        report
-            .findings
-            .extend(partial.findings.into_iter().filter(|finding| {
-                let category = if finding.category == "injection" {
-                    "prompt_injection"
-                } else {
-                    &finding.category
-                };
-                !(matches!(finding.level.as_str(), "l2" | "l3")
-                    && matches!(category, "prompt_injection" | "threat")
-                    && config
-                        .analysis
-                        .confidence
-                        .get(category)
-                        .is_some_and(|threshold| finding.confidence < *threshold))
-            }));
+        report.findings.extend(partial.findings);
     }
     report.approved = report.findings.is_empty();
     report.status = if report.approved { "CLEAN" } else { "FINDINGS" }.into();

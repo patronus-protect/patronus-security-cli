@@ -14,7 +14,7 @@ export const injectionDocument = await readFile(new URL('./fixtures/injection-do
 export const injectionRedacted = await readFile(new URL('./fixtures/injection-document.redacted.txt', import.meta.url), 'utf8')
 assert.equal(injectionDocument.split(injection).length, 2, 'Fixture must contain exactly one injection')
 assert.equal(injectionRedacted, injectionDocument.replace(injection.slice(0, -1), '[REDACTED]'), 'Golden file must preserve everything outside the injection span')
-export const scannerConfig = '[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n'
+export const scannerConfig = '[provider]\nmode="local"\n[ark]\nmax_level="l1"\ndownload_files=false\n'
 export async function checked(command, args, options = {}) {
   const result = await run(command, args, options)
   assert.equal(result.code, 0, `${command} ${args.join(' ')}\n${result.stderr}\n${result.stdout}`)

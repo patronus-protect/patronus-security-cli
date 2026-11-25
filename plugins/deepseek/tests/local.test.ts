@@ -155,7 +155,7 @@ it.each([
 
     for (const scan of [request, response]) {
       expect(scan.job_status).toBe('completed')
-      expect(scan.findings).toEqual(expect.arrayContaining([expect.objectContaining({ category: 'prompt_injection', level: expect.stringMatching(/^l[123]$/) })]))
+      expect(scan.findings).toEqual(expect.arrayContaining([expect.objectContaining({ category: 'injection', level: expect.stringMatching(/^l[123]$/) })]))
       const coverage = scan.coverage as { complete: boolean; fields_total: number; fields_scanned: number; bytes_total: number; bytes_scanned: number }
       expect(coverage.complete).toBe(true)
       expect(coverage.fields_total).toBeGreaterThan(0)

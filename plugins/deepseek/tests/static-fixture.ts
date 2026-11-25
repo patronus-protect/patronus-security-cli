@@ -5,21 +5,21 @@ import { join } from 'node:path'
 export const canary = 'STATIC_PRIVATE_FILE_BYTES_741'
 export const config = {
   schema_version: 1, provider: { mode: 'local' },
-  ark: { categories: ['prompt_injection'], max_level: 'l1', download_files: true },
+  ark: { categories: ['injection'], max_level: 'l1', download_files: true },
   output: { include_evidence_text: true, include_chunk_content: true },
   scan: { include_hidden: true, respect_gitignore: false, max_file_bytes: 123456 },
   ignore: { patterns: ['custom-ignore/**'] }, chunking: {}, progress: {}, support: {}, runtime: {},
 }
 export const report = {
   schema: 'patronus.security-scanner.report.v1', status: 'CLEAN',
-  ark_categories: ['prompt_injection'], ark_max_level: 'l1',
+  ark_categories: ['injection'], ark_max_level: 'l1',
   coverage: { discovered_files: 1, eligible_files: 1, analyzed_files: 1, skipped_files: 0,
     eligible_bytes: 30, analyzed_bytes: 30, chunks: 1, classifications: 1, failures: 0, degraded: false },
   findings: [],
   conclusion: canary, content: canary, evidence: canary, chunks: [{ content: canary }],
   failures: [{ message: canary }], skipped: [{ reason: canary }], report_path: canary,
 }
-export const finding = { path: canary, category: 'prompt_injection', level: 'l1', line_start: 1, line_end: 1, confidence: 0.99, label: canary, source: canary, evidence: canary }
+export const finding = { path: canary, category: 'injection', level: 'l1', line_start: 1, line_end: 1, confidence: 0.99, label: canary, source: canary, evidence: canary }
 
 /** This test-only installed executable simulates the CLI protocol, not Ark logic. */
 export async function fakeCli(mode = 'normal', override: object = {}) {

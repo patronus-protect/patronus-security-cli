@@ -1,16 +1,14 @@
-use std::collections::HashMap;
-use std::time::Duration;
+use std::cell::RefCell;
 
-use patronus_ark::{
-    GatewayConfig, L3Strategy, QueuedSecurityEvent, ScanRequest, ScanRequestOptions,
-    SecurityGateway, SecurityRequestCompletion,
+use patronus_ark_core::cascade::{
+    ModuleDecision, ScanGateMatrix, SecurityLevel, Stage, StageOutcome,
 };
-use patronus_ark_core::cascade::{ScanGateMatrix, SecurityLevel};
 use patronus_ark_core::warmup::DownloadPolicy;
-use patronus_ark_core::SecurityCategory;
+use patronus_ark_core::wolf::{WolfConfig, WolfModel};
+use patronus_ark_core::{NativeResult, ScanReport, Scanner, ScannerConfig, SecurityCategory};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{ark_categories, ArkConfig};
+use crate::config::{scan_category, ArkConfig};
 use crate::error::{Result, ScannerError};
 
 #[derive(Debug, Clone, Serialize)]
@@ -121,13 +119,20 @@ pub trait ContentAnalyzer {
     }
 }
 
+/// Ark Core's synchronous scanner: L1 rules and built-in L1 models per
+/// category, and Wolf Defender Edge as the L3 of `injection` where the cascade
+/// escalates.
 pub struct ArkAnalyzer {
-    gateways: HashMap<String, SecurityGateway>,
-    policies: HashMap<String, (String, ScanGateMatrix)>,
+    config: ScannerConfig,
+    scanner: RefCell<Option<Scanner>>,
+    requested: Vec<SecurityCategory>,
     user_prompt_pii: bool,
-    requested: Vec<String>,
     include_evidence_text: bool,
 }
+
+/// Inputs and evidence beyond these limits fail instead of being truncated.
+const MAX_INPUT_BYTES: usize = 1024 * 1024;
+const MAX_FINDINGS: usize = 10_000;
 
 impl ArkAnalyzer {
     pub fn new(config: &ArkConfig, include_evidence_text: bool) -> Result<Self> {
@@ -143,77 +148,12 @@ impl ArkAnalyzer {
         policy: &crate::analysis_config::AnalysisConfig,
         include_evidence_text: bool,
     ) -> Result<Self> {
-        policy.validate(config).map_err(ScannerError::Ark)?;
-        let mut groups: HashMap<String, Vec<SecurityCategory>> = HashMap::new();
-        let mut policies = HashMap::new();
-        for category in &config.categories {
-            let normalized = normalize_category(category);
-            let level = policy.level(&normalized, config).to_owned();
-            // A gateway refuses duplicate categories; `prompt_injection` and
-            // `threat` share Ark's `injection` class.
-            let classes = ark_categories(category).map_err(ScannerError::Ark)?;
-            for (group, ark_classes) in [
-                (level.as_str(), classes.primary),
-                (L1_ONLY, classes.l1_only),
-            ] {
-                if ark_classes.is_empty() {
-                    continue;
-                }
-                let group = groups.entry(group.to_owned()).or_default();
-                for ark in ark_classes {
-                    if !group.contains(ark) {
-                        group.push(*ark);
-                    }
-                }
-            }
-            let gates = ScanGateMatrix {
-                l1: policy.l1.get(&normalized).copied(),
-                pii_mode: policy.pii_mode,
-                dlp_mode: policy.dlp_mode,
-                rules: policy
-                    .l1_rules
-                    .iter()
-                    .map(|(id, enabled)| (id.clone(), *enabled))
-                    .collect(),
-                models: policy
-                    .l1_detectors
-                    .iter()
-                    .map(|(name, enabled)| (format!("native:{name}"), *enabled))
-                    .collect(),
-                ..Default::default()
-            };
-            policies.insert(normalized, (level, gates));
-        }
-        let mut gateways = HashMap::new();
-        for (level, categories) in groups {
-            let mut gateway_config = GatewayConfig::new(categories, parse_level(&level)?);
-            gateway_config.core.cache_root = config.model_dir.clone();
-            gateway_config.core.download = if config.download_files {
-                DownloadPolicy::Missing
-            } else {
-                DownloadPolicy::Never
-            };
-            // Ark 0.1.18 dropped its default input limits; keep the 0.1.16 ones.
-            gateway_config.core.max_input_bytes = Some(ARK_MAX_INPUT_BYTES);
-            gateway_config.core.max_findings = Some(ARK_MAX_FINDINGS);
-            // Reuse the desktop's installed shared L3 model when available.
-            // Apply the same strategy for readiness, preparation and scanning.
-            if config
-                .model_dir
-                .as_ref()
-                .is_some_and(|dir| unified_l3_assets_present(dir))
-            {
-                gateway_config.l3_strategy = L3Strategy::Multi;
-            }
-            let gateway = SecurityGateway::new(gateway_config).map_err(ScannerError::Ark)?;
-            gateway.set_queue_worker_count(config.queue_capacity);
-            gateways.insert(level, gateway);
-        }
+        let scanner = scanner_config(config, policy)?;
         Ok(Self {
-            gateways,
-            policies,
+            requested: scanner.categories.clone(),
+            config: scanner,
+            scanner: RefCell::new(None),
             user_prompt_pii: policy.user_prompt_pii,
-            requested: config.categories.clone(),
             include_evidence_text,
         })
     }
@@ -222,68 +162,118 @@ impl ArkAnalyzer {
         Self::prepare_policy_assets(config, &crate::analysis_config::AnalysisConfig::default())
     }
 
-    /// Inspect required assets without enabling downloads or loading model sessions.
+    /// Whether the model files the configuration needs (Wolf Edge at L3) are
+    /// in place, without downloading or loading them.
     pub fn policy_assets_ready(
         config: &ArkConfig,
         policy: &crate::analysis_config::AnalysisConfig,
     ) -> Result<bool> {
-        let mut local = config.clone();
-        local.download_files = false;
-        let analyzer = Self::with_policy(&local, policy, false)?;
-        let mut ready = true;
-        for gateway in analyzer.gateways.values() {
-            let readiness = gateway.asset_readiness();
-            for level in [readiness.l2, readiness.l3] {
-                if let patronus_ark::SecurityLevelReadiness::NotReady { failures } = level {
-                    for failure in failures {
-                        if failure.kind != patronus_ark::SecurityFailureKind::MissingAsset {
-                            return Err(ScannerError::Ark(format!(
-                                "Local model validation failed; no download started: {failure}"
-                            )));
-                        }
-                        eprintln!("{failure}");
-                    }
-                    ready = false;
-                }
-            }
-        }
-        Ok(ready)
+        let scanner = scanner_config(config, policy)?
+            .resolved()
+            .map_err(|error| ScannerError::Ark(error.to_string()))?;
+        let Some(wolf) = &scanner.wolf else {
+            return Ok(true);
+        };
+        let dir = wolf
+            .bundle_dir
+            .as_deref()
+            .ok_or_else(|| ScannerError::Ark("Wolf bundle directory is not resolved".into()))?;
+        patronus_ark_core::warmup::wolf_assets_present(dir, wolf.model, wolf.precision).map_err(
+            |error| {
+                ScannerError::Ark(format!(
+                    "Local model validation failed; no download started: {error}"
+                ))
+            },
+        )
     }
 
+    /// Download what the configuration needs (Wolf Edge at L3) and verify it.
     pub fn prepare_policy_assets(
         config: &ArkConfig,
         policy: &crate::analysis_config::AnalysisConfig,
     ) -> Result<()> {
-        let mut downloadable = config.clone();
-        downloadable.download_files = true;
-        let analyzer = Self::with_policy(&downloadable, policy, false)?;
-        for gateway in analyzer.gateways.values() {
-            let readiness = gateway.asset_readiness();
-            if !matches!(
-                readiness.l2,
-                patronus_ark::SecurityLevelReadiness::NotReady { .. }
-            ) && !matches!(
-                readiness.l3,
-                patronus_ark::SecurityLevelReadiness::NotReady { .. }
-            ) {
-                continue;
-            }
-            gateway
-                .prepare_assets()
-                .map_err(|error| ScannerError::Ark(error.to_string()))?;
-        }
-        Ok(())
+        let mut scanner = scanner_config(config, policy)?;
+        scanner.download = DownloadPolicy::Missing;
+        patronus_ark_core::warmup::prepare_assets(&scanner)
+            .map_err(|error| ScannerError::Ark(error.to_string()))
     }
+
+    fn with_scanner<T>(&self, run: impl FnOnce(&mut Scanner) -> Result<T>) -> Result<T> {
+        let mut slot = self.scanner.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(build_scanner(&self.config)?);
+        }
+        run(slot.as_mut().expect("scanner was just built"))
+    }
+}
+
+/// The Ark Core configuration of one analyzer.
+fn scanner_config(
+    config: &ArkConfig,
+    policy: &crate::analysis_config::AnalysisConfig,
+) -> Result<ScannerConfig> {
+    policy.validate(config).map_err(ScannerError::Ark)?;
+    let categories = config
+        .categories
+        .iter()
+        .map(|category| scan_category(category).map_err(ScannerError::Ark))
+        .collect::<Result<Vec<_>>>()?;
+    let max_level = parse_level(&config.max_level)?;
+    let gates = ScanGateMatrix {
+        pii_mode: policy.pii_mode,
+        dlp_mode: policy.dlp_mode,
+        rules: policy
+            .l1_rules
+            .iter()
+            .map(|(id, enabled)| (id.clone(), *enabled))
+            .collect(),
+        models: policy
+            .l1_detectors
+            .iter()
+            .map(|(name, enabled)| (format!("native:{name}"), *enabled))
+            .collect(),
+        l1: policy.skip_l1.then_some(false),
+        cascade: Some(
+            patronus_ark_core::cascade::Cascade::new(policy.cascade_config(&config.categories))
+                .map_err(|error| ScannerError::Ark(error.to_string()))?,
+        ),
+        ..Default::default()
+    };
+    let wolf = (max_level == SecurityLevel::L3
+        && categories.contains(&SecurityCategory::Injection))
+    .then(|| WolfConfig {
+        model: WolfModel::Edge,
+        ..Default::default()
+    });
+    Ok(ScannerConfig {
+        categories,
+        max_level,
+        gates,
+        max_input_bytes: Some(MAX_INPUT_BYTES),
+        max_findings: Some(MAX_FINDINGS),
+        cache_root: config.model_dir.clone(),
+        download: if config.download_files {
+            DownloadPolicy::Missing
+        } else {
+            DownloadPolicy::Never
+        },
+        wolf,
+        ..Default::default()
+    })
+}
+
+fn build_scanner(config: &ScannerConfig) -> Result<Scanner> {
+    let built = if config.download == DownloadPolicy::Missing {
+        Scanner::warmup(config.clone())
+    } else {
+        Scanner::new(config.clone())
+    };
+    built.map_err(|error| ScannerError::Ark(error.to_string()))
 }
 
 impl ContentAnalyzer for ArkAnalyzer {
     fn prepare(&mut self) -> Result<()> {
-        for gateway in self.gateways.values_mut() {
-            gateway
-                .warmup()
-                .map_err(|error| ScannerError::Ark(error.to_string()))?;
-        }
-        Ok(())
+        self.with_scanner(|_| Ok(()))
     }
 
     fn analyze(&self, input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
@@ -294,8 +284,8 @@ impl ContentAnalyzer for ArkAnalyzer {
         let requested: Vec<_> = self
             .requested
             .iter()
-            .filter(|category| self.user_prompt_pii || *category != "pii")
-            .cloned()
+            .copied()
+            .filter(|category| self.user_prompt_pii || *category != SecurityCategory::Pii)
             .collect();
         self.analyze_categories(input, &requested)
     }
@@ -305,267 +295,168 @@ impl ArkAnalyzer {
     fn analyze_categories(
         &self,
         input: ChunkInput<'_>,
-        requested: &[String],
+        requested: &[SecurityCategory],
     ) -> Result<AnalysisOutcome> {
         if requested.is_empty() {
             return Err(ScannerError::Ark(
                 "no scan categories enabled for this input".into(),
             ));
         }
-        let mut combined = AnalysisOutcome {
-            classifications: Vec::new(),
-            failures: Vec::new(),
-            degraded: false,
-            notice: None,
-        };
-        for category in requested {
-            let outcome = self.analyze_category(input.clone(), category)?;
-            combined.classifications.extend(outcome.classifications);
-            combined.failures.extend(outcome.failures);
-            combined.degraded |= outcome.degraded;
-        }
-        Ok(combined)
-    }
-
-    fn analyze_category(
-        &self,
-        input: ChunkInput<'_>,
-        category: &String,
-    ) -> Result<AnalysisOutcome> {
-        let normalized = normalize_category(category);
-        let (level, gates) = self
-            .policies
-            .get(&normalized)
-            .ok_or_else(|| ScannerError::Ark("category is not enabled".into()))?;
-        let classes = ark_categories(category).map_err(ScannerError::Ark)?;
-        // The L1-only classes share the request when the category runs at L1.
-        let mut requests = Vec::new();
-        if level == L1_ONLY || classes.l1_only.is_empty() {
-            let mut all = classes.primary.to_vec();
-            for class in classes.l1_only {
-                if !all.contains(class) {
-                    all.push(*class);
-                }
-            }
-            requests.push((level.as_str(), all));
-        } else {
-            requests.push((level.as_str(), classes.primary.to_vec()));
-            requests.push((L1_ONLY, classes.l1_only.to_vec()));
-        }
-        let mut pending = Vec::new();
-        for (level, categories) in requests {
-            let gateway = &self.gateways[level];
-            let request_id = gateway
-                .enqueue(ScanRequest {
-                    categories: Some(categories),
-                    options: ScanRequestOptions {
-                        gates: Some(gates.clone()),
-                        ..Default::default()
-                    },
-                    ..ScanRequest::new(input.content)
-                })
-                .map_err(ScannerError::Ark)?;
-            pending.push((gateway, request_id));
-        }
-        // Each Ark class keeps its own authoritative (deepest) result.
-        let mut by_class: HashMap<String, patronus_ark::SecurityScanResult> = HashMap::new();
-        let mut failures = Vec::new();
-        let mut degraded = false;
-        for (gateway, request_id) in pending {
-            let completion = loop {
-                let event = gateway
-                    .consume_next_event(Some(Duration::from_secs(30)))
-                    .ok_or_else(|| {
-                        ScannerError::Ark(format!("timed out waiting for request {request_id}"))
-                    })?;
-                if event.request_id() != request_id {
-                    continue;
-                }
-                match event {
-                    QueuedSecurityEvent::Result(queued) => {
-                        let result = queued.result;
-                        match by_class.get(&result.category) {
-                            Some(current) if !authoritative_over(&result, current) => {}
-                            _ => {
-                                by_class.insert(result.category.clone(), result);
-                            }
-                        }
-                    }
-                    QueuedSecurityEvent::Progress(_) | QueuedSecurityEvent::Provisional(_) => {}
-                    QueuedSecurityEvent::Finished { completion, .. } => break completion,
-                }
-            };
-            let (request_failures, request_degraded) = completion_failures(completion);
-            failures.extend(request_failures);
-            degraded |= request_degraded;
-        }
-        let mut classifications = Vec::new();
-        if by_class.is_empty() {
-            failures.push(format!(
-                "missing terminal classification for category {category}"
-            ));
-        } else {
-            // Across classes the strongest detection decides our category; the
-            // evidence of every matching class is kept.
-            let class_results: Vec<_> = by_class.into_values().collect();
-            let matching: Vec<_> = class_results
-                .iter()
-                .filter(|result| !is_benign(&authoritative_result(result).0))
-                .collect();
-            let result = class_results
-                .iter()
-                .max_by(|left, right| {
-                    let (left_label, left_confidence, _) = authoritative_result(left);
-                    let (right_label, right_confidence, _) = authoritative_result(right);
-                    (!is_benign(&left_label), level_rank(&left.level))
-                        .cmp(&(!is_benign(&right_label), level_rank(&right.level)))
-                        .then_with(|| left_confidence.total_cmp(&right_confidence))
-                        .then_with(|| left.model.cmp(&right.model))
-                })
-                .expect("non-empty class results");
-            let mut evidence: Vec<Evidence> = matching
-                .iter()
-                .flat_map(|result| result.evidence_spans.iter())
-                .map(|span| Evidence {
-                    start: span.start_byte,
-                    end: span.end_byte,
-                    label: span.label.clone(),
-                    confidence: span.score.clamp(0.0, 1.0),
-                    line_start: line_at(input.content, span.start_byte),
-                    line_end: line_at(
-                        input.content,
-                        if span.end_byte > span.start_byte {
-                            span.end_byte - 1
-                        } else {
-                            span.end_byte
-                        },
-                    ),
-                    text: self.include_evidence_text.then(|| span.text.clone()),
-                })
-                .collect();
-            evidence.sort_by(|a, b| (a.start, a.end, &a.label).cmp(&(b.start, b.end, &b.label)));
-            evidence.dedup_by(|a, b| (a.start, a.end, &a.label) == (b.start, b.end, &b.label));
-            let (label, confidence, source) = authoritative_result(result);
-            let decision = result
-                .decision
-                .as_ref()
-                .and_then(|value| serde_json::to_value(value).ok());
-            let matched = !is_benign(&label);
-            if !matched {
-                evidence.clear();
-            }
-            classifications.push(FinalClassification {
-                schema: "patronus.security-scanner.classification.v1",
-                run_id: input.run_id.into(),
-                chunk_id: input.chunk_id.into(),
-                file_id: input.file_id.into(),
-                path: input.path.into(),
-                category: normalized,
-                source,
-                level: result.level.to_ascii_lowercase(),
-                terminal: true,
-                matched,
-                label,
-                confidence,
-                decision,
-                evidence,
-                duration_ms: class_results
-                    .iter()
-                    .map(|result| result.duration_ms)
-                    .fold(0.0, f64::max)
-                    .round() as u64,
-                warnings: Vec::new(),
-            });
-        }
-        Ok(AnalysisOutcome {
-            classifications,
-            failures,
-            degraded,
-            notice: None,
-        })
-    }
-}
-
-/// Within one Ark class the deepest layer is authoritative, then a detection,
-/// then a result with a decision, then confidence (Ark 0.1.18 semantics).
-fn authoritative_over(
-    candidate: &patronus_ark::SecurityScanResult,
-    current: &patronus_ark::SecurityScanResult,
-) -> bool {
-    let (candidate_label, candidate_confidence, _) = authoritative_result(candidate);
-    let (current_label, current_confidence, _) = authoritative_result(current);
-    (
-        level_rank(&candidate.level),
-        !is_benign(&candidate_label),
-        candidate.decision.is_some(),
-    )
-        .cmp(&(
-            level_rank(&current.level),
-            !is_benign(&current_label),
-            current.decision.is_some(),
+        let report = self.with_scanner(|scanner| {
+            scanner
+                .scan_categories(input.content, requested)
+                .map_err(|error| ScannerError::Ark(error.to_string()))
+        })?;
+        Ok(classify(
+            &input,
+            requested,
+            &report,
+            self.include_evidence_text,
         ))
-        .then_with(|| candidate_confidence.total_cmp(&current_confidence))
-        .then_with(|| candidate.model.cmp(&current.model))
-        .is_gt()
+    }
 }
 
-fn authoritative_result(result: &patronus_ark::SecurityScanResult) -> (String, f64, String) {
-    result
-        .decision
-        .as_ref()
-        .map(|decision| {
-            let final_result = &decision.final_result;
-            (
-                final_result.class_name.clone(),
-                final_result.confidence.clamp(0.0, 1.0),
-                final_result.source.clone(),
-            )
-        })
-        .unwrap_or_else(|| {
-            (
-                result.class_name.clone(),
-                result.confidence.clamp(0.0, 1.0),
-                result.model.clone(),
-            )
-        })
+/// One classification per requested category from a scan report. With the
+/// cascade, the module decision is authoritative: it names the stage that
+/// decided (rules, L1 model or Wolf) and whether the category was detected.
+fn classify(
+    input: &ChunkInput<'_>,
+    requested: &[SecurityCategory],
+    report: &ScanReport,
+    include_evidence_text: bool,
+) -> AnalysisOutcome {
+    let mut classifications = Vec::new();
+    let mut failures = Vec::new();
+    for category in requested {
+        let name = category.as_str();
+        let native = report.native.iter().find(|result| result.category == name);
+        let decision = report
+            .decision
+            .as_ref()
+            .and_then(|decisions| decisions.iter().find(|d| d.module == *category));
+        let Some(verdict) = verdict(name, native, decision) else {
+            failures.push(format!(
+                "missing terminal classification for category {name}"
+            ));
+            continue;
+        };
+        let mut evidence: Vec<Evidence> = native
+            .filter(|_| verdict.matched)
+            .map(|result| {
+                result
+                    .evidence_spans
+                    .iter()
+                    .map(|span| Evidence {
+                        start: span.start_byte,
+                        end: span.end_byte,
+                        label: span.label.clone(),
+                        confidence: span.score.clamp(0.0, 1.0),
+                        line_start: line_at(input.content, span.start_byte),
+                        line_end: line_at(
+                            input.content,
+                            if span.end_byte > span.start_byte {
+                                span.end_byte - 1
+                            } else {
+                                span.end_byte
+                            },
+                        ),
+                        text: include_evidence_text.then(|| span.text.clone()),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        evidence.sort_by(|a, b| (a.start, a.end).cmp(&(b.start, b.end)));
+        let duration_ms = native.map_or(0.0, |result| result.duration_ms)
+            + decision.map_or(0.0, |d| {
+                d.layers.iter().map(|layer| layer.duration_ms).sum()
+            });
+        classifications.push(FinalClassification {
+            schema: "patronus.security-scanner.classification.v1",
+            run_id: input.run_id.into(),
+            chunk_id: input.chunk_id.into(),
+            file_id: input.file_id.into(),
+            path: input.path.into(),
+            category: name.into(),
+            source: verdict.source,
+            level: verdict.level.into(),
+            terminal: true,
+            matched: verdict.matched,
+            label: verdict.label,
+            confidence: verdict.confidence,
+            decision: decision.and_then(|d| serde_json::to_value(d).ok()),
+            evidence,
+            duration_ms: duration_ms.max(0.0).round() as u64,
+            warnings: Vec::new(),
+        });
+    }
+    AnalysisOutcome {
+        classifications,
+        failures,
+        degraded: false,
+        notice: None,
+    }
 }
 
-/// The gateway that scans a category's L1-only Ark classes.
-const L1_ONLY: &str = "l1";
-const ARK_MAX_INPUT_BYTES: usize = 1024 * 1024;
-const ARK_MAX_FINDINGS: usize = 10_000;
+struct Verdict {
+    matched: bool,
+    level: &'static str,
+    source: String,
+    label: String,
+    confidence: f64,
+}
 
-/// Whether the shared (multi-head) L3 bundle is installed below `model_dir`.
-fn unified_l3_assets_present(model_dir: &std::path::Path) -> bool {
-    let asset = patronus_ark::assets::UNIFIED_L3_ASSET;
-    let bundle = asset.spec.cache_dir(model_dir);
-    asset
-        .selected_files()
-        .iter()
-        .all(|file| bundle.join(file).is_file())
+fn verdict(
+    category: &str,
+    native: Option<&NativeResult>,
+    decision: Option<&ModuleDecision>,
+) -> Option<Verdict> {
+    let native_label = native
+        .map(|result| result.class_name.clone())
+        .filter(|label| !is_benign(label));
+    match decision {
+        Some(decision) => {
+            let matched = decision.outcome == StageOutcome::Detected;
+            let (source, confidence) = match decision.decided_by {
+                Stage::Heuristic => ("heuristic", decision.score),
+                // The L1 model reports its decision logit.
+                Stage::L1Model => ("l1_model", 1.0 / (1.0 + (-decision.score).exp())),
+                Stage::Policy => ("policy", decision.score),
+                Stage::L2 => ("l2", decision.score),
+                Stage::L3 => ("wolf", decision.score),
+            };
+            Some(Verdict {
+                matched,
+                level: if decision.decided_by == Stage::L3 {
+                    "l3"
+                } else {
+                    "l1"
+                },
+                source: source.into(),
+                label: if matched {
+                    native_label.unwrap_or_else(|| category.into())
+                } else {
+                    "safe".into()
+                },
+                confidence: confidence.clamp(0.0, 1.0),
+            })
+        }
+        None => native.map(|result| Verdict {
+            matched: native_label.is_some(),
+            level: "l1",
+            source: result.model.clone(),
+            label: result.class_name.clone(),
+            confidence: result.confidence.clamp(0.0, 1.0),
+        }),
+    }
 }
 
 fn parse_level(value: &str) -> Result<SecurityLevel> {
     match value {
         "l1" => Ok(SecurityLevel::L1),
-        "l2" => Ok(SecurityLevel::L2),
         "l3" => Ok(SecurityLevel::L3),
-        other => Err(ScannerError::Ark(format!("unsupported level {other}"))),
-    }
-}
-
-fn normalize_category(category: &str) -> String {
-    match category {
-        "injection" | "prompt-injection" => "prompt_injection".into(),
-        other => other.replace('-', "_"),
-    }
-}
-
-fn level_rank(level: &str) -> u8 {
-    match level.to_ascii_lowercase().as_str() {
-        "l3" => 3,
-        "l2" => 2,
-        _ => 1,
+        other => Err(ScannerError::Ark(format!(
+            "unsupported level {other}; use l1 or l3"
+        ))),
     }
 }
 
@@ -595,64 +486,159 @@ fn line_at(text: &str, byte_offset: usize) -> usize {
         .count()
 }
 
-fn completion_failures(completion: SecurityRequestCompletion) -> (Vec<String>, bool) {
-    match completion {
-        SecurityRequestCompletion::Complete => (Vec::new(), false),
-        SecurityRequestCompletion::Degraded { failures } => (
-            failures
-                .into_iter()
-                .map(|failure| failure.to_string())
-                .collect(),
-            true,
-        ),
-        SecurityRequestCompletion::Failed { failures } => (
-            failures
-                .into_iter()
-                .map(|failure| failure.to_string())
-                .collect(),
-            true,
-        ),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use patronus_ark_core::EvidenceSpan;
+
+    fn input(content: &str) -> ChunkInput<'_> {
+        ChunkInput {
+            run_id: "run",
+            chunk_id: "chunk",
+            file_id: "file",
+            path: "path",
+            content,
+            input_tokens: None,
+        }
+    }
+
+    fn native(category: &str, class_name: &str, spans: Vec<EvidenceSpan>) -> NativeResult {
+        NativeResult {
+            category: category.into(),
+            class_name: class_name.into(),
+            confidence: 0.4,
+            level: "L1".into(),
+            model: "native:fixture".into(),
+            duration_ms: 1.0,
+            layers: vec![],
+            evidence_spans: spans,
+            label_scores: vec![],
+            decision: None,
+        }
+    }
+
+    fn span() -> EvidenceSpan {
+        serde_json::from_value(serde_json::json!({
+            "label": "rule", "text": "ignore", "score": 0.9,
+            "start_byte": 0, "end_byte": 6, "start_char": 0, "end_char": 6
+        }))
+        .unwrap()
+    }
+
+    fn decision(
+        module: SecurityCategory,
+        outcome: StageOutcome,
+        by: Stage,
+        score: f64,
+    ) -> ModuleDecision {
+        ModuleDecision {
+            module,
+            outcome,
+            decided_by: by,
+            score,
+            layers: vec![],
+        }
+    }
+
+    fn report(native: Vec<NativeResult>, decisions: Vec<ModuleDecision>) -> ScanReport {
+        ScanReport {
+            input_bytes: 6,
+            native,
+            wolf: None,
+            decision: Some(decisions),
+        }
+    }
 
     #[test]
-    fn decision_final_result_overrides_raw_classifier_fields() {
-        let decision = serde_json::from_value(json!({
-            "schema_version": "1",
-            "final_result": {"class_name": "benign", "confidence": 0.0, "source": "default"},
-            "decision_candidate": {
-                "source": "l2", "class_name": "injection", "confidence": 0.97,
-                "acceptance_threshold": 0.99, "accepted": false, "evidence": null
-            },
-            "recommendation": {"accepted": false, "final_arbitration": "default", "operating_point": "best_f1", "acceptance_threshold": 0.99},
-            "candidates": [],
-            "terminality": {"completion": "complete", "degraded": false, "degradation_reason": null},
-            "provenance": {"ark_version": "0.1.18", "schema_version": "1", "model": "fixture"}
-        })).unwrap();
-        let result = patronus_ark::SecurityScanResult {
-            native: patronus_ark_core::NativeResult {
-                category: "injection".into(),
-                class_name: "injection".into(),
-                confidence: 0.97,
-                level: "L2".into(),
-                model: "raw-model".into(),
-                duration_ms: 0.0,
-                layers: vec![],
-                evidence_spans: vec![],
-                label_scores: vec![],
-                decision: Some(decision),
-            },
-            internal_l2_chunk_outputs: vec![],
-            module_decision: None,
-        };
-        assert_eq!(
-            authoritative_result(&result),
-            ("benign".into(), 0.0, "default".into())
+    fn wolf_decision_reports_l3_without_rule_evidence() {
+        let report = report(
+            vec![native("injection", "safe", vec![])],
+            vec![decision(
+                SecurityCategory::Injection,
+                StageOutcome::Detected,
+                Stage::L3,
+                0.93,
+            )],
         );
+        let outcome = classify(
+            &input("ignore"),
+            &[SecurityCategory::Injection],
+            &report,
+            false,
+        );
+        let result = &outcome.classifications[0];
+        assert_eq!(
+            (
+                result.category.as_str(),
+                result.level.as_str(),
+                result.source.as_str()
+            ),
+            ("injection", "l3", "wolf")
+        );
+        assert!(result.matched);
+        assert_eq!(result.label, "injection");
+        assert!(result.evidence.is_empty());
+        assert_eq!(result.confidence, 0.93);
+    }
+
+    #[test]
+    fn cascade_clear_overrides_native_spans() {
+        let report = report(
+            vec![native("jailbreak", "jailbreak", vec![span()])],
+            vec![decision(
+                SecurityCategory::Jailbreak,
+                StageOutcome::Clear,
+                Stage::L1Model,
+                -4.0,
+            )],
+        );
+        let outcome = classify(
+            &input("ignore"),
+            &[SecurityCategory::Jailbreak],
+            &report,
+            false,
+        );
+        let result = &outcome.classifications[0];
+        assert!(!result.matched);
+        assert_eq!(
+            (
+                result.label.as_str(),
+                result.source.as_str(),
+                result.level.as_str()
+            ),
+            ("safe", "l1_model", "l1")
+        );
+        assert!(result.evidence.is_empty());
+    }
+
+    #[test]
+    fn rule_detection_keeps_its_evidence() {
+        let report = report(
+            vec![native("injection", "injection", vec![span()])],
+            vec![decision(
+                SecurityCategory::Injection,
+                StageOutcome::Detected,
+                Stage::Heuristic,
+                0.8,
+            )],
+        );
+        let outcome = classify(
+            &input("ignore"),
+            &[SecurityCategory::Injection],
+            &report,
+            true,
+        );
+        let result = &outcome.classifications[0];
+        assert!(result.matched);
+        assert_eq!(result.evidence.len(), 1);
+        assert_eq!(result.evidence[0].text.as_deref(), Some("ignore"));
+    }
+
+    #[test]
+    fn a_category_without_result_is_a_failure() {
+        let report = report(vec![], vec![]);
+        let outcome = classify(&input("x"), &[SecurityCategory::Pii], &report, false);
+        assert!(outcome.classifications.is_empty());
+        assert_eq!(outcome.failures.len(), 1);
     }
 }

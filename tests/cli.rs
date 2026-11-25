@@ -20,7 +20,7 @@ fn version_contract_is_stable() {
         .arg("version")
         .assert()
         .success()
-        .stdout(predicates::str::contains("patronus-ark 0.1.18"));
+        .stdout(predicates::str::contains("patronus-ark-core 0.1.18"));
 }
 
 #[test]

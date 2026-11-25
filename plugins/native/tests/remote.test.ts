@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { StaticScanner } from '../../deepseek/src/static.ts'
 import { handleMcp } from '../src/mcp.ts'
 
-const clean = {schema:'patronus.remote.scan.v1',kind:'url',provider:'api',status:'CLEAN',approved:true,complete:true,categories:['injection','dlp','pii','threat'],findings:[],jobs:1,duration_ms:10}
+const clean = {schema:'patronus.remote.scan.v1',kind:'url',provider:'api',status:'CLEAN',approved:true,complete:true,categories:['injection','dlp','pii','unsafe_action'],findings:[],jobs:1,duration_ms:10}
 async function fixture(report: object, exit = 0) {
  const root=await mkdtemp(join(tmpdir(),'patronus-remote-test-')),executable=join(root,'scanner.mjs'),log=join(root,'arguments.json')
  await writeFile(executable,`#!${process.execPath}\nimport {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(log)},JSON.stringify(process.argv.slice(2)));process.stdout.write(${JSON.stringify(JSON.stringify({...report,private_text:'PRIVATE-REMOTE-CANARY'}))});process.exitCode=${exit};`,{mode:0o700})
@@ -34,7 +34,7 @@ for(const kind of ['url','mcp'])test(`explicit ${kind} preserves target and retu
   if(kind==='mcp')assert.deepEqual(args.slice(4,6),['--server','chosen'])
  }finally{await rm(f.root,{recursive:true,force:true})}
 })
-for(const invalid of [{complete:false},{status:['CLEAN']},{approved:true,findings:[{category:'injection',level:'l2',confidence:0.9}]},{approved:false,status:'FINDINGS',findings:[{category:['injection'],level:'l2',confidence:0.9}]}])test(`invalid remote report cannot approve ${JSON.stringify(invalid)}`,async()=>{
+for(const invalid of [{complete:false},{status:['CLEAN']},{approved:true,findings:[{category:'injection',level:'l3',confidence:0.9}]},{approved:false,status:'FINDINGS',findings:[{category:['injection'],level:'l3',confidence:0.9}]}])test(`invalid remote report cannot approve ${JSON.stringify(invalid)}`,async()=>{
  const f=await fixture({...clean,...invalid},invalid.approved===false?1:0)
  try {
   const result:any=await new StaticScanner({executable:f.executable},signal()).scan({kind:'url',path:'https://example.org'},signal())

@@ -21,7 +21,7 @@ async function fixture(): Promise<{ root: string; config: BrokerConfig }> {
   const cwd = join(root, 'project')
   await mkdir(cwd)
   const configPath = join(root, 'scanner.toml')
-  await writeFile(configPath, '[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
+  await writeFile(configPath, '[provider]\nmode="local"\n[ark]\ncategories=["injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
   return { root, config: { host: 'codex', sessionId: crypto.randomUUID(), cwd, stateDir: join(root, 'state'), executable: installed, configPath, responseWaitMs: 0 } }
 }
 

@@ -2,7 +2,7 @@
 
 The compiled defaults come from `config/defaults.toml`. Precedence is: compiled defaults, legacy per-user platform config, `~/.patronus-security-scanner/config.toml`, repository `.patronus-security-scanner.toml` for repo scans, explicit `--config`, then applicable CLI flags. Unknown keys and schema versions other than `1` are rejected. `--no-repo-config` skips repository configuration.
 
-`provider.mode` accepts `local`, `api`, and `hybrid` and controls **Wolf model analysis**, not the native detectors. All L1 rules, PII, DLP and Cat run locally, with every selected native mode preserved. API mode sends text only for enabled Injection/Threat model stages (L2/L3). Hybrid keeps prompts and results/files of at most 2048 tokens local and can use the API for Wolf on larger results/files. Wolf API failures retain the existing usage-limit/authentication fallback behavior. Explicit URL/MCP service audits and explicitly requested API document uploads remain separate workflows; they are not automatic native-detector routing.
+`provider.mode` accepts `local`, `api`, and `hybrid` and controls **Wolf model analysis**, not the native detectors. All L1 rules, the built-in L1 models, PII, DLP and Cat run locally, with every selected native mode preserved. API mode sends text only for Wolf, the L3 of `injection`, and only for text the local injection stages did not detect. Hybrid keeps prompts and results/files of at most 2048 tokens local (Wolf Edge on this device) and can use the API for Wolf on larger results/files. Wolf API failures retain the existing usage-limit/authentication fallback behavior. Explicit URL/MCP service audits and explicitly requested API document uploads remain separate workflows; they are not automatic native-detector routing.
 
 Reports default to `~/.patronus-security-scanner/output`; protocol journals and runtime sessions use the same shared user directory. `PATRONUS_DATA_DIR` relocates this root for tests or managed deployments. Explicit output/state overrides are honored. The old `.patronus-security-scanner/output` configuration default is normalized to the shared root; existing repository reports are not moved automatically.
 
@@ -10,7 +10,36 @@ Static `scan file`, `scan directory`, and `scan repo` commands omit analyzed chu
 
 Local static scans decode UTF-8 and BOM-marked UTF-16 text directly. PDF text and DOCX document XML are extracted locally with bounded decompression; image-only PDFs require OCR and are reported as unsupported documents.
 
-`config print` emits the effective, recursively redacted configuration. Ark categories are `prompt_injection`, `dlp`, `pii` and `threat`; levels are L1 (rules), L2 (lightweight ML models) and L3 (deeper models). `threat` requires prepared L2/L3 assets; L1 cannot complete that category. Model downloads are off by default. Model-specific fixtures can remain clean under L1: coverage and the selected profile determine what a result establishes.
+`config print` emits the effective, recursively redacted configuration.
+
+## Ark Core categories, levels and cascade
+
+The scanner embeds **Ark Core** (`patronus-ark-core`, MIT OR Apache-2.0). Categories are Ark Core's own names:
+
+| Category | Default | What it answers |
+| --- | --- | --- |
+| `pii`, `dlp` | on | Personal identifiers; credentials, secrets and classification markings. |
+| `injection`, `jailbreak`, `prompt_extraction`, `tool_poisoning`, `exfiltration` | on | Attack classes: instruction override, jailbreak framings, system-prompt requests, poisoned tool metadata, data sent out. |
+| `agent_config_tampering`, `memory_poisoning`, `unsafe_action`, `resource_exhaustion`, `harmful_content`, `toxic_language` | opt-in | Further attack classes (for example `unsafe_action`: remote or decoded execution, credential access, destructive operations). |
+
+`ark.max_level` is `l1` or `l3`:
+
+- **L1**: Ark Core's rules (`ark.injection.*`, `ark.threat.*`, PII/DLP detectors) and, per attack class, Ark Core's built-in L1 text model. No downloads.
+- **L3**: L1 plus **Wolf Defender Edge** for `injection`. Prepare it once with `assets prepare`.
+
+Every attack class runs Ark Core's cascade. The rules decide first; a score at or above their detect cut is detected. For `injection`, an undecided input goes to the L1 model, which detects above its 0.1 % FPR cut and clears at its 1 % FPR cut; only what it leaves open reaches Wolf (at L3). For the other attack classes the defaults set a rules clear cut of `0.05`: text without a rule signal is clear, so their L1 models only judge what the rules found. All cuts are configurable per category:
+
+```toml
+[analysis.l1_models]
+jailbreak = false                  # switch one class's L1 model off
+
+[analysis.cascade]
+exfiltration = { clear_threshold = 0.05 }            # rules clear cut (0..1)
+injection = { l1_clear_threshold = -2.0 }            # L1 model cuts (logit scale)
+# also: detect_threshold, l1_detect_threshold, l1_clear_enabled
+```
+
+Settings from earlier versions migrate when they are loaded: `prompt_injection` becomes `injection`, `jailbreak`, `prompt_extraction`, `tool_poisoning`; `threat` becomes `unsafe_action`, `harmful_content`, `exfiltration`, `toxic_language`; `l2` becomes `l3`; `category_levels` and `confidence` are dropped. Model downloads are off by default.
 
 ## Local request/response runtime
 
@@ -23,7 +52,7 @@ schema_version = 1
 mode = "local"
 
 [ark]
-categories = ["prompt_injection", "dlp", "pii"]
+categories = ["pii", "dlp", "injection", "jailbreak", "prompt_extraction", "tool_poisoning", "exfiltration"]
 max_level = "l1"
 download_files = false
 
@@ -37,7 +66,7 @@ max_store_bytes = 536870912
 max_pending_jobs = 64
 ```
 
-The runtime requires local mode and uses **Ark 0.1.18** with downloads disabled. The default L1 profile works without model downloads. Prepare assets required by an L2/L3 profile separately for that version. Missing required assets, a different provider or invalid limits prevent startup; the plugin does not install a scanner or change providers. Scanning never triggers model or tokenizer downloads.
+The runtime requires local mode and uses **Ark Core 0.1.18** with downloads disabled. The default L1 profile works without model downloads. Prepare Wolf Defender Edge for an L3 profile separately for that version. Missing required assets, a different provider or invalid limits prevent startup; the plugin does not install a scanner or change providers. Scanning never triggers model or tokenizer downloads.
 
 | Runtime key | Meaning and valid range |
 | --- | --- |
@@ -73,15 +102,15 @@ See the [DeepSeek README](../plugins/deepseek/README.md) for installation and th
 
 ## Shared plugin policy
 
-The dashboard manages per-category levels, L1 detector switches, hook selection and per-chat pauses. `plugins.json` in the shared Patronus data directory stores hook switches and paused chats.
+The dashboard manages categories, L1 models, Wolf per plugin surface, L1 detector switches, hook selection and per-chat pauses. `plugins.json` in the shared Patronus data directory stores hook switches and paused chats.
 
 ## Dashboard and policies
 
-Run `patronus-security-scanner dashboard`. `[plugin_policies."<host>.<surface>"]` stores each plugin's granular L1 booleans and Injection/Threat assessment settings. Hosts: `claude`, `codex`, `deepseek`. Surfaces: `user_input`, `tool_result`, `mcp_result`. Assessment rules select `enabled` and `max_level` (`l2` or `l3`); Ark's calibrated `decision_candidate` determines acceptance. Legacy `min_confidence` values are accepted during migration but ignored and omitted when configuration is saved. No access-rule engine is involved.
+Run `patronus-security-scanner dashboard`. `[plugin_policies."<host>.<surface>"]` stores each plugin's granular L1 booleans and `wolf` (Wolf Defender Edge for `injection` on that surface). Hosts: `claude`, `codex`, `cursor`, `deepseek`. Surfaces: `user_input`, `tool_result`, `mcp_result`. Categories, L1 models and cascade cuts come from the global settings. Older `injection`/`threat` assessments migrate on load: an enabled injection assessment becomes `wolf = true`; the threat model no longer exists. No access-rule engine is involved.
 
-`policy show`, `policy validate <policies.json>` and `policy import <policies.json>` manage the nine scopes. `policy rules` lists the L1 inventory. `policy check <check.json>` accepts `host`, `surface` and `text`. `assets prepare` includes levels required by plugin policies. Restart active sessions after saving settings.
+`policy show`, `policy validate <policies.json>` and `policy import <policies.json>` manage the nine scopes. `policy rules` lists the L1 inventory. `policy check <check.json>` accepts `host`, `surface` and `text`. `assets prepare` prepares Wolf Defender Edge when the global level or a plugin surface needs it, and Cat. Restart active sessions after saving settings.
 
-The earlier `[analysis]` configuration still applies to file scans and clients without plugin scope metadata. Its `l1_rules` are direct Ark gates. `analysis.confidence` supports Injection/Threat model thresholds; the plugin UI manages the corresponding scoped settings instead.
+The earlier `[analysis]` configuration still applies to file scans and clients without plugin scope metadata. Its `l1_rules` are direct Ark Core gates, including the `ark.threat.*` rules of each attack class.
 
 
 ## PII and DLP modes (CLI 0.1.7)

@@ -124,7 +124,7 @@ it.each(['repo', 'directory', 'file'])('passes %s paths literally, freezes confi
     expect(calls[1].snapshot).toContain('"include_chunk_content" = false')
     expect(calls[1].snapshot).toContain('"include_evidence_text" = false')
     expect(calls[1].snapshot).toContain('"mode" = "local"')
-    expect(calls[1].snapshot).toContain('"categories" = ["prompt_injection"]')
+    expect(calls[1].snapshot).toContain('"categories" = ["injection"]')
     expect(calls[1].snapshot).toContain('"include_hidden" = true')
     expect(calls[1].snapshot).toContain('"respect_gitignore" = false')
     expect(calls[1].snapshot).toContain('"max_file_bytes" = 123456')
@@ -170,7 +170,7 @@ it.each([
 it.each([
   ['status', { status: ['CLEAN'] }],
   ['ark_max_level', { ark_max_level: ['l1'] }],
-  ['category', { status: 'FINDINGS', findings: [{ ...finding, category: ['prompt_injection'] }] }],
+  ['category', { status: 'FINDINGS', findings: [{ ...finding, category: ['injection'] }] }],
   ['level', { status: 'FINDINGS', findings: Array(50).fill({ ...finding, level: [[['l1']]] }) }],
 ] as const)('rejects a malformed %s enum rather than projecting its original value', async (_field, override) => {
   const fixture = await fakeCli('normal', override)
@@ -275,7 +275,7 @@ it.each(['api', 'hybrid'])('preserves explicit %s provider routing without local
 })
 
 it.each(['url','mcp'])('returns explicit %s scan metadata through the registered host tool', async kind => {
-  const fixture = await fakeCli('normal', {schema:'patronus.remote.scan.v1',kind,provider:'api',status:'CLEAN',approved:true,complete:true,categories:['injection','pii','dlp','threat'],findings:[],jobs:1,duration_ms:10})
+  const fixture = await fakeCli('normal', {schema:'patronus.remote.scan.v1',kind,provider:'api',status:'CLEAN',approved:true,complete:true,categories:['injection','pii','dlp','unsafe_action'],findings:[],jobs:1,duration_ms:10})
   const client = new FakeClient({async scan() { return {status:'approved'} }})
   const ctx = await createHarness(client, undefined, {executable:fixture.executable,configPath:fixture.configPath})
   try {
