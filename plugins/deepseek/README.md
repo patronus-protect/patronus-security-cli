@@ -77,7 +77,7 @@ Unless a message says the content was scanned locally, it was not scanned and re
 | `runtime_version_mismatch` | The installed CLI and the plugin are different releases. | `maintenance update`, then `integration deepseek update`, and restart |
 | `configuration_unavailable` | The scanner configuration is invalid or unreadable. | `config print --format json` and fix the reported file |
 | `scan_timeout`, `payload_too_large`, `unsupported_content`, `unsupported_payload`, `invalid_chunking` | The content is too large, too slow to scan or in an unsupported shape. | Raise `scan_timeout_ms` or `max_payload_bytes` ([configuration](../../docs/configuration.md)) or treat the content as unverified |
-| `local_scanner_error`, `scanner_crashed`, `incomplete_classification`, `invalid_classification`, `invalid_evidence_span` | The local scanner or a classifier failed on this content. | `assets prepare` for L2/L3 profiles; if it repeats, report it with `support-us` |
+| `local_scanner_error`, `scanner_crashed`, `incomplete_classification`, `invalid_classification`, `invalid_evidence_span` | The local scanner or a classifier failed on this content. | `assets prepare` for L3 profiles (Wolf Defender Edge) and the shell check (Cat); if it repeats, report it with `support-us` |
 
 ## Manage the integration
 
