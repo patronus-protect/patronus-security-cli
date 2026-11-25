@@ -13,7 +13,7 @@ const handleHook = (event: string, value: unknown, rpc: (config: any, request: a
 /** Common fields cursor-agent 2026.10.14 adds to every agent hook (hook executor `executeHookForStep`). */
 const common = (event: string) => ({
   conversation_id: 'c0ffee00-0000-4000-8000-000000000731', generation_id: 'gen-731', model: 'claude-sonnet-4-5',
-  session_id: 'c0ffee00-0000-4000-8000-000000000731', hook_event_name: event, cursor_version: '2026.10.14-0f9edde',
+  session_id: 'c0ffee00-0000-4000-8000-000000000731', hook_event_name: event, cursor_version: '2026.11.19-f005e9d',
   workspace_roots: ['/private/tmp/cursor-workspace'], user_email: null, transcript_path: null,
 })
 const shell = (output: string) => ({ ...common('postToolUse'), tool_name: 'Shell', tool_input: { command: 'cat notes.txt', cwd: '/private/tmp/cursor-workspace' },
