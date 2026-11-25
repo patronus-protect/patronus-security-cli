@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8 - 2026-11-25
 
 - Scan with **Ark Core 0.1.18** (`patronus-ark-core`, MIT OR Apache-2.0) instead of the full Ark gateway. The CLI no longer depends on the GPL `patronus-ark` crate, its queue or its L2/threat models.
 - Categories are Ark Core's own: `pii`, `dlp` and the attack classes `injection`, `jailbreak`, `prompt_extraction`, `tool_poisoning`, `exfiltration` (default on) plus opt-in `agent_config_tampering`, `memory_poisoning`, `unsafe_action`, `resource_exhaustion`, `harmful_content`, `toxic_language`. Each is switchable in settings and the dashboard, as are each class's built-in L1 model and the `ark.injection.*` and 88 `ark.threat.*` rules.
@@ -11,6 +11,8 @@
 - Cat receives the command's working directory, the user's home and repository root, plus the facts of the session's earlier commands.
 - Existing settings migrate on load: `prompt_injection` → `injection`, `jailbreak`, `prompt_extraction`, `tool_poisoning`; `threat` → `unsafe_action`, `harmful_content`, `exfiltration`, `toxic_language`; `l2` → `l3`; enabled injection assessments → `wolf = true`. Runtime plugins require Ark Core 0.1.18 and accept the new category names; L3 installations should run `assets prepare` to fetch Wolf Defender Edge.
 - Session start now also builds the analyzers for the host's prompt, tool-result and MCP-result scopes in the background (runtime RPC `warm`); surfaces with the same profile share one analyzer. Measured with the Claude hooks 4 s after `SessionStart`: the first prompt takes 0.16–0.18 s instead of 0.8–1.1 s and the first tool result 0.1 s instead of 1.05 s, at L1 and L3. Cursor registers a `sessionStart` hook for this; before, its first prompt paid the whole runtime start.
+- Fix Codex 0.164 and later running none of the Patronus hooks after `integration codex enable`: Codex now binds hook approval to the plugin's contents and reports a `<declaration>/<content>` hash, which is stored in `trusted_hash` and `trusted_content_hash`. Earlier Codex versions keep the single hash. Tested hosts: Codex 0.171.0, cursor-agent 2026.11.19.
+- Publish unchanged API clients as 0.1.8 with the CLI, keeping the release manifests aligned.
 
 ## 0.1.7 - 2026-11-13
 
