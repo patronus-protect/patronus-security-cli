@@ -111,7 +111,8 @@ impl Inference {
     }
 
     /// Every category at L1 (rules and L1 models), on this device.
-    fn local_native(&self, input: ChunkInput<'_>, user_prompt: bool) -> Result<AnalysisOutcome> {
+    /// Builds the API route's local L1 analyzer; every API scan runs it first.
+    fn prepare_native(&self) -> Result<()> {
         let mut native = self.native.borrow_mut();
         if native.is_none() {
             let mut config = self.config.clone();
@@ -125,6 +126,12 @@ impl Inference {
             analyzer.prepare()?;
             *native = Some(analyzer);
         }
+        Ok(())
+    }
+
+    fn local_native(&self, input: ChunkInput<'_>, user_prompt: bool) -> Result<AnalysisOutcome> {
+        self.prepare_native()?;
+        let native = self.native.borrow();
         if user_prompt {
             native.as_ref().unwrap().analyze_user_prompt(input)
         } else {
@@ -145,6 +152,9 @@ impl ContentAnalyzer for Inference {
             }
             self.local.get_mut().as_mut().unwrap().prepare()?;
             self.local_prepared.set(true);
+        }
+        if self.config.provider.mode == ProviderMode::Api {
+            self.prepare_native()?;
         }
         Ok(())
     }
@@ -173,9 +183,16 @@ impl ContentAnalyzer for Inference {
     fn prepare_scope(&self, scope: &str) -> Result<()> {
         let profile = self.scoped_profile(scope)?;
         // The local route serves Local mode, Hybrid prompts and small results;
-        // API mode scans its L1 stages through the API route's analyzer.
-        let local = self.config.provider.mode != ProviderMode::Api;
-        self.scoped_analyzer(&profile, local).map(|_| ())
+        // the API route (API mode, large Hybrid results) runs its L1 stages on
+        // its own local analyzer, which its prepare() builds.
+        let mode = self.config.provider.mode;
+        if mode != ProviderMode::Api {
+            self.scoped_analyzer(&profile, true)?;
+        }
+        if mode != ProviderMode::Local {
+            self.scoped_analyzer(&profile, false)?;
+        }
+        Ok(())
     }
     fn analyze_local(&self, input: ChunkInput<'_>, scope: Option<&str>) -> Result<AnalysisOutcome> {
         match scope {
@@ -726,5 +743,33 @@ mod usage_limit_fallback_tests {
             authentication_reason(&error),
             Some("authentication_expired")
         );
+    }
+}
+
+#[cfg(test)]
+mod warm_tests {
+    use super::*;
+
+    #[test]
+    fn warming_an_api_scope_builds_its_local_l1_analyzer() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config: Config = toml::from_str(crate::config::DEFAULTS).unwrap();
+        config.ark.model_dir = Some(dir.path().to_path_buf());
+        config.ark.download_files = false;
+        for (mode, scoped) in [(ProviderMode::Api, 1), (ProviderMode::Hybrid, 2)] {
+            config.provider.mode = mode;
+            let inference = Inference::new(&config).unwrap();
+            inference.prepare_scope("claude.tool_result").unwrap();
+            inference.prepare_scope("claude.mcp_result").unwrap();
+            let built = inference.scoped.borrow();
+            // Surfaces with the same profile share one analyzer per route.
+            assert_eq!(built.len(), scoped, "{mode:?}");
+            assert!(
+                built
+                    .values()
+                    .any(|analyzer| analyzer.native.borrow().is_some()),
+                "{mode:?}: the API route's L1 analyzer was not built"
+            );
+        }
     }
 }
