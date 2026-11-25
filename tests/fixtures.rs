@@ -88,7 +88,7 @@ fn explicit_injections_in_complete_documents_are_detected() {
 }
 
 #[test]
-#[ignore = "requires a locally prepared Wolf Defender Edge bundle (assets prepare)"]
+#[ignore = "requires a prepared Wolf Defender Edge bundle in PATRONUS_TEST_MODEL_DIR"]
 fn wolf_edge_detects_the_injection_document_l1_misses() {
     let finance = scan_fixture(
         "tests/fixtures/known-misses/finance-q2-board-report.txt",
@@ -100,7 +100,7 @@ fn wolf_edge_detects_the_injection_document_l1_misses() {
 }
 
 #[test]
-#[ignore = "requires a locally prepared Wolf Defender Edge bundle (assets prepare)"]
+#[ignore = "requires a prepared Wolf Defender Edge bundle in PATRONUS_TEST_MODEL_DIR"]
 fn wolf_edge_answers_the_isolated_operator_section() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("finance-operator.txt");
@@ -116,10 +116,10 @@ fn wolf_edge_answers_the_isolated_operator_section() {
 }
 
 #[test]
-#[ignore = "requires a locally prepared Wolf Defender Edge bundle (assets prepare)"]
+#[ignore = "requires a prepared Wolf Defender Edge bundle in PATRONUS_TEST_MODEL_DIR"]
 fn warmed_wolf_analyzer_preserves_attack_on_repeated_content() {
     let config = ArkConfig {
-        model_dir: None,
+        model_dir: std::env::var_os("PATRONUS_TEST_MODEL_DIR").map(Into::into),
         categories: vec!["injection".into()],
         max_level: "l3".into(),
         download_files: false,
@@ -161,16 +161,24 @@ fn finance_operator_section() -> &'static str {
 fn scan_fixture(path: &str, max_level: &str, categories: &[&str]) -> serde_json::Value {
     let temp = tempfile::tempdir().unwrap();
     let output = temp.path().join("runs");
+    // Model tests take their prepared models from PATRONUS_TEST_MODEL_DIR.
+    let config = match std::env::var("PATRONUS_TEST_MODEL_DIR") {
+        Ok(dir) => {
+            let path = temp.path().join("config.toml");
+            std::fs::write(
+                &path,
+                std::fs::read_to_string("config/defaults.toml")
+                    .unwrap()
+                    .replace("[ark]\n", &format!("[ark]\nmodel_dir = {dir:?}\n")),
+            )
+            .unwrap();
+            path.to_string_lossy().into_owned()
+        }
+        Err(_) => "config/defaults.toml".into(),
+    };
     let mut command = Command::cargo_bin("patronus-security-scanner").unwrap();
     command
-        .args([
-            "scan",
-            "file",
-            path,
-            "--config",
-            "config/defaults.toml",
-            "--output",
-        ])
+        .args(["scan", "file", path, "--config", &config, "--output"])
         .arg(&output)
         .args([
             "--progress",

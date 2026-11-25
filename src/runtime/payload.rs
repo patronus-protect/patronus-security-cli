@@ -228,8 +228,12 @@ impl PayloadScan<'_> {
         };
         // A verdict without evidence spans still names its chunk: every other chunk
         // was classified on its own, so masking the whole field would hide text the
-        // scanner judged separately.
-        if classification.evidence.is_empty() {
+        // scanner judged separately. Attack-class evidence marks the words a rule
+        // matched, not the instruction's extent (its payload may follow them), so an
+        // attack finding masks its chunk; on-demand refinement then restores only the
+        // parts the full pipeline approves in context.
+        let attack = crate::config::is_attack_class(category);
+        if attack || classification.evidence.is_empty() {
             push(
                 chunk_start,
                 chunk_start + text.len(),
@@ -244,6 +248,9 @@ impl PayloadScan<'_> {
                 || !valid_confidence(span.confidence)
             {
                 return Err(ScanError::Incomplete("invalid_evidence_span"));
+            }
+            if attack {
+                continue;
             }
             push(
                 chunk_start + span.start,

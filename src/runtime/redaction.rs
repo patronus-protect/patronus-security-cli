@@ -28,8 +28,72 @@ const MAX_CHECKS: usize = 96;
 /// Regions with at most this many words are not split further.
 const MIN_WORDS: usize = 8;
 
+/// Remembers the classifications of every text the refinement scanned, so the
+/// final tightening reads rule evidence without scanning again.
+struct Recording<'a> {
+    inner: &'a dyn ContentAnalyzer,
+    evidence: std::cell::RefCell<HashMap<blake3::Hash, Vec<Range<usize>>>>,
+}
+
+impl Recording<'_> {
+    fn record(&self, content: &str, outcome: &crate::ark::AnalysisOutcome) {
+        let spans = outcome
+            .classifications
+            .iter()
+            .filter(|c| c.matched && crate::config::is_attack_class(&c.category))
+            .flat_map(|c| c.evidence.iter().map(|e| e.start..e.end))
+            .collect();
+        self.evidence
+            .borrow_mut()
+            .insert(blake3::hash(content.as_bytes()), spans);
+    }
+}
+
+impl ContentAnalyzer for Recording<'_> {
+    fn prepare(&mut self) -> crate::error::Result<()> {
+        Ok(())
+    }
+    fn analyze(
+        &self,
+        input: crate::ark::ChunkInput<'_>,
+    ) -> crate::error::Result<crate::ark::AnalysisOutcome> {
+        let content = input.content;
+        let outcome = self.inner.analyze(input.clone())?;
+        self.record(content, &outcome);
+        Ok(outcome)
+    }
+    fn analyze_scoped(
+        &self,
+        input: crate::ark::ChunkInput<'_>,
+        scope: &str,
+    ) -> crate::error::Result<crate::ark::AnalysisOutcome> {
+        let content = input.content;
+        let outcome = self.inner.analyze_scoped(input.clone(), scope)?;
+        self.record(content, &outcome);
+        Ok(outcome)
+    }
+    fn analyze_user_prompt(
+        &self,
+        input: crate::ark::ChunkInput<'_>,
+    ) -> crate::error::Result<crate::ark::AnalysisOutcome> {
+        self.inner.analyze_user_prompt(input)
+    }
+    fn analyze_local(
+        &self,
+        input: crate::ark::ChunkInput<'_>,
+        scope: Option<&str>,
+    ) -> crate::error::Result<crate::ark::AnalysisOutcome> {
+        let content = input.content;
+        let outcome = self.inner.analyze_local(input.clone(), scope)?;
+        self.record(content, &outcome);
+        Ok(outcome)
+    }
+}
+
 struct Refiner<'a> {
-    analyzer: &'a dyn ContentAnalyzer,
+    analyzer: &'a Recording<'a>,
+    /// Rule evidence of attack classes found while narrowing, in field offsets.
+    evidence: Vec<Range<usize>>,
     chunking: &'a ChunkingConfig,
     deadline: Instant,
     checks: usize,
@@ -67,6 +131,22 @@ impl Refiner<'_> {
         Some(result)
     }
 
+    /// [`Self::flagged`] for one part of the field, keeping the rule evidence
+    /// found in it at its position in the field.
+    fn flagged_at(&mut self, text: &str, part: Range<usize>) -> Option<bool> {
+        let flagged = self.flagged(&text[part.clone()]);
+        let key = blake3::hash(text[part.clone()].as_bytes());
+        if let Some(spans) = self.analyzer.evidence.borrow().get(&key) {
+            self.evidence.extend(
+                spans
+                    .iter()
+                    .filter(|e| e.start < e.end && e.end <= part.len())
+                    .map(|e| part.start + e.start..part.start + e.end),
+            );
+        }
+        flagged
+    }
+
     fn flagged(&mut self, text: &str) -> Option<bool> {
         self.scan(text, true)
             .and_then(|result| match result.verdict {
@@ -87,13 +167,13 @@ impl Refiner<'_> {
         let Some((left, right)) = split(text, region.clone()) else {
             return;
         };
-        let left_flagged = self.flagged(&text[left.clone()]);
-        let right_flagged = self.flagged(&text[right.clone()]);
+        let left_flagged = self.flagged_at(text, left.clone());
+        let right_flagged = self.flagged_at(text, right.clone());
         let parts: Vec<(Range<usize>, bool)> = match (left_flagged, right_flagged) {
             // Neither half alone is flagged: the instruction may cross the cut, so try
             // the middle half once. If that loses the signal too, it needs its context.
             (Some(false), Some(false)) => match middle(text, region.clone()) {
-                Some(center) if self.flagged(&text[center.clone()]) == Some(true) => {
+                Some(center) if self.flagged_at(text, center.clone()) == Some(true) => {
                     vec![(center, true)]
                 }
                 _ => return,
@@ -121,6 +201,56 @@ impl Refiner<'_> {
             if flagged {
                 self.narrow(text, part, regions, fixed);
             }
+        }
+    }
+}
+
+impl Refiner<'_> {
+    /// After bisection, try to shrink each remaining region to the extent of
+    /// the rule evidence inside it. Attack findings mask their chunk because a
+    /// rule marks only the words it matched; the shrunk mask is kept only when
+    /// the full pipeline approves the masked field in context, so a payload
+    /// after the matched words keeps the wider mask.
+    fn tighten(
+        &mut self,
+        text: &str,
+        regions: &mut Vec<Range<usize>>,
+        fixed: &[RuntimeFinding],
+        finding: Range<usize>,
+    ) {
+        if Instant::now() >= self.deadline || self.checks >= MAX_CHECKS {
+            return;
+        }
+        let Some(hull) = self
+            .evidence
+            .iter()
+            .filter(|e| e.start >= finding.start && e.end <= finding.end)
+            .fold(None, |hull: Option<Range<usize>>, e| {
+                Some(hull.map_or(e.clone(), |h| h.start.min(e.start)..h.end.max(e.end)))
+            })
+        else {
+            return;
+        };
+        if !text.is_char_boundary(hull.start) || !text.is_char_boundary(hull.end) {
+            return;
+        }
+        // Every mask this finding left becomes the one evidence hull.
+        let mut candidate: Vec<_> = regions
+            .iter()
+            .filter(|r| r.end <= finding.start || r.start >= finding.end)
+            .cloned()
+            .collect();
+        candidate.push(hull);
+        candidate.sort_unstable_by_key(|r| r.start);
+        if candidate == *regions {
+            return;
+        }
+        let masked = masked_view(text, &candidate, fixed);
+        if self
+            .scan(&masked, false)
+            .is_some_and(|result| result.verdict == Some(Verdict::Approved))
+        {
+            *regions = candidate;
         }
     }
 }
@@ -276,8 +406,13 @@ pub fn refine_redaction(
         Value::Array(values) => values.iter().map(Value::as_str).collect::<Option<_>>()?,
         _ => return None,
     };
+    let recording = Recording {
+        inner: analyzer,
+        evidence: Default::default(),
+    };
     let mut refiner = Refiner {
-        analyzer,
+        analyzer: &recording,
+        evidence: Vec::new(),
         chunking,
         deadline,
         checks: 0,
@@ -321,8 +456,13 @@ pub fn refine_redaction(
         let mut regions = merged.clone();
         for region in merged {
             refiner.finding_checks = 0;
+            refiner.evidence.clear();
             // The durable same-policy finding already establishes danger.
-            refiner.narrow(text, region, &mut regions, &spans);
+            refiner.narrow(text, region.clone(), &mut regions, &spans);
+            // Only a finding that finished narrowing within its budget is tightened.
+            if refiner.finding_checks < CHECKS_PER_FINDING {
+                refiner.tighten(text, &mut regions, &spans, region);
+            }
         }
         cover_hidden_containers(text, &mut regions);
         output.push(Value::String(masked_view(text, &regions, &spans)));

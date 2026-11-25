@@ -83,12 +83,15 @@ user_prompt_pii = false
 # set. On developer text (code, docs, tool results) those cuts flagged 8 to 206
 # of 1,109 benign texts per class (tool_poisoning and agent_config_tampering
 # about 17-19 %). The detect cuts below allow at most one false positive per
-# class on that set; the models' clear cuts stay Ark's. Attack classes other
+# class on that set; the models' clear cuts stay Ark's, except for injection:
+# its model's clear cut (Ark's 1 % FPR cut) cleared 116 of 229 injection attacks
+# before Wolf could see them, so it is off and Wolf answers what the rules leave
+# undecided. Attack classes other
 # than injection also clear text without a rule signal (rules score below
 # 0.05), so their models only judge what the rules found; injection keeps every
 # undecided input for its L1 model and, at L3, Wolf.
 [analysis.cascade]
-injection = { l1_detect_threshold = 8.5 }
+injection = { l1_detect_threshold = 8.5, l1_clear_enabled = false }
 jailbreak = { clear_threshold = 0.05, l1_detect_threshold = 6.0 }
 prompt_extraction = { clear_threshold = 0.05, l1_detect_threshold = 8.0 }
 tool_poisoning = { clear_threshold = 0.05, l1_detect_threshold = 1.5 }
