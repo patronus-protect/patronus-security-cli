@@ -18,6 +18,16 @@ export async function run(command, args, options) {
   } finally { clearTimeout(timer) }
 }
 
+/**
+ * Codex 0.164+ reports `<declaration hash>/<plugin content hash>` and trusts a hook only
+ * when each part is stored in its own field; older Codex reports a single hash.
+ */
+export function trustFields(currentHash) {
+  const split = currentHash.indexOf('/')
+  if (split < 0) return `trusted_hash = ${JSON.stringify(currentHash)}\n`
+  return `trusted_hash = ${JSON.stringify(currentHash.slice(0, split))}\ntrusted_content_hash = ${JSON.stringify(currentHash.slice(split + 1))}\n`
+}
+
 /** Trust only this test's generated hook definitions through Codex's own hashes. */
 export async function trustHooks(binary, cwd, env, persist = true) {
   const child = spawn(binary, ['app-server'], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] })
@@ -50,7 +60,7 @@ export async function trustHooks(binary, cwd, env, persist = true) {
     const result = await rpc('hooks/list', { cwds: [cwd] })
     const hooks = result.data.flatMap(entry => entry.hooks)
     if (!hooks.length) throw new Error('No test hooks discovered: ' + JSON.stringify(result))
-    const settings = hooks.map(hook => `\n[hooks.state.${JSON.stringify(hook.key)}]\nenabled = true\ntrusted_hash = ${JSON.stringify(hook.currentHash)}\n`).join('')
+    const settings = hooks.map(hook => `\n[hooks.state.${JSON.stringify(hook.key)}]\nenabled = true\n${trustFields(hook.currentHash)}`).join('')
     if (persist) await appendFile(join(env.CODEX_HOME, 'config.toml'), settings)
     else if (hooks.some(hook => !hook.enabled || hook.trustStatus !== 'trusted')) throw Error('Installed hooks are not trusted')
     return hooks.map(({ key, eventName, currentHash }) => ({ key, eventName, currentHash }))
