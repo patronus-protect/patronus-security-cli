@@ -182,6 +182,11 @@ var LocalClient = class {
     if (!record(value) || typeof value.scan_id !== "string" || value.scan_id.length > 256 || value.status !== "pending") throw failure();
     return { scan_id: value.scan_id, status: "pending" };
   }
+  /** Builds the per-surface analyzers of `host` in the background, so a session's first scans skip that cost. */
+  async warm(params, signal) {
+    const value = await this.rpc("warm", params, signal);
+    if (!record(value) || value.warming !== true) throw failure();
+  }
   async checkCommand(params, signal) {
     const value = await this.rpc("check_command", params, signal);
     if (!record(value) || value.category !== "shell_command" || !["approved", "dangerous", "unavailable"].includes(String(value.status)) || value.risk !== void 0 && value.risk !== "low" && value.risk !== "medium" || value.decision_score !== void 0 && typeof value.decision_score !== "number") throw failure();
@@ -877,6 +882,7 @@ import { promisify } from "node:util";
 
 // plugins/native/src/hosts/cursor.ts
 var cursorEvents = {
+  sessionStart: "SessionStart",
   beforeSubmitPrompt: "UserPromptSubmit",
   beforeReadFile: "PostToolUse",
   beforeShellExecution: "PreToolUse",
@@ -1620,7 +1626,7 @@ async function serveBroker(input) {
       };
     }
     if (request.method === "warm") {
-      void boot().catch(() => {
+      void boot().then(({ client: client2 }) => client2.warm({ session: sessions.capability(id2), host: config.host })).catch(() => {
       });
       return { warming: true };
     }

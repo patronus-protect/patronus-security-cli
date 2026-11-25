@@ -170,6 +170,13 @@ impl ContentAnalyzer for Inference {
             || self.scoped_scan(fallback, scope, &profile, true),
         )
     }
+    fn prepare_scope(&self, scope: &str) -> Result<()> {
+        let profile = self.scoped_profile(scope)?;
+        // The local route serves Local mode, Hybrid prompts and small results;
+        // API mode scans its L1 stages through the API route's analyzer.
+        let local = self.config.provider.mode != ProviderMode::Api;
+        self.scoped_analyzer(&profile, local).map(|_| ())
+    }
     fn analyze_local(&self, input: ChunkInput<'_>, scope: Option<&str>) -> Result<AnalysisOutcome> {
         match scope {
             Some(scope) => {
@@ -206,7 +213,7 @@ impl Inference {
         profile: &crate::plugin_policies::Profile,
         local: bool,
     ) -> Result<AnalysisOutcome> {
-        let cache_key = self.scoped_analyzer(scope, profile, local)?;
+        let cache_key = self.scoped_analyzer(profile, local)?;
         let scoped = self.scoped.borrow();
         let analyzer = &scoped[&cache_key];
         if scope.ends_with(".user_input") {
@@ -218,22 +225,26 @@ impl Inference {
 }
 
 impl Inference {
-    /// Builds, once per scope and route, the analyzer for a plugin policy.
+    /// Builds, once per effective configuration, the analyzer for a plugin policy.
     fn scoped_analyzer(
         &self,
-        scope: &str,
         profile: &crate::plugin_policies::Profile,
         local: bool,
     ) -> Result<String> {
-        let cache_key = format!("{scope}:{local}");
+        let mut config = profile.apply(&self.config);
+        config.provider.mode = if local {
+            ProviderMode::Local
+        } else {
+            ProviderMode::Api
+        };
+        // Keyed by the effective configuration, so surfaces with the same
+        // profile share one analyzer and are built (and warmed) only once.
+        let cache_key = serde_json::to_string(&config).map_err(|error| ScannerError::Config {
+            source_name: "plugin policy".into(),
+            message: error.to_string(),
+        })?;
         let mut scoped = self.scoped.borrow_mut();
         if !scoped.contains_key(&cache_key) {
-            let mut config = profile.apply(&self.config);
-            config.provider.mode = if local {
-                ProviderMode::Local
-            } else {
-                ProviderMode::Api
-            };
             let mut analyzer = Inference::new(&config)?;
             analyzer.prepare()?;
             scoped.insert(cache_key.clone(), Box::new(analyzer));

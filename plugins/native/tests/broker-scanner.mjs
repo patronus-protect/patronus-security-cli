@@ -23,7 +23,7 @@ if (args[0] === 'config') {
   const file = id => join(state, id + '.json')
   createInterface({ input: process.stdin }).on('line', line => {
     const { id, method, params } = JSON.parse(line)
-    appendFileSync(new URL('./rpc.jsonl', import.meta.url), JSON.stringify({ method, policy_scope: params.policy_scope }) + '\n')
+    appendFileSync(new URL('./rpc.jsonl', import.meta.url), JSON.stringify({ method, policy_scope: params.policy_scope, ...(method === 'warm' ? { params } : {}) }) + '\n')
     const reply = result => process.stdout.write(JSON.stringify({ id, result }) + '\n')
     process.stderr.write(canary)
     if (options.noise) { process.stdout.write(canary + '\n'); return }
@@ -31,6 +31,8 @@ if (args[0] === 'config') {
     if (method === 'hello') {
       reply({ protocol_version: 1, provider: options.helloProvider ?? 'local', scanner_version: '0.1.0', ark_version: options.arkVersion ?? '0.1.18', ready: true,
         runtime: { response_wait_ms: 0, request_timeout_ms: 1000, scan_timeout_ms: 60000, max_payload_bytes: options.payloadLimit ?? 10 * 1024 * 1024 } })
+    } else if (method === 'warm') {
+      reply({ warming: true })
     } else if (method === 'submit') {
       const scan_id = randomBytes(16).toString('hex')
       writeFileSync(file(scan_id), JSON.stringify({ ...params, readyAt: Date.now() + (options.delayMs ?? 0) }), { mode: 0o600 })

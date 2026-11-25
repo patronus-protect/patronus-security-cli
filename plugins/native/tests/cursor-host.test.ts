@@ -162,3 +162,10 @@ test('Cursor MCP results are submitted under the MCP policy scope', () => {
   assert.equal(mcpResult('claude', 'mcp__tracker__get_issue'), true)
   assert.equal(mcpResult('codex', 'MCP:get_issue'), false)
 })
+
+test('sessionStart warms the runtime without blocking the session', async () => {
+  const requests: unknown[] = []
+  const rpc = async (_config: unknown, request: unknown) => { requests.push(request); return { warming: true } }
+  assert.deepEqual(await handleHook('sessionStart', { ...common('sessionStart'), is_background_agent: false, composer_mode: 'agent' }, rpc), {})
+  assert.deepEqual(requests, [{ method: 'warm' }])
+})

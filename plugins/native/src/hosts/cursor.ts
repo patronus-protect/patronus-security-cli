@@ -12,6 +12,7 @@ import { CATEGORY_LABELS, type TextPayload } from '../../../deepseek/src/protoco
  * Fetch, Grep and MCP resource results expose no content to hooks and stay unscanned.
  */
 export const cursorEvents: Record<string, string> = {
+  sessionStart: 'SessionStart',
   beforeSubmitPrompt: 'UserPromptSubmit',
   beforeReadFile: 'PostToolUse',
   beforeShellExecution: 'PreToolUse',

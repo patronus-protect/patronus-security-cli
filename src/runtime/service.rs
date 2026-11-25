@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use super::protocol::{
     CheckCommandParams, Direction, LookupParams, PrepareDisclosureParams, ReadDisclosedParams,
-    RpcRequest, SubmitParams, PROTOCOL_VERSION,
+    RpcRequest, SubmitParams, WarmParams, PROTOCOL_VERSION,
 };
 use super::store::{NewJob, Store, StoreLimits};
 use super::worker::Worker;
@@ -102,6 +102,23 @@ impl Runtime {
                 )
             }
             "submit" => self.submit(params),
+            "warm" => {
+                let params: WarmParams =
+                    serde_json::from_value(params).map_err(|_| "invalid_params")?;
+                if !valid_session(&params.session)
+                    || !crate::plugin_policies::HOSTS.contains(&params.host.as_str())
+                {
+                    return Err("invalid_params".into());
+                }
+                self.worker
+                    .warm(
+                        crate::plugin_policies::SURFACES
+                            .into_iter()
+                            .map(|surface| format!("{}.{surface}", params.host)),
+                    )
+                    .map_err(|_| "worker_unavailable")?;
+                Ok(json!({"warming": true}))
+            }
             "check_command" => {
                 let params: CheckCommandParams =
                     serde_json::from_value(params).map_err(|_| "invalid_params")?;

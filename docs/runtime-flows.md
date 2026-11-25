@@ -70,6 +70,7 @@ Cursor names its own events; the hook bundle maps them onto the flows above
 
 | Cursor event | Handled as | Purpose |
 | --- | --- | --- |
+| `sessionStart` | `SessionStart` | Starts the session runtime and builds the analyzers in the background, so the first prompt and tool result skip the cold start. |
 | `beforeSubmitPrompt` | `UserPromptSubmit` | Prompt gate; `continue: false` blocks the prompt. |
 | `beforeShellExecution` | `PreToolUse` (Shell) | Shell gate (section 7): `deny` or `ask` with the hint as `user_message`. |
 | `beforeReadFile` | `PostToolUse` (Read) | Result gate for file content; a finding denies the read and the agent receives the receipt or the masked file. |
@@ -82,6 +83,7 @@ Cursor names its own events; the hook bundle maps them onto the flows above
 | Method | Caller | Effect |
 | --- | --- | --- |
 | `hello` | broker | Versions, provider and runtime limits. |
+| `warm` | broker | Builds the analyzers for the host's prompt, tool-result and MCP-result scopes while the worker is idle (sent after `SessionStart`); returns `{warming: true}` at once. |
 | `submit` | broker | Enqueues a `request` (prompt) or `response` (result) job; returns `pending` and a `scan_id`. |
 | `check_command` | broker | Classifies one shell command line before it runs (section 7); synchronous, nothing stored. |
 | `check` | broker | Job status; the original only for an approved response. |

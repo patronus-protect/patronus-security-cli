@@ -21,7 +21,7 @@
       "required": ["id", "method", "params"],
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "method": { "enum": ["hello", "submit", "check_command", "check", "read_redacted", "cancel", "prepare_disclosure", "read_disclosed"] },
+        "method": { "enum": ["hello", "submit", "warm", "check_command", "check", "read_redacted", "cancel", "prepare_disclosure", "read_disclosed"] },
         "params": { "type": "object" }
       },
       "allOf": [
@@ -32,6 +32,10 @@
         {
           "if": { "properties": { "method": { "const": "submit" } } },
           "then": { "properties": { "params": { "$ref": "#/$defs/submit" } } }
+        },
+        {
+          "if": { "properties": { "method": { "const": "warm" } } },
+          "then": { "properties": { "params": { "$ref": "#/$defs/warm" } } }
         },
         {
           "if": { "properties": { "method": { "const": "check_command" } } },
@@ -63,6 +67,19 @@
         "payload": { "$ref": "#/$defs/text_payload" }
       },
       "description": "The service additionally enforces byte limits on UTF-8 tool/call IDs and serialized payloads."
+    },
+    "warming": {
+      "type": "object", "additionalProperties": false, "required": ["warming"],
+      "properties": { "warming": { "const": true } }
+    },
+    "warm": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session", "host"],
+      "properties": {
+        "session": { "$ref": "#/$defs/session" },
+        "host": { "enum": ["claude", "codex", "deepseek", "cursor"] }
+      },
+      "description": "Prepares the analyzers of the host's three text surfaces while the worker is idle; answers {warming: true} at once."
     },
     "check_command": {
       "type": "object", "additionalProperties": false,
@@ -130,6 +147,7 @@
           { "$ref": "#/$defs/disclosure_offer" },
           { "$ref": "#/$defs/disclosure_state" },
           { "$ref": "#/$defs/command_verdict" },
+          { "$ref": "#/$defs/warming" },
           { "$ref": "#/$defs/unavailable" }
         ] }
       }
