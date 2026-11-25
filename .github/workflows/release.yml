@@ -25,7 +25,8 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # Playwright has no Chromium build for Ubuntu 26.04 (ubuntu-latest since November 2026).
+    runs-on: ubuntu-24.04
     env:
       DSH_SOURCE_ROOT: ${{ github.workspace }}/.harness
       PATRONUS_TEST_SCANNER: ${{ github.workspace }}/target/debug/patronus-security-scanner
