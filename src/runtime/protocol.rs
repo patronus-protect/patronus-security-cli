@@ -200,6 +200,14 @@ pub struct CheckCommandParams {
     pub repo_root: Option<String>,
 }
 
+/// Prepare the analyzers a host's surfaces scan with, before its first scan.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WarmParams {
+    pub session: String,
+    pub host: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LookupParams {

@@ -53,6 +53,8 @@ impl ContentAnalyzer for UserPromptAnalyzer<'_> {
 
 pub struct Worker {
     wake: mpsc::SyncSender<()>,
+    /// Policy scopes to prepare while no scan is waiting.
+    warm: Arc<Mutex<Vec<String>>>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -88,6 +90,8 @@ impl Worker {
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = stop.clone();
+        let warm = Arc::new(Mutex::new(Vec::<String>::new()));
+        let warming = warm.clone();
         let thread = thread::spawn(move || {
             let prepared = factory().and_then(|mut analyzer| {
                 analyzer
@@ -113,6 +117,15 @@ impl Worker {
                 let work = match next {
                     Ok(Some(work)) => work,
                     Ok(None) => {
+                        // Scans always come first; between them, build one scope's
+                        // analyzer so the first scan of that surface is warm.
+                        let scope = warming.lock().ok().and_then(|mut pending| pending.pop());
+                        if let Some(scope) = scope {
+                            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                analyzer.prepare_scope(&scope)
+                            }));
+                            continue;
+                        }
                         if receiver.recv_timeout(Duration::from_secs(1))
                             == Err(mpsc::RecvTimeoutError::Disconnected)
                         {
@@ -201,9 +214,24 @@ impl Worker {
         }
         Ok(Self {
             wake,
+            warm,
             stop,
             thread: Some(thread),
         })
+    }
+
+    /// Queue `scopes` to be prepared while the worker is idle; already queued
+    /// scopes are not added twice.
+    pub fn warm(&self, scopes: impl IntoIterator<Item = String>) -> RuntimeResult<()> {
+        if let Ok(mut pending) = self.warm.lock() {
+            for scope in scopes {
+                if !pending.contains(&scope) {
+                    // Popped last-in first-out: queue the first surface last.
+                    pending.insert(0, scope);
+                }
+            }
+        }
+        self.notify()
     }
 
     pub fn notify(&self) -> RuntimeResult<()> {

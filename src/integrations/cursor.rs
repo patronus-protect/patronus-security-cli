@@ -11,7 +11,8 @@ use crate::cli::{IntegrationAction, IntegrationArgs, IntegrationHost, Integratio
 use crate::error::{Result, ScannerError};
 
 /// Cursor events Patronus registers, with their hook timeouts in seconds.
-const EVENTS: [(&str, u64); 6] = [
+const EVENTS: [(&str, u64); 7] = [
+    ("sessionStart", 30),
     ("beforeSubmitPrompt", 90),
     ("beforeShellExecution", 30),
     ("beforeReadFile", 90),

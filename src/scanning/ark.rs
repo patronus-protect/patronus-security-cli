@@ -111,6 +111,11 @@ pub trait ContentAnalyzer {
     /// Analyze on this device only, never through the API. Redaction refinement
     /// re-scans fragments of text that is already dangerous and must not upload them.
     /// Analyzers without an API route are local already.
+    /// Build what scans of `scope` (`<host>.<surface>`) need, so its first scan
+    /// does not pay for it. Analyzers without scopes have nothing to build.
+    fn prepare_scope(&self, _scope: &str) -> Result<()> {
+        Ok(())
+    }
     fn analyze_local(&self, input: ChunkInput<'_>, scope: Option<&str>) -> Result<AnalysisOutcome> {
         match scope {
             Some(scope) => self.analyze_scoped(input, scope),

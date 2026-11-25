@@ -10,6 +10,7 @@
 - Plugin surfaces switch Wolf on or off (`wolf`) instead of the Injection/Threat L2/L3 assessments. API mode sends only Wolf's injection stage to the API, for text the local stages did not detect.
 - Cat receives the command's working directory, the user's home and repository root, plus the facts of the session's earlier commands.
 - Existing settings migrate on load: `prompt_injection` → `injection`, `jailbreak`, `prompt_extraction`, `tool_poisoning`; `threat` → `unsafe_action`, `harmful_content`, `exfiltration`, `toxic_language`; `l2` → `l3`; enabled injection assessments → `wolf = true`. Runtime plugins require Ark Core 0.1.18 and accept the new category names; L3 installations should run `assets prepare` to fetch Wolf Defender Edge.
+- Session start now also builds the analyzers for the host's prompt, tool-result and MCP-result scopes in the background (runtime RPC `warm`); surfaces with the same profile share one analyzer. Measured with the Claude hooks 4 s after `SessionStart`: the first prompt takes 0.16–0.18 s instead of 0.8–1.1 s and the first tool result 0.1 s instead of 1.05 s, at L1 and L3. Cursor registers a `sessionStart` hook for this; before, its first prompt paid the whole runtime start.
 
 ## 0.1.7 - 2026-11-13
 

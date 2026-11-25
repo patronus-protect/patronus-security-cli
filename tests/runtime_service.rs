@@ -330,3 +330,33 @@ fn check_command_accepts_harness_context_and_bounds_its_paths() {
     let reply = check(json!({"unknown": true}));
     assert!(reply.get("error").is_some(), "{reply}");
 }
+
+#[test]
+fn warm_accepts_known_hosts_and_rejects_anything_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = config();
+    config.ark.model_dir = Some(dir.path().join("models"));
+    let runtime = Runtime::start(config, &dir.path().join("state")).unwrap();
+    let reply = call(
+        &runtime,
+        "warm",
+        json!({"session": OWNER, "host": "cursor"}),
+    );
+    assert_eq!(reply["result"], json!({"warming": true}), "{reply}");
+    for params in [
+        json!({"session": OWNER, "host": "unknown"}),
+        json!({"session": "x", "host": "claude"}),
+        json!({"session": OWNER, "host": "claude", "surface": "user_input"}),
+    ] {
+        let reply = call(&runtime, "warm", params);
+        assert_eq!(reply["error"]["code"], "invalid_params", "{reply}");
+    }
+    // Scans still run after (and during) warming.
+    let submitted = call(
+        &runtime,
+        "submit",
+        json!({"session":OWNER,"policy_scope":"cursor.tool_result","direction":"response","tool":"Read","call_id":"w","payload":"plain text"}),
+    );
+    let id = submitted["result"]["scan_id"].as_str().unwrap().to_string();
+    assert_eq!(wait_result(&runtime, &id)["status"], "approved");
+}
