@@ -111,7 +111,7 @@ fn unknown_rules_fail_and_catalog_ids_are_unique() {
 
 #[test]
 fn ark_016_additions_are_in_the_settings_catalog_and_migrate_into_profiles() {
-    use patronus_ark::detectors::{dlp::dlp::DLP_PATTERNS, pii::pii::PII_PATTERNS};
+    use patronus_ark_core::detectors::{dlp::dlp::DLP_PATTERNS, pii::pii::PII_PATTERNS};
     use patronus_security_scanner::plugin_policies::Profile;
 
     let rules = policy::rules();

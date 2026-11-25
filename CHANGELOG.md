@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Upgrade the pinned local engine to `patronus-ark 0.1.18` (Ark 0.1.17 ships Wolf Defender v2.1, 0.1.18 builds Ark on Ark Core with one config and model cache, moves Wolf Defender to v2.2 and memory-maps ONNX weights). Ark replaced its `threat` category with eleven attack classes and reports many rules under them. Patronus keeps its categories and their detections: `prompt_injection` scans `injection`, `jailbreak`, `prompt_extraction` and `tool_poisoning` up to its level and, with L1 rules only, the classes its former rules moved to (`exfiltration`, `unsafe_action`, `memory_poisoning`, `agent_config_tampering`); `dlp` adds `exfiltration` and `unsafe_action` at L1; opt-in `threat` scans the threat model's classes. Results merge back into the Patronus category. The 1 MiB input and 10,000 evidence limits stay as before. Runtime plugins require Ark 0.1.18. Wolf and threat model caches from 0.1.16 are replaced the next time they are prepared; offline L2/L3 installations should run `assets prepare` before upgrading.
+
 ## 0.1.7 - 2026-11-13
 
 - Configure PII and DLP scoring independently (Strict, Balanced, Recall), globally or per plugin text surface; existing profiles inherit the global modes. Show scored-only rules as inactive in Strict. All native rules and PII/DLP modes stay local in every provider mode; only Wolf model stages use the API.

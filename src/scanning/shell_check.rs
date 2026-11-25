@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use patronus_ark::assets::SHELL_COMMAND_ASSET;
-use patronus_ark::detectors::shell::{ShellConfig, ShellRiskPipeline};
+use patronus_ark_core::detectors::shell::{ShellConfig, ShellRiskPipeline};
+use patronus_ark_core::warmup::{DownloadPolicy, WarmupOptions};
 use serde::Serialize;
 
 /// Commands longer than this are not a single command line; they are not classified.
@@ -53,17 +53,23 @@ pub fn model_directory(configured: Option<&Path>) -> Option<PathBuf> {
 }
 
 pub fn bundle_dir(model_dir: &Path) -> PathBuf {
-    model_dir.join(SHELL_COMMAND_ASSET.destination_path)
+    patronus_ark_core::warmup::shell_bundle_dir(model_dir)
 }
 
 pub fn assets_present(model_dir: &Path) -> bool {
-    patronus_ark::assets::shell_command_assets_present(model_dir)
+    patronus_ark_core::warmup::shell_assets_present(&ShellConfig::new(bundle_dir(model_dir)))
 }
 
 pub fn download_assets(model_dir: &Path) -> Result<(), String> {
-    patronus_ark::assets::download_shell_command_assets(model_dir)
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    let options = WarmupOptions {
+        download: DownloadPolicy::Missing,
+        ..WarmupOptions::default()
+    };
+    patronus_ark_core::warmup::prepare_shell_assets(
+        &ShellConfig::new(bundle_dir(model_dir)),
+        &options,
+    )
+    .map_err(|error| error.to_string())
 }
 
 /// Lazily loaded classifier. A missing or invalid bundle reports `unavailable` instead of failing
@@ -129,7 +135,7 @@ impl ShellCheck {
             .get_or_init(|| {
                 let config = ShellConfig::new(bundle_dir(dir));
                 let pipeline = ShellRiskPipeline::from_pinned_bundle_dir(
-                    &config.bundle_dir,
+                    &bundle_dir(dir),
                     &config.manifest_sha256,
                 )
                 .map_err(|_| "shell_model_invalid")?;
@@ -226,7 +232,8 @@ impl ShellCheck {
                     Ok(verdict) => verdict,
                     Err(_) => return CommandVerdict::unavailable("shell_policy_invalid"),
                 };
-                let flagged = verdict.decision != patronus_ark::detectors::shell::Decision::Allow;
+                let flagged =
+                    verdict.decision != patronus_ark_core::detectors::shell::Decision::Allow;
                 CommandVerdict {
                     status: if flagged { "dangerous" } else { "approved" },
                     category: "shell_command",

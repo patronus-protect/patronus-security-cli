@@ -4,7 +4,7 @@ use crate::{
     config::Config,
     error::Result,
 };
-use patronus_ark::detectors::{dlp::dlp::DLP_PATTERNS, pii::pii::PII_PATTERNS};
+use patronus_ark_core::detectors::{dlp::dlp::DLP_PATTERNS, pii::pii::PII_PATTERNS};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub struct Rule {
 
 /// PII/DLP inventory comes directly from the pinned Ark dependency. Injection
 /// metadata uses its canonical gate IDs (several patterns share one rule).
-/// Snapshot source: patronus-ark-core 0.1.16, detectors/injection/rules/*.json,
+/// Snapshot source: patronus-ark-core 0.1.18, detectors/injection/rules/*.json,
 /// MIT OR Apache-2.0. Refresh the metadata when upgrading the pinned dependency.
 fn all_modes() -> Vec<String> {
     ["strict", "balanced", "recall"]
@@ -68,9 +68,9 @@ pub fn rules() -> Vec<Rule> {
             default_enabled: false,
         });
     }
-    let defaults = patronus_ark::ScanGateMatrix::default();
+    let defaults = patronus_ark_core::cascade::ScanGateMatrix::default();
     for rule in &mut rules {
-        rule.default_enabled = defaults.native.allows_rule(&rule.id);
+        rule.default_enabled = defaults.allows_rule(&rule.id);
     }
     rules.sort_by(|a, b| (&a.category, &a.id).cmp(&(&b.category, &b.id)));
     rules

@@ -248,7 +248,7 @@ impl Config {
             )));
         }
         for category in &self.ark.categories {
-            ark_category(category).map_err(invalid)?;
+            ark_categories(category).map_err(invalid)?;
         }
         Ok(())
     }
@@ -276,12 +276,63 @@ pub fn user_root() -> Result<PathBuf> {
         .ok_or_else(|| ScannerError::Output("cannot resolve the user home directory".into()))
 }
 
-pub fn ark_category(value: &str) -> std::result::Result<patronus_ark::SecurityCategory, String> {
+/// Ark classes behind one of our scan categories.
+///
+/// Ark 0.1.18 split its old `injection`, `dlp` and `threat` categories into
+/// attack classes. Each of our categories keeps the detections it had on Ark
+/// 0.1.16 by requesting the classes its rules and model labels now report
+/// under; the results are merged back into our category.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArkClasses {
+    /// Scanned up to the category's configured level.
+    pub primary: &'static [patronus_ark_core::SecurityCategory],
+    /// Scanned with L1 rules only. Their old rules reported under this category,
+    /// but Ark 0.1.18 runs the threat model (formerly the opt-in `threat`
+    /// category) for `unsafe_action` at L2/L3.
+    pub l1_only: &'static [patronus_ark_core::SecurityCategory],
+}
+
+pub fn ark_categories(value: &str) -> std::result::Result<ArkClasses, String> {
+    use patronus_ark_core::SecurityCategory as Ark;
     match value {
-        "prompt_injection" | "injection" => Ok(patronus_ark::SecurityCategory::Injection),
-        "dlp" => Ok(patronus_ark::SecurityCategory::Dlp),
-        "pii" => Ok(patronus_ark::SecurityCategory::Pii),
-        "threat" => Ok(patronus_ark::SecurityCategory::Threat),
+        // Rules that reported under `injection` before 0.1.18; see Ark's
+        // detectors/injection/rules/rule_categories.json.
+        "prompt_injection" | "injection" => Ok(ArkClasses {
+            primary: &[
+                Ark::Injection,
+                Ark::Jailbreak,
+                Ark::PromptExtraction,
+                Ark::ToolPoisoning,
+            ],
+            l1_only: &[
+                Ark::Exfiltration,
+                Ark::UnsafeAction,
+                Ark::MemoryPoisoning,
+                Ark::AgentConfigTampering,
+            ],
+        }),
+        // Secret transfers moved to `exfiltration`; destructive operations,
+        // sensitive material and risky MCP calls to `unsafe_action`.
+        "dlp" => Ok(ArkClasses {
+            primary: &[Ark::Dlp],
+            l1_only: &[Ark::Exfiltration, Ark::UnsafeAction],
+        }),
+        "pii" => Ok(ArkClasses {
+            primary: &[Ark::Pii],
+            l1_only: &[],
+        }),
+        // The old threat model now runs under `unsafe_action`; its labels report
+        // under these classes. Its instruction-override label goes to
+        // `injection`, which `prompt_injection` scans with Wolf already.
+        "threat" => Ok(ArkClasses {
+            primary: &[
+                Ark::UnsafeAction,
+                Ark::HarmfulContent,
+                Ark::Exfiltration,
+                Ark::ToxicLanguage,
+            ],
+            l1_only: &[],
+        }),
         other => Err(format!("unsupported Ark category {other:?}")),
     }
 }

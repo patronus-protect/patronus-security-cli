@@ -1,4 +1,4 @@
-use patronus_ark::detectors::shell::{ShellConfig, ShellRiskPipeline};
+use patronus_ark_core::detectors::shell::{ShellConfig, ShellRiskPipeline};
 use patronus_security_scanner::shell_check::{self, ShellCheck};
 
 #[test]

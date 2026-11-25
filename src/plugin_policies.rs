@@ -20,9 +20,9 @@ pub struct Assessment {
 #[serde(deny_unknown_fields)]
 pub struct Profile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pii_mode: Option<patronus_ark::ScoreMode>,
+    pub pii_mode: Option<patronus_ark_core::native::ScoreMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dlp_mode: Option<patronus_ark::ScoreMode>,
+    pub dlp_mode: Option<patronus_ark_core::native::ScoreMode>,
     pub l1_rules: BTreeMap<String, bool>,
     pub injection: Assessment,
     pub threat: Assessment,
@@ -179,7 +179,8 @@ pub fn assess(mut outcome: crate::ark::AnalysisOutcome) -> crate::ark::AnalysisO
             .as_ref()
             .and_then(|decision| decision.get("decision_candidate"))
             .and_then(|candidate| {
-                serde_json::from_value::<patronus_ark::DecisionCandidate>(candidate.clone()).ok()
+                serde_json::from_value::<patronus_ark_core::DecisionCandidate>(candidate.clone())
+                    .ok()
             })
         else {
             continue;
