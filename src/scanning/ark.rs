@@ -365,7 +365,7 @@ fn classify(
                     .collect()
             })
             .unwrap_or_default();
-        evidence.sort_by(|a, b| (a.start, a.end).cmp(&(b.start, b.end)));
+        evidence.sort_by_key(|span| (span.start, span.end));
         let duration_ms = native.map_or(0.0, |result| result.duration_ms)
             + decision.map_or(0.0, |d| {
                 d.layers.iter().map(|layer| layer.duration_ms).sum()
