@@ -65,8 +65,10 @@ test('stale PreToolUse trust is diagnosed and explicit repair restores status re
     assert(pre)
     const text=await readFile(config,'utf8')
     // Reproduce a previously trusted hook whose definition changed during update.
-    assert(text.includes(pre.currentHash))
-    await writeFile(config,text.replace(pre.currentHash,'sha256:'+ '0'.repeat(64)))
+    // Codex 0.164+ stores the declaration part of `<declaration>/<content>` in trusted_hash.
+    const stored=pre.currentHash.split('/')[0]
+    assert(text.includes(stored))
+    await writeFile(config,text.replace(stored,'sha256:'+ '0'.repeat(64)))
     await fixture.exec('stale-trust', {bypassApprovals:true})
     assert(placeholder,'The original placeholder failure was not reproduced')
     const options={cwd:fixture.cwd,env:{...fixture.env,PATRONUS_CODEX_BIN:process.env.PATRONUS_CODEX_BIN}}

@@ -489,7 +489,18 @@ fn trust_hooks(document: &mut DocumentMut, hooks: &BTreeMap<String, String>) -> 
     for (key, hash) in hooks {
         let mut table = Table::new();
         table.insert("enabled", value(true));
-        table.insert("trusted_hash", value(hash));
+        // Codex 0.164+ reports `<declaration hash>/<plugin content hash>` and
+        // trusts a hook only when both parts are stored in their own fields.
+        // Older Codex reports one hash, which stays in `trusted_hash` alone.
+        match hash.split_once('/') {
+            Some((declaration, content)) => {
+                table.insert("trusted_hash", value(declaration));
+                table.insert("trusted_content_hash", value(content));
+            }
+            None => {
+                table.insert("trusted_hash", value(hash));
+            }
+        }
         hooks_state.insert(key, Item::Table(table));
     }
     Ok(())
@@ -670,6 +681,29 @@ mod tests {
         assert!(rendered.contains("[hooks.state.other]"));
         assert!(!rendered.contains("trusted_hash = \"old\""));
         assert_eq!(rendered.matches("trusted_hash = \"hash-").count(), 5);
+    }
+
+    #[test]
+    fn splits_content_bound_hashes_into_declaration_and_content_trust() {
+        let mut document = DocumentMut::new();
+        let hooks = BTreeMap::from([
+            (
+                expected_key("preToolUse"),
+                "sha256:decl/sha256:content".to_owned(),
+            ),
+            (expected_key("stop"), "sha256:legacy".to_owned()),
+        ]);
+        trust_hooks(&mut document, &hooks).unwrap();
+        let state = document["hooks"]["state"].as_table().unwrap();
+        let split = state[&expected_key("preToolUse")].as_table().unwrap();
+        assert_eq!(split["trusted_hash"].as_str(), Some("sha256:decl"));
+        assert_eq!(
+            split["trusted_content_hash"].as_str(),
+            Some("sha256:content")
+        );
+        let legacy = state[&expected_key("stop")].as_table().unwrap();
+        assert_eq!(legacy["trusted_hash"].as_str(), Some("sha256:legacy"));
+        assert!(!legacy.contains_key("trusted_content_hash"));
     }
 
     #[test]
