@@ -77,22 +77,28 @@ user_prompt_pii = false
 
 # Cascade cuts per category (Ark defaults when unset): detect_threshold and
 # clear_threshold of the rules, l1_detect_threshold, l1_clear_threshold and
-# l1_clear_enabled of the L1 model.
-# Attack classes other than injection: text without a rule signal (score below
-# 0.05) is clear, so their L1 models only judge what the rules found. Without
-# this cut the L1 models flagged plain code and security docs in the hook QA.
-# injection keeps every undecided input for its L1 model and Wolf.
+# l1_clear_enabled of the L1 model (logit scale).
+#
+# Ark Core's built-in L1 models detect at their 0.1 % FPR cut on Ark's benign
+# set. On developer text (code, docs, tool results) those cuts flagged 8 to 206
+# of 1,109 benign texts per class (tool_poisoning and agent_config_tampering
+# about 17-19 %). The detect cuts below allow at most one false positive per
+# class on that set; the models' clear cuts stay Ark's. Attack classes other
+# than injection also clear text without a rule signal (rules score below
+# 0.05), so their models only judge what the rules found; injection keeps every
+# undecided input for its L1 model and, at L3, Wolf.
 [analysis.cascade]
-jailbreak = { clear_threshold = 0.05 }
-prompt_extraction = { clear_threshold = 0.05 }
-tool_poisoning = { clear_threshold = 0.05 }
-exfiltration = { clear_threshold = 0.05 }
-agent_config_tampering = { clear_threshold = 0.05 }
-memory_poisoning = { clear_threshold = 0.05 }
-unsafe_action = { clear_threshold = 0.05 }
-resource_exhaustion = { clear_threshold = 0.05 }
+injection = { l1_detect_threshold = 8.5 }
+jailbreak = { clear_threshold = 0.05, l1_detect_threshold = 6.0 }
+prompt_extraction = { clear_threshold = 0.05, l1_detect_threshold = 8.0 }
+tool_poisoning = { clear_threshold = 0.05, l1_detect_threshold = 1.5 }
+exfiltration = { clear_threshold = 0.05, l1_detect_threshold = 8.0 }
+agent_config_tampering = { clear_threshold = 0.05, l1_detect_threshold = 3.0 }
+memory_poisoning = { clear_threshold = 0.05, l1_detect_threshold = 2.0 }
+unsafe_action = { clear_threshold = 0.05, l1_detect_threshold = 6.5 }
+resource_exhaustion = { clear_threshold = 0.05, l1_detect_threshold = 2.5 }
 harmful_content = { clear_threshold = 0.05 }
-toxic_language = { clear_threshold = 0.05 }
+toxic_language = { clear_threshold = 0.05, l1_detect_threshold = 5.0 }
 
 [analysis.l1_detectors]
 # hidden_html_instruction = true

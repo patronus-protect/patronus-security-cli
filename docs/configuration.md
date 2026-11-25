@@ -27,7 +27,9 @@ The scanner embeds **Ark Core** (`patronus-ark-core`, MIT OR Apache-2.0). Catego
 - **L1**: Ark Core's rules (`ark.injection.*`, `ark.threat.*`, PII/DLP detectors) and, per attack class, Ark Core's built-in L1 text model. No downloads.
 - **L3**: L1 plus **Wolf Defender Edge** for `injection`. Prepare it once with `assets prepare`.
 
-Every attack class runs Ark Core's cascade. The rules decide first; a score at or above their detect cut is detected. For `injection`, an undecided input goes to the L1 model, which detects above its 0.1 % FPR cut and clears at its 1 % FPR cut; only what it leaves open reaches Wolf (at L3). For the other attack classes the defaults set a rules clear cut of `0.05`: text without a rule signal is clear, so their L1 models only judge what the rules found. All cuts are configurable per category:
+Every attack class runs Ark Core's cascade. The rules decide first; a score at or above their detect cut is detected. An undecided input goes to the class's L1 model, which clears at Ark's 1 % FPR cut; for `injection` what it leaves open reaches Wolf (at L3). For the other attack classes the defaults also set a rules clear cut of `0.05`: text without a rule signal is clear, so their L1 models only judge what the rules found.
+
+The L1 models' detect cuts are stricter than Ark's (`config/defaults.toml`). Ark calibrates them at 0.1 % false positives on its own benign set; on 1,109 benign developer texts (this repository's code and docs, Ark's benign and hard-negative fixtures, QA corpora) those cuts flagged 8 to 206 texts per class. The defaults allow at most one per class on that set. With them the default L1 profile flagged 2 of the 1,109 benign texts and caught 133 of 445 attacks (Ark 0.1.16: 1 and 97). All cuts are configurable per category:
 
 ```toml
 [analysis.l1_models]
