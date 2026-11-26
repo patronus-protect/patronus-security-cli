@@ -14,6 +14,7 @@ import type { TextPayload } from '../../../deepseek/src/protocol.ts'
  * carry no tool call ID, so one is derived from the session and the event timestamp.
  */
 export const copilotEvents: Record<string, string> = {
+  sessionStart: 'SessionStart',
   userPromptTransformed: 'UserPromptSubmit',
   preToolUse: 'PreToolUse',
   postToolUse: 'PostToolUse',
@@ -40,7 +41,7 @@ export function normalizeCopilot(event: string, value: unknown): { event: string
   if (!shared) return undefined
   if (!record(value) || typeof value.sessionId !== 'string') return { event: shared, input: value }
   const input: Record<string, unknown> = { ...value, hook_event_name: shared, session_id: value.sessionId, cwd: value.cwd }
-  if (event === 'userPromptTransformed') return { event: shared, input }
+  if (event === 'userPromptTransformed' || event === 'sessionStart') return { event: shared, input }
   input.tool_name = value.toolName
   input.tool_input = value.toolArgs
   // Pre and post hooks of one call have different timestamps; the ID only has to be unique per scan.

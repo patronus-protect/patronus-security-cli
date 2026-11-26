@@ -1,6 +1,14 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "node \"$PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot sessionStart",
+        "powershell": "node \"$env:PLUGIN_ROOT/scripts/patronus.mjs\" hook copilot sessionStart",
+        "timeoutSec": 30
+      }
+    ],
     "userPromptTransformed": [
       {
         "type": "command",

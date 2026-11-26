@@ -13,7 +13,8 @@ use crate::error::{Result, ScannerError};
 
 /// Copilot events Patronus registers, with their hook timeouts in seconds. `postToolUse` also
 /// answers Patronus' own tools, static audits included.
-const EVENTS: [(&str, u64); 5] = [
+const EVENTS: [(&str, u64); 6] = [
+    ("sessionStart", 30),
     ("userPromptTransformed", 90),
     ("preToolUse", 60),
     ("postToolUse", 330),

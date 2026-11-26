@@ -176,3 +176,10 @@ test('without a host session the MCP server answers Copilot with a non-error pla
   assert.equal(response.result.isError, false)
   assert.match(response.result.content[0].text, /result hook/)
 })
+
+test('sessionStart warms the runtime without blocking the session', async () => {
+  const requests: unknown[] = []
+  const rpc = async (_config: unknown, request: unknown) => { requests.push(request); return { warming: true } }
+  assert.deepEqual(await handleHook('sessionStart', { ...common, source: 'new', initialPrompt: injection }, rpc), {})
+  assert.deepEqual(requests, [{ method: 'warm' }])
+})
