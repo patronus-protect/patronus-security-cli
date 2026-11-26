@@ -75,6 +75,15 @@ function cursorCase(item, session, text) {
   if (item.tool?.startsWith('mcp__')) return post(`MCP:${item.tool.split('__').pop()}`, { content: [{ type: 'text', text }], isError: false })
 }
 
+/** Copilot sends native camelCase payloads (plugins/native/src/hosts/copilot.ts): one text result per tool. */
+const copilotCommon = session => ({ sessionId: session, timestamp: Date.now(), cwd: work })
+function copilotCase(item, session, text) {
+  if (item.event === 'UserPromptSubmit') return { event: 'userPromptTransformed', input: { ...copilotCommon(session), prompt: text, transformedPrompt: text } }
+  const toolName = item.tool === 'Read' ? 'view' : item.tool === 'Bash' ? 'bash' : item.tool === 'WebFetch' ? 'web_fetch'
+    : item.tool?.startsWith('mcp__') ? `${item.tool.split('__')[1]}-${item.tool.split('__').pop()}` : item.tool
+  return { event: 'postToolUse', input: { ...copilotCommon(session), toolName, toolArgs: {}, toolResult: { resultType: 'success', textResultForLlm: text } } }
+}
+
 async function teardown() {
   if (tornDown) return
   tornDown = true
@@ -82,6 +91,7 @@ async function teardown() {
   const env = await sandboxEnv(replayData).catch(() => process.env)
   await Promise.all(sessions.map(({ host, session }) => host === 'cursor'
     ? hook(host, 'stop', { ...cursorCommon('stop', session), status: 'completed', loop_count: 0 }, env).catch(() => {})
+    : host === 'copilot' ? hook(host, 'sessionEnd', { ...copilotCommon(session), reason: 'complete' }, env).catch(() => {})
     : hook(host, host === 'claude' ? 'SessionEnd' : 'Stop', { hook_event_name: host === 'claude' ? 'SessionEnd' : 'Stop', session_id: session, cwd: work }, env).catch(() => {})))
   if (!options.keep) await rm(sandbox, { recursive: true, force: true })
 }
@@ -95,7 +105,7 @@ const visibleText = output => {
   const texts = []
   const visit = (value, key) => {
     // Receipts (JSON) are model-facing data, not messages a person reads.
-    if (typeof value === 'string' && ['systemMessage', 'additionalContext', 'reason', 'permissionDecisionReason', 'user_message', 'additional_context'].includes(key) && !value.trimStart().startsWith('{')) texts.push(value)
+    if (typeof value === 'string' && ['systemMessage', 'additionalContext', 'reason', 'permissionDecisionReason', 'user_message', 'additional_context', 'modifiedTransformedPrompt'].includes(key) && !value.trimStart().startsWith('{')) texts.push(value)
     else if (value && typeof value === 'object') for (const [child, item] of Object.entries(value)) visit(item, child)
   }
   visit(output)
@@ -114,11 +124,12 @@ async function replay() {
     sessions.push({ host, session })
     const warmup = host === 'cursor'
       ? await hook(host, 'beforeReadFile', { ...cursorCommon('beforeReadFile', session), content: 'warm-up', file_path: join(work, 'warm-up.txt'), attachments: [], tool_use_id: 'call-warmup' }, env)
+      : host === 'copilot' ? await hook(host, 'postToolUse', copilotCase({ tool: 'Read' }, session, 'warm-up').input, env)
       : await hook(host, 'PostToolUse', { hook_event_name: 'PostToolUse', session_id: session, cwd: work, tool_name: 'Read', tool_use_id: 'call-warmup', tool_input: {}, tool_response: 'warm-up' }, env)
     coldStart[host] = warmup.ms
     for (const item of corpus) {
       const text = item.text.repeat(item.repeat ?? 1)
-      const mapped = host === 'cursor' ? cursorCase(item, session, text) : { event: item.event, input: { hook_event_name: item.event, session_id: session, cwd: work,
+      const mapped = host === 'cursor' ? cursorCase(item, session, text) : host === 'copilot' ? copilotCase(item, session, text) : { event: item.event, input: { hook_event_name: item.event, session_id: session, cwd: work,
         ...(item.event === 'UserPromptSubmit' ? { prompt: text } : { tool_name: item.tool, tool_use_id: `call-${item.id}`, tool_input: {}, tool_response: text }) } }
       if (!mapped) { (uncovered[host] ??= []).push(item.id); continue }
       const result = await hook(host, mapped.event, mapped.input, env)
@@ -152,15 +163,16 @@ async function shellReplay() {
   for (const host of hosts) {
     const session = `qa-${runId}-${host}`
     for (const item of corpus) {
-      const event = host === 'cursor' ? 'beforeShellExecution' : 'PreToolUse'
+      const event = host === 'cursor' ? 'beforeShellExecution' : host === 'copilot' ? 'preToolUse' : 'PreToolUse'
       const input = host === 'cursor'
         ? { ...cursorCommon(event, session), command: item.command, cwd: work, sandbox: false, tool_use_id: `shell-${item.id}` }
+        : host === 'copilot' ? { ...copilotCommon(session), toolName: 'bash', toolArgs: { command: item.command, description: item.id } }
         : { hook_event_name: event, session_id: session, cwd: work, tool_name: 'Bash', tool_use_id: `shell-${item.id}`, tool_input: { command: item.command }, permission_mode: 'default' }
       const result = await hook(host, event, input, env)
       let output = {}
       try { output = JSON.parse(result.stdout.trim() || '{}') } catch {}
-      const permission = output.hookSpecificOutput?.permissionDecision ?? output.permission
-      const reason = output.hookSpecificOutput?.permissionDecisionReason ?? output.user_message ?? ''
+      const permission = output.hookSpecificOutput?.permissionDecision ?? output.permissionDecision ?? output.permission
+      const reason = output.hookSpecificOutput?.permissionDecisionReason ?? output.permissionDecisionReason ?? output.user_message ?? ''
       const decision = permission === 'ask' || /patronus_allow [a-f0-9]{32}/.test(reason) ? 'confirm' : permission === 'deny' ? 'block' : 'allow'
       rows.push({ host, id: item.id, expect: item.expect, attack: Boolean(item.attack), decision, ms: result.ms, score: Number(/score ([\d.]+)/.exec(reason)?.[1] ?? NaN) || null })
     }
@@ -314,6 +326,10 @@ async function hostSuites() {
   const cursor = await run(process.execPath, ['--test', '--test-reporter=tap', 'plugins/cursor/tests/bundle-contract.test.mjs'],
     { env: { ...process.env, PATH: hostPath(), PATRONUS_CURSOR_BINARY: bin('cursor-agent') }, timeout: 120_000 })
   out.cursor = { ...tapCounts(cursor.stdout), code: cursor.code, ms: cursor.ms, tail: (cursor.stdout + cursor.stderr).split('\n').filter(line => /^not ok|Error|assert/i.test(line)).slice(0, 30).join('\n') }
+  // Copilot runs offline against a scripted model: the real binary with the shipped plugin directory.
+  const copilot = await run(process.execPath, ['--test', '--test-reporter=tap', '--test-concurrency=1', 'plugins/copilot/tests/real-host.test.mjs'],
+    { env: { ...process.env, PATH: hostPath(), PATRONUS_COPILOT_BINARY: bin('copilot'), PATRONUS_SCANNER_BIN: scanner, PATRONUS_TEST_MODEL_DIR: join(qaHome, 'models') }, timeout: 900_000 })
+  out.copilot = { ...tapCounts(copilot.stdout), code: copilot.code, ms: copilot.ms, tail: (copilot.stdout + copilot.stderr).split('\n').filter(line => /^not ok|Error|assert/i.test(line)).slice(0, 30).join('\n') }
   // The suites build their own isolated environments and deliberately simulate outages, so their
   // journals are neither reachable nor representative; they count as pass/fail only.
   return { suites: out }

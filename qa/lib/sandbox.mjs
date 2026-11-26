@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { percentile, rate, run, scanner, sha256 } from './common.mjs'
 
-export const hosts = ['claude', 'codex', 'cursor']
+export const hosts = ['claude', 'codex', 'cursor', 'copilot']
 // PATRONUS_QA_HOST_BIN_DIR runs the QA against other host builds, e.g. a newer version installed in a scratch prefix.
 const hostBinDirs = [process.env.PATRONUS_QA_HOST_BIN_DIR, join(homedir(), '.local/bin')].filter(Boolean)
 export const bin = name => [...hostBinDirs.map(dir => join(dir, name)), `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find(existsSync) ?? name
@@ -15,6 +15,7 @@ const globalFiles = [
   '.claude/settings.json', '.claude/plugins/installed_plugins.json', '.claude/plugins/known_marketplaces.json',
   '.codex/config.toml', '.codex/hooks.json',
   '.cursor/hooks.json', '.cursor/mcp.json',
+  '.copilot/hooks/patronus-security.json', '.copilot/mcp-config.json',
 ].map(path => join(homedir(), path))
 
 /** Hashes of the global host config files plus each host's Patronus integration state. */

@@ -27,7 +27,7 @@ fn runtime_flows_document_every_event_method_and_status() {
         &defs["disclosure_state"]["properties"]["status"]["enum"],
     ));
     names.extend(["redacted", "unavailable", "confirmation_required"].map(String::from));
-    for plugin in ["claude", "codex", "cursor"] {
+    for plugin in ["claude", "codex", "cursor", "copilot"] {
         let hooks: serde_json::Value =
             serde_json::from_str(&read(&format!("plugins/{plugin}/hooks/hooks.json"))).unwrap();
         names.extend(hooks["hooks"].as_object().unwrap().keys().cloned());

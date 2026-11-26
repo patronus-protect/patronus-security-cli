@@ -3,7 +3,7 @@ use crate::{config::Config, policy::rules};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const HOSTS: [&str; 4] = ["claude", "codex", "deepseek", "cursor"];
+pub const HOSTS: [&str; 5] = ["claude", "codex", "deepseek", "cursor", "copilot"];
 pub const SURFACES: [&str; 3] = ["user_input", "tool_result", "mcp_result"];
 
 /// A model assessment of profiles saved before Ark Core 0.1.18. Read once by
