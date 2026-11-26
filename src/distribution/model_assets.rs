@@ -33,26 +33,11 @@ pub fn prepare(config: &mut Config) -> Result<()> {
     if config.ark.model_dir.is_none() {
         config.ark.model_dir = Some(default_directory()?);
     }
-    for profile in config.plugin_policies.values() {
-        for (category, assessment) in [
-            ("prompt_injection", &profile.injection),
-            ("threat", &profile.threat),
-        ] {
-            if !assessment.enabled {
-                continue;
-            }
-            if !config.ark.categories.iter().any(|c| c == category) {
-                config.ark.categories.push(category.into());
-            }
-            let level = config
-                .analysis
-                .level(category, &config.ark)
-                .max(&assessment.max_level)
-                .to_string();
-            config
-                .analysis
-                .category_levels
-                .insert(category.into(), level);
+    // A plugin surface with Wolf needs Wolf Edge even when the global level is L1.
+    if config.plugin_policies.values().any(|profile| profile.wolf) {
+        config.ark.max_level = "l3".into();
+        if !config.ark.categories.iter().any(|c| c == "injection") {
+            config.ark.categories.push("injection".into());
         }
     }
     eprintln!(
@@ -75,7 +60,7 @@ mod tests {
     use super::*;
     fn config(path: PathBuf, level: &str) -> crate::config::ArkConfig {
         crate::config::ArkConfig {
-            categories: vec!["prompt_injection".into()],
+            categories: vec!["injection".into()],
             max_level: level.into(),
             model_dir: Some(path),
             download_files: false,
@@ -92,10 +77,10 @@ mod tests {
         .unwrap());
     }
     #[test]
-    fn empty_model_folder_is_not_ready_for_l2() {
+    fn empty_model_folder_is_not_ready_for_wolf_at_l3() {
         let root = tempfile::tempdir().unwrap();
         assert!(!ArkAnalyzer::policy_assets_ready(
-            &config(root.path().into(), "l2"),
+            &config(root.path().into(), "l3"),
             &Default::default()
         )
         .unwrap());

@@ -16,7 +16,16 @@ import { SessionState, type SessionRuntime } from '../../deepseek/src/sessions.t
 import { StaticScanner } from '../../deepseek/src/static.ts'
 import { waitForScan } from '../../deepseek/src/wait.ts'
 import { autoRedact } from '../../deepseek/src/auto-redaction.ts'
-import { brokerFailure, CALL_TIMEOUT, failureReason, prepareBroker, privateDirectory, readFrame, readPrivate, record, unavailable, validRequest, writeFrame, type BrokerConfig, type BrokerRequest } from './broker.ts'
+import { SCAN_CATEGORIES, SCAN_LEVELS } from '../../deepseek/src/protocol.ts'
+import { homedir } from 'node:os'
+import { brokerFailure, CALL_TIMEOUT, failureReason, prepareBroker, privateDirectory, readFrame, readPrivate, record, repositoryRoot, unavailable, validRequest, writeFrame, type BrokerConfig, type BrokerRequest } from './broker.ts'
+
+/** Cat's harness context for one command: its working directory, the user's home and the repository root. */
+async function shellContext(cwd: string | undefined): Promise<{ cwd?: string; home?: string; repo_root?: string }> {
+  const home = homedir()
+  if (!cwd) return home ? { home } : {}
+  return { cwd, ...(home ? { home } : {}), ...(await repositoryRoot(cwd).then(root => root ? { repo_root: root } : {}, () => ({}))) }
+}
 
 const IDLE_MS = 30 * 60_000 // Greater than the maximum five-minute runtime scan deadline.
 /** How long an approval dialog opened by the PreToolUse hook may stay open. */
@@ -107,7 +116,9 @@ async function acquire(path: string, socketPath?: string, depth = 0): Promise<bo
 }
 
 function toml(value: unknown): string {
-  if (typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)) return JSON.stringify(value)
+  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value)
+  // Integers and the cascade cuts (probabilities and L1 model logits, which may be negative).
+  if (typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value))) return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(toml).join(', ')}]`
   if (record(value)) return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${toml(item)}`).join(',')}}`
   throw brokerFailure()
@@ -161,9 +172,9 @@ function scanResult(value: unknown, allowOriginal: boolean): JsonValue {
   if (Array.isArray(value.findings)) {
     const findings: JsonValue[] = []
     for (const item of value.findings.slice(0, 100)) {
-      if (!record(item) || typeof item.category !== 'string' || !['prompt_injection', 'injection', 'dlp', 'pii', 'threat'].includes(item.category)) return unavailable('invalid_scanner_response')
+      if (!record(item) || typeof item.category !== 'string' || !SCAN_CATEGORIES.includes(item.category)) return unavailable('invalid_scanner_response')
       const finding: Record<string, JsonValue> = { category: item.category }
-      if (item.level !== undefined) { if (typeof item.level !== 'string' || !['l1', 'l2', 'l3'].includes(item.level)) return unavailable('invalid_scanner_response'); finding.level = item.level }
+      if (item.level !== undefined) { if (typeof item.level !== 'string' || !SCAN_LEVELS.includes(item.level)) return unavailable('invalid_scanner_response'); finding.level = item.level }
       if (typeof item.confidence === 'number' && Number.isFinite(item.confidence) && item.confidence >= 0 && item.confidence <= 1) finding.confidence = item.confidence
       for (const key of ['start_byte', 'end_byte', 'field_id']) if (count(item[key])) finding[key] = item[key]
       findings.push(finding)
@@ -206,7 +217,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
       await privateDirectory(join(directory, 'scanner'))
       runtimeSessions = new SessionState({ ...frozen, stateDir: config.stateDir })
       const connected = await runtimeSessions.runtime(id, shutdown.signal)
-      if (connected.hello.ark_version !== '0.1.16') { await runtimeSessions.close(); throw brokerFailure('runtime_version_mismatch') }
+      if (connected.hello.ark_version !== '0.1.18') { await runtimeSessions.close(); throw brokerFailure('runtime_version_mismatch') }
       if (connected.hello.provider !== frozen.provider) { await runtimeSessions.close(); throw brokerFailure('runtime_start_failed') }
       return connected
     })()
@@ -230,7 +241,11 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
         message: 'Use a file_id returned by a static finding in this session.',
       }
     }
-    if (request.method === 'warm') { void boot().catch(() => {}); return { warming: true } }
+    if (request.method === 'warm') {
+      // Older runtimes have no `warm`; booting them is still worth it, so a refused warm-up is ignored.
+      void boot().then(({ client }) => client.warm?.({ session: sessions.capability(id), host: config.host })).catch(() => {})
+      return { warming: true }
+    }
     const { client, hello } = await boot().catch(error => { throw brokerFailure(failureReason(error) ?? 'runtime_start_failed') })
     if (signal.aborted) return unavailable('scan_timeout')
     const session = sessions.capability(id)
@@ -282,7 +297,7 @@ export async function serveBroker(input: BrokerConfig): Promise<void> {
       // Synchronous and stateless: the scanner classifies the command line, nothing is stored.
       const budget = AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs ?? hello.runtime.request_timeout_ms)])
       if (!client.checkCommand) return { status: 'unavailable', category: 'shell_command', reason: 'runtime_version_mismatch' }
-      return await client.checkCommand({ host: config.host, session, tool: request.tool, call_id: request.callId, command: request.command }, budget) as unknown as JsonValue
+      return await client.checkCommand({ host: config.host, session, tool: request.tool, call_id: request.callId, command: request.command, ...await shellContext(request.cwd) }, budget) as unknown as JsonValue
     }
     if (request.method !== 'request' && request.method !== 'response') throw brokerFailure()
     if (Buffer.byteLength(JSON.stringify(request.payload)) > hello.runtime.max_payload_bytes) return unavailable('payload_too_large')

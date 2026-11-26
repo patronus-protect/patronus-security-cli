@@ -40,7 +40,7 @@ fn clean(input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
             chunk_id: input.chunk_id.into(),
             file_id: input.file_id.into(),
             path: input.path.into(),
-            category: "prompt_injection".into(),
+            category: "injection".into(),
             source: "test".into(),
             level: "l1".into(),
             terminal: true,
@@ -523,4 +523,47 @@ fn redaction_refinement_scans_fragments_only_on_the_local_route() {
         .unwrap()
         .iter()
         .all(|fragment| fragment != text));
+}
+
+struct Warming(Arc<Mutex<Vec<String>>>);
+
+impl ContentAnalyzer for Warming {
+    fn prepare(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn prepare_scope(&self, scope: &str) -> Result<()> {
+        self.0.lock().unwrap().push(scope.into());
+        if scope.ends_with(".panics") {
+            panic!("scope preparation failed");
+        }
+        Ok(())
+    }
+
+    fn analyze(&self, input: ChunkInput<'_>) -> Result<AnalysisOutcome> {
+        clean(input)
+    }
+}
+
+#[test]
+fn warm_prepares_each_scope_once_in_order_and_survives_failures() {
+    let (_dir, store) = setup();
+    let prepared = Arc::new(Mutex::new(Vec::new()));
+    let seen = prepared.clone();
+    let config: Config = toml::from_str(DEFAULTS).unwrap();
+    let worker = Worker::start_with(store.clone(), config, POLICY.into(), move || {
+        Ok(Box::new(Warming(seen)))
+    })
+    .unwrap();
+    let scopes = ["claude.panics", "claude.user_input", "claude.panics"];
+    worker.warm(scopes.map(String::from)).unwrap();
+    wait_until(|| prepared.lock().unwrap().len() == 2);
+    assert_eq!(
+        *prepared.lock().unwrap(),
+        ["claude.panics", "claude.user_input"]
+    );
+    // A panicking preparation does not take the worker down.
+    let id = enqueue(&store, "hello");
+    worker.notify().unwrap();
+    assert_eq!(finished(&store, &id)["status"], "approved");
 }

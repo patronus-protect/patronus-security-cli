@@ -359,7 +359,7 @@ export async function handleHook(host: Host, hostEvent: string, hostValue: unkno
     if (command !== undefined) {
       if (!enabled('shell_command') || !command.trim()) return {}
       if (host === 'codex' && consumeCommandApproval(host, input.session_id, command)) { trace.outcome = 'override'; return {} }
-      const result = await scan({ method: 'command', tool: input.tool_name, callId: input.tool_use_id, command }) as unknown as CommandResult
+      const result = await scan({ method: 'command', tool: input.tool_name, callId: input.tool_use_id, command, cwd: input.cwd }) as unknown as CommandResult
       // Fail-open: an unavailable check never stops the user's command; the journal records why.
       if (!record(result) || result.status === 'unavailable') { traceFailure(trace, record(result) ? result.reason : 'invalid_scanner_response'); return {} }
       // Low lies within the model's 0.1% FPR threshold, where routine developer work scores.

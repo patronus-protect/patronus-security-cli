@@ -94,6 +94,12 @@ export class LocalClient implements RuntimeClient {
     return { scan_id: value.scan_id, status: 'pending' }
   }
 
+  /** Builds the per-surface analyzers of `host` in the background, so a session's first scans skip that cost. */
+  async warm(params: { session: string; host: string }, signal?: AbortSignal): Promise<void> {
+    const value = await this.rpc('warm', params, signal)
+    if (!record(value) || value.warming !== true) throw failure()
+  }
+
   async checkCommand(params: CommandParams, signal?: AbortSignal): Promise<CommandResult> {
     const value = await this.rpc('check_command', params, signal)
     if (!record(value) || value.category !== 'shell_command' || !['approved', 'dangerous', 'unavailable'].includes(String(value.status)) ||

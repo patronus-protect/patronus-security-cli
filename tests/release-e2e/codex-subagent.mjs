@@ -52,7 +52,7 @@ try{
   await writeFile(path,manifest)
   command=`${quote(process.execPath)} -e ${quote(`const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(counter)},'1');process.stdout.write(fs.readFileSync(${JSON.stringify(path)}));`)}`
   const config=join(fixture.env.CODEX_HOME,'config.toml')
-  const current=fixture.trusted.find(h=>h.key.startsWith('patronus-security@') && h.eventName==='preToolUse').currentHash
+  const current=fixture.trusted.find(h=>h.key.startsWith('patronus-security@') && h.eventName==='preToolUse').currentHash.split('/')[0] // declaration part; Codex 0.164+ appends /<content hash>
   const text=await readFile(config,'utf8');assert(text.includes(current))
   await writeFile(config,text.replace(current,'sha256:'+'0'.repeat(64)))
   // Allow the synthetic tool action, but do NOT bypass hook trust.

@@ -26,7 +26,7 @@ for (const wait of ['0','10000']) {
       return [done()]
     },{PATRONUS_RESPONSE_WAIT_MS:wait})
     try {
-      await writeFile(fixture.env.PATRONUS_CONFIG,'[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
+      await writeFile(fixture.env.PATRONUS_CONFIG,'[provider]\nmode="local"\n[ark]\ncategories=["injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
       const path=join(fixture.cwd,'manifest.toml')
       await writeFile(path,`version = "0.1.0"\nauthor = "${privateEmail}"\n`)
       command='cat '+quote(path)

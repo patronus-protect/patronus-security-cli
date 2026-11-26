@@ -11,12 +11,12 @@ const reply = (id, result) => process.stdout.write(JSON.stringify({ id, result }
 
 if (process.argv[2] === 'config') {
   process.stdout.write(JSON.stringify({ schema_version: 1, provider: { mode: 'local' },
-    ark: { max_level: 'l1', categories: ['prompt_injection'], download_files: false },
+    ark: { max_level: 'l1', categories: ['injection'], download_files: false },
     scan: {}, ignore: {}, chunking: {}, progress: {}, output: {}, support: {}, runtime: {} }));
 } else for await (const line of createInterface({ input: process.stdin })) {
   const { id, method, params = {} } = JSON.parse(line);
   if (method === 'hello') {
-    reply(id, { protocol_version: 1, provider: 'local', scanner_version: '0.1.0', ark_version: '0.1.16', ready: true,
+    reply(id, { protocol_version: 1, provider: 'local', scanner_version: '0.1.0', ark_version: '0.1.18', ready: true,
       runtime: { response_wait_ms: 5000, request_timeout_ms: 1000, scan_timeout_ms: 60000, max_payload_bytes: 10 * 1024 * 1024 } });
   } else if (method === 'submit') {
     const scan_id = randomBytes(16).toString('hex');

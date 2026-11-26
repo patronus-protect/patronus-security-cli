@@ -324,8 +324,9 @@ pub enum ProgressMode {
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MaxLevel {
+    /// Rules and Ark Core's built-in L1 models.
     L1,
-    L2,
+    /// L1 plus Wolf Defender Edge for injection, where the cascade escalates.
     L3,
 }
 
@@ -333,7 +334,6 @@ impl MaxLevel {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::L1 => "l1",
-            Self::L2 => "l2",
             Self::L3 => "l3",
         }
     }

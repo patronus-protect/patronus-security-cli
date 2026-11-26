@@ -255,7 +255,7 @@ fn handle(request: Request, host: &str, token: &str) -> Result<(u16, &'static st
         return Ok((
             200,
             "application/json",
-            json!({"config": config, "rules": crate::policy::rules(), "profiles": crate::plugin_policies::resolved(&config), "data_root": crate::config::user_root()?, "maintenance": {"cargo_install": crate::maintenance::cargo_install(), "standalone_install":crate::releases::standalone_install(),"repository":crate::releases::REPOSITORY}, "version": crate::VERSION, "ark_version": crate::ARK_VERSION, "shell_model_ready": crate::shell_check::model_directory(config.ark.model_dir.as_deref()).as_deref().is_some_and(crate::shell_check::assets_present), "revision": revision(&config)?})
+            json!({"config": config, "rules": crate::policy::rules(), "profiles": crate::plugin_policies::resolved(&config), "data_root": crate::config::user_root()?, "maintenance": {"cargo_install": crate::maintenance::cargo_install(), "standalone_install":crate::releases::standalone_install(),"repository":crate::releases::REPOSITORY}, "version": crate::VERSION, "ark_version": crate::ARK_VERSION, "shell_model_ready": crate::shell_check::model_directory(config.ark.model_dir.as_deref()).as_deref().is_some_and(crate::shell_check::assets_present), "wolf_model_ready": wolf_model_ready(&config), "revision": revision(&config)?})
                 .to_string(),
         ));
     }
@@ -553,6 +553,18 @@ fn revision(config: &Config) -> Result<String> {
 }
 fn fail(error: impl std::fmt::Display) -> ScannerError {
     ScannerError::Output(error.to_string())
+}
+
+/// Whether Wolf Defender Edge is prepared in the configured model folder, without
+/// loading or downloading it.
+fn wolf_model_ready(config: &crate::config::Config) -> bool {
+    let mut ark = config.ark.clone();
+    ark.max_level = "l3".into();
+    ark.categories = vec!["injection".into()];
+    if ark.model_dir.is_none() {
+        ark.model_dir = crate::model_assets::default_directory().ok();
+    }
+    crate::ark::ArkAnalyzer::policy_assets_ready(&ark, &config.analysis).unwrap_or(false)
 }
 
 #[cfg(test)]

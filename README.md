@@ -90,7 +90,7 @@ require an account for local protection.
 To pin a specific release, replace the version in this URL:
 
 ```sh
-curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.7/install.sh | sh
+curl -fsSL https://github.com/patronus-protect/patronus-security-cli/releases/download/v0.1.8/install.sh | sh
 ```
 
 Release checksums are available on the [GitHub Releases](https://github.com/patronus-protect/patronus-security-cli/releases) page for manual verification.
@@ -118,7 +118,7 @@ Onboarding guides you through a short setup:
 
 1. Sign in when you want cloud-backed features. Local protection works without an account.
 2. Choose Local, Hybrid or API processing.
-3. Patronus uses L3 analysis. For Local mode it measures a 256-token L3 check and recommends Hybrid when that takes more than 200 ms.
+3. Patronus uses L3 analysis: Ark Core's rules and L1 models, plus Wolf Defender Edge for injection the L1 stages leave undecided. For Local mode it measures Wolf Edge on 256 tokens and recommends Hybrid when that takes more than 200 ms.
 4. Run a visible injection check in the final processing mode.
 5. Choose Full protection, Scanner + skills without automatic hooks, or CLI only. For either agent integration, select the detected hosts you use.
 
@@ -194,7 +194,7 @@ The [runtime text contract](docs/runtime-text-contract.md) defines the text each
 
 To check a live Codex or Claude session, ask the agent to run `patronus-security-scanner probe` through its normal shell tool. The command prints only a fixed harmless marker. After a complete scan, the result hook returns `status=probe_scanned`, the scan verdict, coverage and host context in place of the raw tool output. Seeing the raw marker means the result was not withheld. This checks that shell-result path in the current session; it does not certify every host tool or future session. Runtime receipts include the observed host, hook event and text surface when the hook supplies them. `delivery=hook_requested_unverified` means the hook requested replacement; only a host-level test or observed model request can prove delivery.
 
-Patronus checks supported text for prompt injection, sensitive data and configured Ark classifications. Plugin protection covers user-prompt text, tool-result text and MCP text blocks. It does not scan tool requests, paths, metadata or media bytes.
+Patronus checks supported text for prompt injection, sensitive data and the configured Ark Core attack classes. Plugin protection covers user-prompt text, tool-result text and MCP text blocks. It does not scan tool requests, paths, metadata or media bytes.
 
 MCP appears in three distinct places: the Patronus tools expose explicit scans, pending-result checks and redacted reads; runtime integrations protect text returned by foreign MCP servers; and an explicit audit of a public MCP server is a remote scan. Public URLs use the rate-limited anonymous API when no account credential is available. MCP-server audits remain authenticated. File, directory and repository scans extract UTF-8/UTF-16 text plus text from PDF and DOCX files on-device. In hybrid mode, native rules and PII/DLP analysis stay local; only enabled Wolf model stages for files above 2048 tokens use the API. Add `--anonymous-api` only when you explicitly want to upload one complete TXT, Markdown, HTML, PDF, or DOCX document.
 
@@ -204,7 +204,7 @@ For exact behavior, see [configuration](docs/configuration.md), [privacy](docs/p
 
 ## License
 
-The Patronus Security CLI and its first-party integrations are the Apache-2.0-licensed community project. The CLI depends on the separately licensed first-party `patronus-ark` engine, which remains GPL-3.0-only and is explicitly approved by the repository's package-scoped license policy. Third-party components and model assets retain their own terms; see [licensing notes](docs/licensing.md), [`deny.toml`](deny.toml), and `THIRD_PARTY_NOTICES.md`.
+The Patronus Security CLI and its first-party integrations are the Apache-2.0-licensed community project. The CLI scans with the first-party Ark Core engine (`patronus-ark-core`, MIT OR Apache-2.0); the GPL-3.0-only `patronus-ark` gateway is not a dependency, and the license policy allows no GPL dependency. Third-party components and model assets retain their own terms; see [licensing notes](docs/licensing.md), [`deny.toml`](deny.toml), and `THIRD_PARTY_NOTICES.md`.
 
 
 ### Local rules, modes and shell policies

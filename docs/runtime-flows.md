@@ -22,7 +22,7 @@ flowchart LR
   end
   subgraph Local["patronus-security-scanner serve --stdio"]
     Runtime["Runtime service<br/>(RPC, policy fingerprint)"]
-    Worker["Worker<br/>(Ark L1 → L2 → L3)"]
+    Worker["Worker<br/>(Ark Core: rules → L1 model → Wolf Edge)"]
     Store[("Job store<br/>SQLite + 0600 payload files")]
     Cache[("Result cache<br/>config + payload hash")]
   end
@@ -70,6 +70,7 @@ Cursor names its own events; the hook bundle maps them onto the flows above
 
 | Cursor event | Handled as | Purpose |
 | --- | --- | --- |
+| `sessionStart` | `SessionStart` | Starts the session runtime and builds the analyzers in the background, so the first prompt and tool result skip the cold start. |
 | `beforeSubmitPrompt` | `UserPromptSubmit` | Prompt gate; `continue: false` blocks the prompt. |
 | `beforeShellExecution` | `PreToolUse` (Shell) | Shell gate (section 7): `deny` or `ask` with the hint as `user_message`. |
 | `beforeReadFile` | `PostToolUse` (Read) | Result gate for file content; a finding denies the read and the agent receives the receipt or the masked file. |
@@ -83,16 +84,23 @@ payloads carry no tool call ID, so the hook derives one from the event timestamp
 
 | Copilot event | Handled as | Purpose |
 | --- | --- | --- |
+| `sessionStart` | `SessionStart` | Boots the runtime and warms the session's surface analyzers. |
 | `userPromptTransformed` | `UserPromptSubmit` | Prompt gate; `modifiedTransformedPrompt` replaces what the model receives. |
 | `preToolUse` | `PreToolUse` | Shell gate for `bash`/`powershell` (section 7) and disclosure arming (section 5). |
 | `postToolUse` | `PostToolUse` | Result gate for every built-in and MCP tool (`textResultForLlm`); answers Patronus' own MCP tools. |
 | `postToolUseFailure` | `PostToolUseFailure` | Scans a failed tool's error text; it cannot be replaced, a finding adds a warning. |
+| `sessionEnd` | `SessionEnd` | Closes the broker and runtime session. |
+
+From Copilot 1.0.116, hooks from plugins (`--plugin-dir`, marketplace installs) run only in folders
+listed in `trustedFolders`; elsewhere Copilot skips them without a warning. The user-level hook file
+that `integration copilot install` writes (`~/.copilot/hooks/patronus-security.json`) is not gated.
 
 ### Runtime RPC methods
 
 | Method | Caller | Effect |
 | --- | --- | --- |
 | `hello` | broker | Versions, provider and runtime limits. |
+| `warm` | broker | Builds the analyzers for the host's prompt, tool-result and MCP-result scopes while the worker is idle (sent after `SessionStart`); returns `{warming: true}` at once. |
 | `submit` | broker | Enqueues a `request` (prompt) or `response` (result) job; returns `pending` and a `scan_id`. |
 | `check_command` | broker | Classifies one shell command line before it runs (section 7); synchronous, nothing stored. |
 | `check` | broker | Job status; the original only for an approved response. |
@@ -189,7 +197,7 @@ flowchart TD
   I -- no --> S["submit(direction=request)<br/>wait up to request_timeout_ms (30 s)"]
   S --> V{"Verdict"}
   V -- approved --> Send
-  V -- "dangerous: only injection / threat" --> W["Send with warning<br/>(model treats embedded instructions as data)"]
+  V -- "dangerous: only attack classes" --> W["Send with warning<br/>(model treats embedded instructions as data)"]
   V -- "dangerous: PII or DLP" --> X["Block before the model<br/>offer ignore_once (15 min, this chat and text)"]
   V -- "dangerous without named findings" --> Y["Block"]
   V -- "failed / unavailable / timeout" --> F["Send with warning (fail-open)"]
@@ -249,7 +257,7 @@ never a runtime `scan_id`.
 
 A user can let the agent see selected PII types from one redacted result, once.
 Only results whose every finding is PII qualify; with any prompt-injection, DLP
-or threat finding nothing becomes readable.
+or attack-class finding nothing becomes readable.
 
 ```mermaid
 sequenceDiagram
@@ -329,14 +337,15 @@ flowchart TD
 
 ## 7. Shell gate (before a command runs)
 
-CLI 0.1.7 uses Cat K26 (Ark 0.1.16) with bundled and user Cedar policies. `ask_behavior` maps Cat ask to low (default) or host approval; block continues to request approval. The optional `check_command.host` selects a complete per-host override, with omitted/unconfigured hosts using the global shell policy. See [Shell and Cedar configuration](configuration.md#shell-and-cedar). The older measured scores below describe Ark 0.1.13 and are not a K26 calibration claim.
+CLI 0.1.8 uses Cat K26 from Ark Core 0.1.18 (`Scanner::shell_verdict`) with bundled and user Cedar policies. `ask_behavior` maps Cat ask to low (default) or host approval; block continues to request approval. The optional `check_command.host` selects a complete per-host override, with omitted/unconfigured hosts using the global shell policy. See [Shell and Cedar configuration](configuration.md#shell-and-cedar).
 
 Every host checks a shell command line before it runs. The scanner classifies only the command
-string with Ark's `cat-shell-risk-commander` (L1, ~4.4 MB, prepared by `assets prepare`); it never
-executes, parses or expands it. Prompts and results never go through this model.
+string with Ark Core's `cat-shell-risk-commander` (L1, ~4.4 MB, prepared by `assets prepare`), plus
+the command's working directory, the user's home, the repository root and the facts of the session's
+earlier commands; it never executes, parses or expands it. Prompts and results never go through this model.
 
 The runtime keeps the model current by itself: when the bundle is missing or from another pinned
-revision (for example after an upgrade to a new Ark release), it downloads the pinned revision once
+revision (for example after an upgrade to a new Ark Core release), it downloads the pinned revision once
 in the background and answers `unavailable` with `shell_model_updating` until it is in place. A
 failed download is retried at most every 10 minutes.
 
@@ -352,19 +361,20 @@ flowchart LR
 
 | Score | Risk | Decision |
 | --- | --- | --- |
-| at or below `external_commands_1pct_fpr` (0.475) | none | Runs. |
-| above it, at or below `block_0_1pct_fpr` (2.518) | `low` | Runs. Routine developer work such as `npm install`, `git push --force` or `rm -rf build/` lands here or below. |
+| at or below `external_commands_1pct_fpr` (0.348) | none | Runs. |
+| above it, at or below `block_0_1pct_fpr` (2.296) | `low` | Runs. Routine developer work such as `npm install` (1.53), `rm -rf node_modules` (1.56) or `git push --force origin main` (1.80) lands here; `rm -rf build/` (0.04) runs without a finding. A bare `git push --force` scores 5.14 and asks. |
 | above `block_0_1pct_fpr` | `medium` | The user decides: Claude and Copilot `permissionDecision: "ask"` (Copilot denies it in prompt mode and autopilot), Cursor `permission: "ask"`, DeepSeek `ask` through its approval service. Codex rejects a hook `ask`, so the hook holds the command and issues `patronus_allow <token>`; only the user's next message can carry it, and it releases exactly that command once. |
 
 Patronus never blocks a command on its own. The thresholds are the two policies in the pinned
 model; a model without `block_0_1pct_fpr` keeps every flagged command at `medium`. Above it the
-scores do not separate attacks from destructive developer work well enough for a block tier:
-a reverse shell and `git reset --hard` score close together.
+scores rank attacks above destructive developer work (`git reset --hard` 2.56, a reverse shell
+11.72), but the QA corpus is too small to calibrate a block tier on.
 
-Measured scores (QA corpus `qa/hooks/shell.json`, Ark 0.1.13): ordinary commands and `npm install`
-stay at or below `block_0_1pct_fpr` and run; `rm -rf node_modules` 2.8 and `git reset --hard` 4.1
-are medium; exfiltration, reverse shells, `curl … | sh` and `sudo rm -rf /` score 6.4 to 15.5. A missing model or runtime
-fails open. The `shell_command` hook setting (`plugins hook shell_command false`) and a paused
+Measured scores (QA corpus `qa/hooks/shell.json`, 16 commands, Ark Core 0.1.18, run in `/work/repo`):
+ordinary commands (git, ls, tests, `cargo build`, a local `curl`) score −6.8 to −1.4 and run;
+`npm install` 1.53 and `rm -rf node_modules` 1.56 are `low` and run; `git reset --hard` 2.56 is
+`medium`; exfiltration, reverse shells, `curl … | sh` and `sudo rm -rf /` score 7.8 to 11.7. Scores are
+from `check_command` with `cwd`, `home` and `repo_root` set and no earlier commands. A missing model or runtime fails open. The `shell_command` hook setting (`plugins hook shell_command false`) and a paused
 chat turn the gate off.
 
 ## Receipt and disclosure statuses

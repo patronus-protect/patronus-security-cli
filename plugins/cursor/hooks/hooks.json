@@ -1,6 +1,12 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      {
+        "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor sessionStart",
+        "timeout": 30
+      }
+    ],
     "beforeSubmitPrompt": [
       {
         "command": "node \"${CURSOR_PLUGIN_ROOT}/scripts/patronus.mjs\" hook cursor beforeSubmitPrompt",

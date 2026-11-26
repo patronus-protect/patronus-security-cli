@@ -5,24 +5,96 @@ use patronus_security_scanner::{
 };
 
 #[test]
-fn validates_category_levels_and_l1_options_without_loading_models() {
+fn validates_categories_levels_and_l1_options_without_loading_models() {
     let mut config: Config = toml::from_str(DEFAULTS).unwrap();
-    config.ark.categories.push("threat".into());
-    assert!(config.validate().is_err());
-    config
-        .analysis
-        .category_levels
-        .insert("threat".into(), "l2".into());
     config.validate().unwrap();
-    config.analysis.l1.insert("pii".into(), false);
-    assert!(config.validate().is_err());
-    config
-        .analysis
-        .category_levels
-        .insert("pii".into(), "l3".into());
+    config.ark.categories.push("unsafe_action".into());
+    config.validate().unwrap();
+    config.ark.categories.push("threat".into());
+    assert!(
+        config.validate().is_err(),
+        "old names are migrated on load, not accepted"
+    );
+    config.ark.categories.pop();
+    config.ark.max_level = "l2".into();
+    assert!(config.validate().is_err(), "Ark Core has no L2");
+    config.ark.max_level = "l3".into();
+    config.validate().unwrap();
+    config.analysis.l1_models.insert("pii".into(), false);
+    assert!(
+        config.validate().is_err(),
+        "L1 models exist only for attack classes"
+    );
+    config.analysis.l1_models.clear();
+    config.analysis.l1_models.insert("jailbreak".into(), false);
     config.validate().unwrap();
     config.analysis.l1_detectors.insert("typo".into(), false);
     assert!(config.validate().is_err());
+}
+
+#[test]
+fn legacy_categories_levels_and_profiles_migrate_to_ark_core() {
+    let mut config: Config = toml::from_str(&format!(
+        "{DEFAULTS}\n[analysis.category_levels]\nprompt_injection = \"l2\"\n[analysis.confidence]\nthreat = 0.5\n"
+    ).replace("[analysis.cascade]\n# injection = { l1_clear_threshold = -2.0 }\n", ""))
+    .unwrap();
+    config.ark.categories = vec!["prompt_injection".into(), "dlp".into(), "threat".into()];
+    let mut profile =
+        patronus_security_scanner::plugin_policies::Profile::current(&config, "tool_result");
+    profile.injection = Some(
+        serde_json::from_value(serde_json::json!({"enabled": true, "max_level": "l2"})).unwrap(),
+    );
+    profile.threat = Some(
+        serde_json::from_value(serde_json::json!({"enabled": true, "max_level": "l3"})).unwrap(),
+    );
+    config
+        .plugin_policies
+        .insert("codex.tool_result".into(), profile);
+    config.migrate_legacy();
+    assert_eq!(
+        config.ark.categories,
+        [
+            "injection",
+            "jailbreak",
+            "prompt_extraction",
+            "tool_poisoning",
+            "dlp",
+            "unsafe_action",
+            "harmful_content",
+            "exfiltration",
+            "toxic_language"
+        ]
+    );
+    assert_eq!(
+        config.ark.max_level, "l3",
+        "an injection model level becomes Wolf"
+    );
+    let profile = &config.plugin_policies["codex.tool_result"];
+    assert!(profile.wolf && profile.injection.is_none() && profile.threat.is_none());
+    config.validate().unwrap();
+    let saved = toml::to_string(&config).unwrap();
+    for legacy in [
+        "category_levels",
+        "confidence",
+        "prompt_injection",
+        "threat =",
+    ] {
+        assert!(!saved.contains(legacy), "{legacy} is not written back");
+    }
+    // The 0.1.16 injection producer switch maps to Ark Core's injection producers.
+    config
+        .analysis
+        .l1_detectors
+        .insert("injection_l1".into(), false);
+    config.migrate_legacy();
+    assert_eq!(config.analysis.l1_detectors.get("injection_l1"), None);
+    assert!(!config.analysis.l1_detectors["injection_rule_catalog"]);
+    assert!(!config.analysis.l1_detectors["injection_structural"]);
+    config.validate().unwrap();
+    // Idempotent.
+    let before = config.ark.categories.clone();
+    config.migrate_legacy();
+    assert_eq!(config.ark.categories, before);
 }
 
 #[test]

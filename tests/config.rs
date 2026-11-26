@@ -62,9 +62,27 @@ fn redaction_hides_secret_like_keys_recursively() {
 }
 
 #[test]
-fn model_backed_threat_category_is_a_valid_explicit_selection() {
+fn every_ark_core_attack_class_is_a_valid_explicit_selection() {
     let mut config: Config = toml::from_str(DEFAULTS).unwrap();
-    config.ark.categories = vec!["threat".into()];
-    config.ark.max_level = "l2".into();
-    config.validate().expect("threat selection is supported");
+    config.ark.categories = [
+        "injection",
+        "jailbreak",
+        "prompt_extraction",
+        "tool_poisoning",
+        "agent_config_tampering",
+        "memory_poisoning",
+        "exfiltration",
+        "unsafe_action",
+        "resource_exhaustion",
+        "harmful_content",
+        "toxic_language",
+        "pii",
+        "dlp",
+    ]
+    .map(String::from)
+    .to_vec();
+    config.ark.max_level = "l3".into();
+    config.validate().expect("every class is supported");
+    config.ark.categories.push("dlp".into());
+    assert!(config.validate().is_err(), "duplicates are refused");
 }

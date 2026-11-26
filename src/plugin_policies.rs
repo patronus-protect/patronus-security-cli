@@ -6,13 +6,13 @@ use std::collections::BTreeMap;
 pub const HOSTS: [&str; 5] = ["claude", "codex", "deepseek", "cursor", "copilot"];
 pub const SURFACES: [&str; 3] = ["user_input", "tool_result", "mcp_result"];
 
+/// A model assessment of profiles saved before Ark Core 0.1.18. Read once by
+/// [`Profile::migrate_legacy`] and never written.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Assessment {
     pub enabled: bool,
     pub max_level: String,
-    /// Accepted only to migrate older configurations. Ark owns classifier
-    /// thresholds, so this value is never serialized or applied.
     #[serde(default, skip_serializing)]
     pub min_confidence: Option<f64>,
 }
@@ -20,12 +20,18 @@ pub struct Assessment {
 #[serde(deny_unknown_fields)]
 pub struct Profile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pii_mode: Option<patronus_ark::ScoreMode>,
+    pub pii_mode: Option<patronus_ark_core::native::ScoreMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dlp_mode: Option<patronus_ark::ScoreMode>,
+    pub dlp_mode: Option<patronus_ark_core::native::ScoreMode>,
     pub l1_rules: BTreeMap<String, bool>,
-    pub injection: Assessment,
-    pub threat: Assessment,
+    /// Wolf Defender Edge (L3) for `injection` on this surface, where the
+    /// cascade escalates.
+    #[serde(default)]
+    pub wolf: bool,
+    #[serde(default, skip_serializing)]
+    pub injection: Option<Assessment>,
+    #[serde(default, skip_serializing)]
+    pub threat: Option<Assessment>,
 }
 
 pub fn valid_scope(scope: &str) -> bool {
@@ -41,15 +47,6 @@ impl Profile {
         {
             return Err("Plugin policy must specify on/off for every known L1 rule".into());
         }
-        for assessment in [&self.injection, &self.threat] {
-            if !["l2", "l3"].contains(&assessment.max_level.as_str())
-                || assessment
-                    .min_confidence
-                    .is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value))
-            {
-                return Err("Assessment requires L2 or L3".into());
-            }
-        }
         Ok(())
     }
     /// Profiles saved before an Ark update lack rules the new catalog added. They get the rule's
@@ -60,23 +57,23 @@ impl Profile {
         }
     }
 
+    /// Profiles saved before Ark Core 0.1.18 assessed injection and threat
+    /// with L2/L3 models. Injection's model stage becomes Wolf Edge; the threat
+    /// model no longer exists (its classes run as L1 categories).
+    pub fn migrate_legacy(&mut self) {
+        if self
+            .injection
+            .take()
+            .is_some_and(|assessment| assessment.enabled)
+        {
+            self.wolf = true;
+        }
+        self.threat = None;
+    }
+
     /// Seed previously unconfigured scopes from the user's current settings.
     pub fn current(config: &Config, surface: &str) -> Self {
-        let category_enabled = |category: &str| {
-            config
-                .ark
-                .categories
-                .iter()
-                .any(|c| c == category || c == "injection" && category == "prompt_injection")
-        };
-        let assessment = |category: &str| {
-            let level = config.analysis.level(category, &config.ark);
-            Assessment {
-                enabled: category_enabled(category) && level != "l1",
-                max_level: if level == "l1" { "l2" } else { level }.into(),
-                min_confidence: None,
-            }
-        };
+        let category_enabled = |category: &str| config.ark.categories.iter().any(|c| c == category);
         Self {
             pii_mode: None,
             dlp_mode: None,
@@ -84,7 +81,6 @@ impl Profile {
                 .into_iter()
                 .map(|r| {
                     let enabled = category_enabled(&r.category)
-                        && config.analysis.l1.get(&r.category) != Some(&false)
                         && (surface != "user_input"
                             || r.category != "pii"
                             || config.analysis.user_prompt_pii)
@@ -96,54 +92,34 @@ impl Profile {
                     (r.id, enabled)
                 })
                 .collect(),
-            injection: assessment("prompt_injection"),
-            threat: assessment("threat"),
+            wolf: config.ark.max_level == "l3" && category_enabled("injection"),
+            injection: None,
+            threat: None,
         }
     }
-    pub fn l1_categories(&self) -> Vec<String> {
-        let inventory = rules();
-        let mut categories: Vec<String> = ["pii", "dlp", "prompt_injection"]
-            .into_iter()
-            .filter(|category| {
-                inventory.iter().any(|rule| {
-                    rule.category == *category && self.l1_rules.get(&rule.id) == Some(&true)
-                })
-            })
-            .map(String::from)
-            .collect();
-        // Keep one gated-off L1 pipeline to produce a complete, explicit no-match
-        // classification when the user has disabled every rule.
-        if categories.is_empty() {
-            categories.push("pii".into());
-        }
-        categories
-    }
+    /// The configuration one plugin surface scans with: the global categories,
+    /// L1 models and cuts, this profile's rules and modes, and Wolf when on.
     pub fn apply(&self, base: &Config) -> Config {
         let mut config = base.clone();
         config.plugin_policies.clear();
-        config.ark.categories = self.l1_categories();
-        config.ark.max_level = "l1".into();
+        config.ark.max_level =
+            if self.wolf && config.ark.categories.iter().any(|c| c == "injection") {
+                "l3"
+            } else {
+                "l1"
+            }
+            .into();
         config.analysis = crate::analysis_config::AnalysisConfig {
             pii_mode: self.pii_mode.unwrap_or(base.analysis.pii_mode),
             dlp_mode: self.dlp_mode.unwrap_or(base.analysis.dlp_mode),
             l1_rules: self.l1_rules.clone(),
+            l1_models: base.analysis.l1_models.clone(),
+            cascade: base.analysis.cascade.clone(),
+            l1_detectors: base.analysis.l1_detectors.clone(),
+            // Profiles gate PII on user input through their rules.
             user_prompt_pii: true,
             ..Default::default()
         };
-        for (category, rule) in [
-            ("prompt_injection", &self.injection),
-            ("threat", &self.threat),
-        ] {
-            if rule.enabled {
-                if !config.ark.categories.iter().any(|c| c == category) {
-                    config.ark.categories.push(category.into());
-                }
-                config
-                    .analysis
-                    .category_levels
-                    .insert(category.into(), rule.max_level.clone());
-            }
-        }
         config
     }
 }
@@ -163,34 +139,4 @@ pub fn resolved(config: &Config) -> BTreeMap<String, Profile> {
             })
         })
         .collect()
-}
-
-/// Scoped model policies consume Ark's calibrated candidate decision. The
-/// scanner never applies a second confidence threshold.
-pub fn assess(mut outcome: crate::ark::AnalysisOutcome) -> crate::ark::AnalysisOutcome {
-    for result in &mut outcome.classifications {
-        if !["l2", "l3"].contains(&result.level.as_str())
-            || !["prompt_injection", "threat"].contains(&result.category.as_str())
-        {
-            continue;
-        }
-        let Some(candidate) = result
-            .decision
-            .as_ref()
-            .and_then(|decision| decision.get("decision_candidate"))
-            .and_then(|candidate| {
-                serde_json::from_value::<patronus_ark::DecisionCandidate>(candidate.clone()).ok()
-            })
-        else {
-            continue;
-        };
-        result.source = candidate.source;
-        result.label = candidate.class_name;
-        result.confidence = candidate.confidence.clamp(0.0, 1.0);
-        result.matched = candidate.accepted;
-        if !result.matched {
-            result.evidence.clear()
-        }
-    }
-    outcome
 }

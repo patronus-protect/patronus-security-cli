@@ -1,5 +1,5 @@
 import type { HookDecision, HookInput, JsonValue } from '../types.ts'
-import type { TextPayload } from '../../../deepseek/src/protocol.ts'
+import { CATEGORY_LABELS, type TextPayload } from '../../../deepseek/src/protocol.ts'
 
 /**
  * Cursor hook contract (docs: cursor.com/docs/agent/hooks; verified against the cursor-agent
@@ -12,6 +12,7 @@ import type { TextPayload } from '../../../deepseek/src/protocol.ts'
  * Fetch, Grep and MCP resource results expose no content to hooks and stay unscanned.
  */
 export const cursorEvents: Record<string, string> = {
+  sessionStart: 'SessionStart',
   beforeSubmitPrompt: 'UserPromptSubmit',
   beforeReadFile: 'PostToolUse',
   beforeShellExecution: 'PreToolUse',
@@ -89,9 +90,7 @@ export function knownCursorResult(toolName: unknown, response: unknown): boolean
   return true
 }
 
-const categoryLabels: Record<string, string> = {
-  prompt_injection: 'prompt injection', injection: 'injection', dlp: 'sensitive data', pii: 'personal data', threat: 'threat',
-}
+const categoryLabels = CATEGORY_LABELS
 
 /** The receipt fields a person or the agent needs, without echoing the whole receipt. */
 function receiptSummary(text: string): { status: string; categories: string[]; scanId?: string; message?: string; ignoreOnce?: string; redactedAvailable?: boolean; result?: string } | undefined {

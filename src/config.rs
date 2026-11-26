@@ -148,11 +148,52 @@ impl Config {
         ) {
             config.output.root = user_root()?.join("output");
         }
-        for profile in config.plugin_policies.values_mut() {
-            profile.add_missing_rules();
-        }
+        config.migrate_legacy();
         config.validate()?;
         Ok(config)
+    }
+
+    /// Bring settings saved by earlier versions to the Ark Core model: old
+    /// category names, L2 levels and per-category levels. Idempotent; the next
+    /// save writes the migrated form.
+    pub fn migrate_legacy(&mut self) {
+        let legacy_levels = std::mem::take(&mut self.analysis.legacy_category_levels);
+        let legacy_l1 = std::mem::take(&mut self.analysis.legacy_l1);
+        // Ark 0.1.16 had one injection L1 producer; Ark Core splits it into the
+        // rule catalog and the structural checks.
+        if let Some(enabled) = self.analysis.l1_detectors.remove("injection_l1") {
+            for producer in ["injection_rule_catalog", "injection_structural"] {
+                self.analysis
+                    .l1_detectors
+                    .entry(producer.into())
+                    .or_insert(enabled);
+            }
+        }
+        self.analysis.legacy_confidence.clear();
+        // A category whose L1 was switched off had only its model stage; with
+        // Ark Core its rules and L1 model are what remain, so it stays on.
+        let _ = legacy_l1;
+        let wolf = self.ark.max_level == "l2"
+            || legacy_levels.iter().any(|(category, level)| {
+                matches!(category.as_str(), "prompt_injection" | "injection")
+                    && matches!(level.as_str(), "l2" | "l3")
+            });
+        if wolf {
+            self.ark.max_level = "l3".into();
+        }
+        let mut categories: Vec<String> = Vec::new();
+        for category in &self.ark.categories {
+            for migrated in migrate_category(category) {
+                if !categories.iter().any(|c| c == migrated) {
+                    categories.push(migrated.to_owned());
+                }
+            }
+        }
+        self.ark.categories = categories;
+        for profile in self.plugin_policies.values_mut() {
+            profile.migrate_legacy();
+            profile.add_missing_rules();
+        }
     }
 
     pub fn apply_scan_options(&mut self, options: &ScanOptions) -> Result<()> {
@@ -162,6 +203,7 @@ impl Config {
         }
         if !options.category.is_empty() {
             self.ark.categories.clone_from(&options.category);
+            self.migrate_legacy();
         }
         if let Some(level) = options.max_level {
             self.ark.max_level = level.as_str().into();
@@ -241,14 +283,19 @@ impl Config {
                     .into(),
             ));
         }
-        if !matches!(self.ark.max_level.as_str(), "l1" | "l2" | "l3") {
+        if !matches!(self.ark.max_level.as_str(), "l1" | "l3") {
             return Err(invalid(format!(
-                "ark.max_level must be l1, l2, or l3; got {}",
+                "ark.max_level must be l1 (rules and L1 models) or l3 (+ Wolf Edge); got {}",
                 self.ark.max_level
             )));
         }
+        let mut seen = Vec::new();
         for category in &self.ark.categories {
-            ark_category(category).map_err(invalid)?;
+            let parsed = scan_category(category).map_err(invalid)?;
+            if seen.contains(&parsed) {
+                return Err(invalid(format!("ark.categories lists {category} twice")));
+            }
+            seen.push(parsed);
         }
         Ok(())
     }
@@ -276,13 +323,51 @@ pub fn user_root() -> Result<PathBuf> {
         .ok_or_else(|| ScannerError::Output("cannot resolve the user home directory".into()))
 }
 
-pub fn ark_category(value: &str) -> std::result::Result<patronus_ark::SecurityCategory, String> {
-    match value {
-        "prompt_injection" | "injection" => Ok(patronus_ark::SecurityCategory::Injection),
-        "dlp" => Ok(patronus_ark::SecurityCategory::Dlp),
-        "pii" => Ok(patronus_ark::SecurityCategory::Pii),
-        "threat" => Ok(patronus_ark::SecurityCategory::Threat),
-        other => Err(format!("unsupported Ark category {other:?}")),
+/// A scan category: `pii`, `dlp` or one of Ark Core's attack classes.
+pub fn scan_category(
+    value: &str,
+) -> std::result::Result<patronus_ark_core::SecurityCategory, String> {
+    use patronus_ark_core::SecurityCategory as Ark;
+    value
+        .parse::<Ark>()
+        .ok()
+        .filter(|category| {
+            matches!(category, Ark::Pii | Ark::Dlp) || Ark::ATTACK_CLASSES.contains(category)
+        })
+        .ok_or_else(|| {
+            format!(
+                "unsupported category {value:?}; use pii, dlp or an Ark attack class ({})",
+                Ark::ATTACK_CLASSES.map(Ark::as_str).join(", ")
+            )
+        })
+}
+
+/// Whether a category is one of Ark's attack classes (not `pii` or `dlp`).
+pub fn is_attack_class(category: &str) -> bool {
+    category
+        .parse::<patronus_ark_core::SecurityCategory>()
+        .is_ok_and(|parsed| patronus_ark_core::SecurityCategory::ATTACK_CLASSES.contains(&parsed))
+}
+
+/// Categories of configurations written before Ark Core 0.1.18: the old names
+/// become the attack classes their rules and models report under now.
+fn migrate_category(category: &str) -> Vec<&str> {
+    match category {
+        "prompt_injection" | "prompt-injection" => {
+            vec![
+                "injection",
+                "jailbreak",
+                "prompt_extraction",
+                "tool_poisoning",
+            ]
+        }
+        "threat" => vec![
+            "unsafe_action",
+            "harmful_content",
+            "exfiltration",
+            "toxic_language",
+        ],
+        other => vec![other],
     }
 }
 

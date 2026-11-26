@@ -83,7 +83,7 @@ cannot pass a flow: the model-visible output and source execution count must mat
 produced by the release build. Publishing depends on the E2E job. The report is
 uploaded even on failure. This verifies that release candidate on the pinned
 hosts; it does not certify already running desktop sessions, other host versions,
-L2/L3 model latency, API-provider processing or every operating system.
+L3 (Wolf Defender Edge) model latency, API-provider processing or every operating system.
 
 ## Already running parent tasks
 

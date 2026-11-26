@@ -27,7 +27,7 @@ function revealScript(state, command) {
 async function piiFixture(state, options = {}) {
   let command
   const fixture = await nativeFixture(revealScript(state, () => command), { PATRONUS_RESPONSE_WAIT_MS: '20000' }, { captureHooks: true, ...options })
-  await writeFile(join(fixture.root, 'scanner.toml'), '[provider]\nmode = "local"\n[ark]\ncategories = ["prompt_injection", "pii"]\nmax_level = "l1"\ndownload_files = false\n')
+  await writeFile(join(fixture.root, 'scanner.toml'), '[provider]\nmode = "local"\n[ark]\ncategories = ["injection", "pii"]\nmax_level = "l1"\ndownload_files = false\n')
   const document = join(fixture.cwd, 'contact.txt')
   await writeFile(document, `Contact: ${email}, phone ${phone}.\n`)
   command = `cat ${quote(document)}`

@@ -21,7 +21,7 @@ async function fixture(): Promise<{ root: string; config: BrokerConfig }> {
   const cwd = join(root, 'project')
   await mkdir(cwd)
   const configPath = join(root, 'scanner.toml')
-  await writeFile(configPath, '[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
+  await writeFile(configPath, '[provider]\nmode="local"\n[ark]\ncategories=["injection","pii","dlp"]\nmax_level="l1"\ndownload_files=false\n')
   return { root, config: { host: 'codex', sessionId: crypto.randomUUID(), cwd, stateDir: join(root, 'state'), executable: installed, configPath, responseWaitMs: 0 } }
 }
 
@@ -179,6 +179,13 @@ test('warm starts the runtime without waiting for it', { timeout: 20_000 }, asyn
     const deadline = Date.now() + 10_000
     while (!(await calls()).some(row => row.args[0] === 'serve') && Date.now() < deadline) await delay(50)
     assert((await calls()).some(row => row.args[0] === 'serve'))
+    // Once booted, the runtime is asked to build the host's per-surface analyzers.
+    const warmed = () => readFile(join(root, 'rpc.jsonl'), 'utf8').then(text => text.includes('"method":"warm"'), () => false)
+    while (!(await warmed()) && Date.now() < deadline) await delay(50)
+    const rows = (await readFile(join(root, 'rpc.jsonl'), 'utf8')).split('\n').filter(Boolean).map(line => JSON.parse(line))
+    const warm = rows.find(row => row.method === 'warm')
+    assert.equal(warm?.params.host, config.host, JSON.stringify(rows))
+    assert.equal(typeof warm?.params.session, 'string')
   } finally { await hook(config, { method: 'close' }); await rm(root, { recursive: true, force: true }) }
 })
 

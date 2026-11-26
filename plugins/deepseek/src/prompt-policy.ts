@@ -1,11 +1,11 @@
-import type { ScanResult } from './protocol.ts'
+import { isAttackClass, type ScanResult } from './protocol.ts'
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const categories = (result: ScanResult): string[] =>
   Array.isArray(result.findings) ? result.findings.flatMap(finding => record(finding) && typeof finding.category === 'string' ? [finding.category] : []) : []
 
 /**
- * The user wrote or pasted their own prompt, so an injection finding there is the
+ * The user wrote or pasted their own prompt, so an attack-class finding there is the
  * user's decision: the prompt is sent with a warning. Sensitive data is blocked
  * before it leaves the device, and so is any other dangerous verdict without
  * named findings.
@@ -13,7 +13,7 @@ const categories = (result: ScanResult): string[] =>
 export function promptDecision(result: ScanResult): 'warn' | 'block' {
   const found = categories(result)
   return result.status === 'dangerous' && found.length > 0 &&
-    found.every(category => category === 'prompt_injection' || category === 'injection' || category === 'threat')
+    found.every(isAttackClass)
     ? 'warn' : 'block'
 }
 

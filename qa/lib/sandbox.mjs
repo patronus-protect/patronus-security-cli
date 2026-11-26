@@ -6,8 +6,10 @@ import { join } from 'node:path'
 import { percentile, rate, run, scanner, sha256 } from './common.mjs'
 
 export const hosts = ['claude', 'codex', 'cursor', 'copilot']
-export const bin = name => [join(homedir(), '.local/bin', name), `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find(existsSync) ?? name
-export const hostPath = () => `${join(homedir(), '.local/bin')}:${process.env.PATH}`
+// PATRONUS_QA_HOST_BIN_DIR runs the QA against other host builds, e.g. a newer version installed in a scratch prefix.
+const hostBinDirs = [process.env.PATRONUS_QA_HOST_BIN_DIR, join(homedir(), '.local/bin')].filter(Boolean)
+export const bin = name => [...hostBinDirs.map(dir => join(dir, name)), `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find(existsSync) ?? name
+export const hostPath = () => `${hostBinDirs.join(':')}:${process.env.PATH}`
 
 const globalFiles = [
   '.claude/settings.json', '.claude/plugins/installed_plugins.json', '.claude/plugins/known_marketplaces.json',

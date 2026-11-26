@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use super::protocol::{
     CheckCommandParams, Direction, LookupParams, PrepareDisclosureParams, ReadDisclosedParams,
-    RpcRequest, SubmitParams, PROTOCOL_VERSION,
+    RpcRequest, SubmitParams, WarmParams, PROTOCOL_VERSION,
 };
 use super::store::{NewJob, Store, StoreLimits};
 use super::worker::Worker;
@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 // Bump when approval semantics change, independently of the wire protocol.
 // Version 6 binds plugin text surfaces and confidence policies to durable jobs.
-const ANALYSIS_POLICY_VERSION: u32 = 9;
+const ANALYSIS_POLICY_VERSION: u32 = 10;
 
 pub struct Runtime {
     store: Arc<Mutex<Store>>,
@@ -22,6 +22,8 @@ pub struct Runtime {
     config: Config,
     fingerprint: String,
     shell: std::collections::BTreeMap<String, crate::shell_check::ShellCheck>,
+    /// Cat facts of each session's recent commands, passed as `prior_facts`.
+    shell_history: Mutex<crate::shell_check::ShellHistory>,
 }
 
 impl Runtime {
@@ -71,6 +73,7 @@ impl Runtime {
             config,
             fingerprint,
             shell,
+            shell_history: Mutex::default(),
         })
     }
 
@@ -99,6 +102,23 @@ impl Runtime {
                 )
             }
             "submit" => self.submit(params),
+            "warm" => {
+                let params: WarmParams =
+                    serde_json::from_value(params).map_err(|_| "invalid_params")?;
+                if !valid_session(&params.session)
+                    || !crate::plugin_policies::HOSTS.contains(&params.host.as_str())
+                {
+                    return Err("invalid_params".into());
+                }
+                self.worker
+                    .warm(
+                        crate::plugin_policies::SURFACES
+                            .into_iter()
+                            .map(|surface| format!("{}.{surface}", params.host)),
+                    )
+                    .map_err(|_| "worker_unavailable")?;
+                Ok(json!({"warming": true}))
+            }
             "check_command" => {
                 let params: CheckCommandParams =
                     serde_json::from_value(params).map_err(|_| "invalid_params")?;
@@ -107,6 +127,10 @@ impl Runtime {
                     || params.tool.len() > 512
                     || params.call_id.is_empty()
                     || params.call_id.len() > 512
+                    || [&params.cwd, &params.home, &params.repo_root]
+                        .into_iter()
+                        .flatten()
+                        .any(|path| path.len() > 4096)
                 {
                     return Err("invalid_params".into());
                 }
@@ -121,8 +145,25 @@ impl Runtime {
                     .shell
                     .get(params.host.as_deref().unwrap_or(""))
                     .unwrap_or(&self.shell[""]);
-                serde_json::to_value(shell.check(&params.command))
-                    .map_err(|_| "invalid_result".into())
+                let context = patronus_ark_core::detectors::shell::ShellContext {
+                    cwd: params.cwd.clone(),
+                    home: params.home.clone(),
+                    repo_root: params.repo_root.clone(),
+                    dialect: None,
+                };
+                let mut history = self
+                    .shell_history
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let (verdict, facts) = shell.check_in_session(
+                    &params.command,
+                    &context,
+                    history.prior(&params.session),
+                );
+                if let Some(facts) = facts {
+                    history.record(&params.session, facts);
+                }
+                serde_json::to_value(verdict).map_err(|_| "invalid_result".into())
             }
             "prepare_disclosure" => {
                 let params: PrepareDisclosureParams =

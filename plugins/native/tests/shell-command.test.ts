@@ -16,16 +16,17 @@ const hook = (host: Host, event: string, value: unknown, rpc: (config: any, requ
 const session = 'shell-session-0000000000000000000731'
 const pre = (tool_name: string, command: string) => ({ hook_event_name: 'PreToolUse', session_id: session, cwd: '/private/tmp', tool_name, tool_use_id: 'call-731', tool_input: { command }, permission_mode: 'default' })
 const cursorShell = (command: string) => ({ hook_event_name: 'beforeShellExecution', conversation_id: session, session_id: session, generation_id: 'g', model: 'm',
-  cursor_version: '2026.10.14-0f9edde', workspace_roots: ['/private/tmp'], user_email: null, transcript_path: null, command, cwd: '/private/tmp', sandbox: false, tool_use_id: 'call-731' })
+  cursor_version: '2026.11.19-f005e9d', workspace_roots: ['/private/tmp'], user_email: null, transcript_path: null, command, cwd: '/private/tmp', sandbox: false, tool_use_id: 'call-731' })
 const verdict = (status: string, risk?: string, decision_score?: number) => async (_config: unknown, request: any) =>
   request.method === 'command' ? { status, category: 'shell_command', ...(risk ? { risk } : {}), ...(decision_score ? { decision_score, threshold: 1.15 } : {}) } : { closed: true }
 
-test('every host sends exactly the shell command line to the check', async () => {
+test('every host sends exactly the shell command line and its working directory to the check', async () => {
   for (const [host, value] of [['claude', pre('Bash', 'npm test')], ['codex', pre('Bash', 'npm test')], ['cursor', cursorShell('npm test')]] as const) {
     const calls: any[] = []
     assert.deepEqual(await hook(host, value.hook_event_name, value, async (config, request) => { calls.push({ config, request }); return { status: 'approved', category: 'shell_command' } }),
       {})
-    assert.deepEqual(calls.map(call => call.request), [{ method: 'command', tool: host === 'cursor' ? 'Shell' : 'Bash', callId: 'call-731', command: 'npm test' }])
+    assert.deepEqual(calls.map(call => call.request), [{ method: 'command', tool: host === 'cursor' ? 'Shell' : 'Bash', callId: 'call-731', command: 'npm test', cwd: value.cwd }])
+    assert.ok(typeof value.cwd === 'string' && value.cwd.startsWith('/'), 'hooks always carry an absolute cwd')
     assert.equal(calls[0].config.sessionId, session)
   }
 })

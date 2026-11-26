@@ -26,7 +26,21 @@ export interface SubmitParams {
   payload: TextPayload
 }
 export interface JobParams { session: string; scan_id: string }
-export interface CommandParams { host?: string; session: string; tool: string; call_id: string; command: string }
+export interface CommandParams { host?: string; session: string; tool: string; call_id: string; command: string; cwd?: string; home?: string; repo_root?: string }
+/** Ark Core's attack classes; with `pii` and `dlp` they are the scanner's categories. */
+export const ATTACK_CLASSES = ['injection', 'jailbreak', 'prompt_extraction', 'tool_poisoning', 'agent_config_tampering', 'memory_poisoning',
+  'exfiltration', 'unsafe_action', 'resource_exhaustion', 'harmful_content', 'toxic_language'] as const
+export const SCAN_CATEGORIES: readonly string[] = ['pii', 'dlp', ...ATTACK_CLASSES]
+/** L1: rules and L1 models; L3: Wolf Defender Edge for injection. */
+export const SCAN_LEVELS: readonly string[] = ['l1', 'l3']
+export const isAttackClass = (category: unknown): boolean => typeof category === 'string' && (ATTACK_CLASSES as readonly string[]).includes(category)
+/** Readable category names for messages to people. */
+export const CATEGORY_LABELS: Record<string, string> = {
+  pii: 'personal data', dlp: 'sensitive data', injection: 'prompt injection', jailbreak: 'jailbreak attempt', prompt_extraction: 'prompt extraction',
+  tool_poisoning: 'tool poisoning', agent_config_tampering: 'agent configuration tampering', memory_poisoning: 'memory poisoning',
+  exfiltration: 'data exfiltration', unsafe_action: 'unsafe action', resource_exhaustion: 'resource exhaustion', harmful_content: 'harmful content',
+  toxic_language: 'toxic language',
+}
 /** Pre-execution shell command check; `risk` is set for a dangerous command. */
 export interface CommandResult { status: 'approved' | 'dangerous' | 'unavailable'; category: 'shell_command'; risk?: 'low' | 'medium'; decision_score?: number; threshold?: number; reason?: string }
 export interface ScanResult {
@@ -83,6 +97,8 @@ export interface RuntimeClient {
   cancel(params: JobParams, signal?: AbortSignal): Promise<unknown>
   /** Scanners before 0.1.10 do not offer it; callers then let the command run. */
   checkCommand?(params: CommandParams, signal?: AbortSignal): Promise<CommandResult>
+  /** Builds a host's per-surface analyzers in the background; older runtimes refuse it. */
+  warm?(params: { session: string; host: string }, signal?: AbortSignal): Promise<void>
   /** Only a trusted adapter calls these, after the host's own approval dialog. */
   prepareDisclosure?(params: DisclosureParams, signal?: AbortSignal): Promise<DisclosureOffer>
   readDisclosed?(params: DisclosedParams, signal?: AbortSignal): Promise<DisclosedResult>

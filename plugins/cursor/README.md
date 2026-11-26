@@ -39,6 +39,7 @@ The directory also works as a Cursor plugin (`.cursor-plugin/plugin.json`, `hook
 
 | Cursor hook | Patronus behavior |
 | --- | --- |
+| `sessionStart` | Starts the local scanner in the background, so the first prompt is not slowed by model loading. |
 | `beforeSubmitPrompt` | Scans the prompt; handles `patronus on`, `patronus off` and `patronus status`. |
 | `beforeShellExecution` | Checks the command line before it runs (ask). |
 | `beforeReadFile` | Scans file content before the agent receives it. |
