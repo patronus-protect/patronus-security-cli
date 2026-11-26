@@ -7,7 +7,7 @@
 //   PATRONUS_TEST_MODEL_DIR=~/.patronus-qa/models node --test plugins/copilot/tests/real-host.test.mjs
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
@@ -53,14 +53,18 @@ async function model(plan) {
 }
 
 /** One prompt-mode Copilot run in a fresh sandbox (short path: broker sockets must stay below 104 bytes). */
-async function copilot(prompt, plan, { files = {}, promptPii = false } = {}) {
+// `install`: 'plugin' loads plugins/copilot with --plugin-dir; 'user' writes the hook file `integration copilot install`
+// writes to $COPILOT_HOME/hooks. `trusted` adds the workspace to trustedFolders, as Copilot's first-run folder prompt does.
+async function copilot(prompt, plan, { files = {}, promptPii = false, install = 'plugin', trusted = true } = {}) {
   const root = await mkdtemp(join(process.platform === 'darwin' ? '/private/tmp' : '/tmp', 'pcp-'))
   const cwd = join(root, 'w')
-  await mkdir(join(root, 'h/.copilot'), { recursive: true })
+  await mkdir(join(root, 'h/.copilot/hooks'), { recursive: true })
   await mkdir(cwd)
+  if (trusted) await writeFile(join(root, 'h/.copilot/config.json'), JSON.stringify({ trustedFolders: [cwd] }))
+  if (install === 'user') await writeFile(join(root, 'h/.copilot/hooks/patronus-security.json'), JSON.stringify(userHookFile()))
   for (const [name, text] of Object.entries(files)) await writeFile(join(cwd, name), text)
   const config = join(root, 'scanner.toml')
-  await writeFile(config, `[provider]\nmode="local"\n[ark]\ncategories=["prompt_injection","pii","dlp"]\nmax_level="l3"\ndownload_files=false\nmodel_dir=${JSON.stringify(models)}\n` +
+  await writeFile(config, `[provider]\nmode="local"\n[ark]\ncategories=["injection","pii","dlp"]\nmax_level="l3"\ndownload_files=false\nmodel_dir=${JSON.stringify(models)}\n` +
     (promptPii ? '[analysis]\nuser_prompt_pii=true\n' : ''))
   const mcp = join(root, 'mcp.json')
   await writeFile(mcp, JSON.stringify({ mcpServers: { tracker: { type: 'stdio', command: process.execPath, args: [tracker], tools: ['*'] } } }))
@@ -73,7 +77,7 @@ async function copilot(prompt, plan, { files = {}, promptPii = false } = {}) {
   }
   try {
     const result = await new Promise(resolve => {
-      const child = spawn(binary, ['-p', prompt, '--allow-all-tools', '--session-id', randomUUID(), '--plugin-dir', pluginRoot, '--additional-mcp-config', `@${mcp}`, '--disable-builtin-mcps', '-s'],
+      const child = spawn(binary, ['-p', prompt, '--allow-all-tools', '--session-id', randomUUID(), ...(install === 'plugin' ? ['--plugin-dir', pluginRoot] : []), '--additional-mcp-config', `@${mcp}`, '--disable-builtin-mcps', '-s'],
         { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
       let stdout = '', stderr = ''
       child.stdout.on('data', chunk => { stdout += chunk })
@@ -84,6 +88,15 @@ async function copilot(prompt, plan, { files = {}, promptPii = false } = {}) {
     const tools = scripted.requests.at(-1)?.filter(message => message.role === 'tool').map(message => String(message.content)) ?? []
     return { ...result, requests: scripted.requests, tools, seen: JSON.stringify(scripted.requests) }
   } finally { await scripted.close(); await rm(root, { recursive: true, force: true }) }
+}
+
+/** The hook file `integration copilot install` writes (src/integrations/copilot.rs `hook_file`), pointing at this checkout. */
+function userHookFile() {
+  const plugin = JSON.parse(readFileSync(join(pluginRoot, 'hooks/hooks.json'), 'utf8'))
+  const runtime = join(pluginRoot, 'scripts/patronus.mjs')
+  const hooks = Object.fromEntries(Object.entries(plugin.hooks).map(([event, [entry]]) =>
+    [event, [{ type: 'command', command: `node "${runtime}" hook copilot ${event}`, timeoutSec: entry.timeoutSec }]]))
+  return { version: 1, disableAllHooks: false, hooks }
 }
 
 const sequence = calls => (_messages, turn) => calls[turn - 1]
@@ -140,4 +153,21 @@ test('a prompt with sensitive data is withheld from the model with an ignore_onc
   assert.ok(!run.seen.includes(iban), 'the IBAN reached the model')
   assert.match(run.seen, /Patronus withheld the user's message/)
   assert.match(run.seen, /ignore_once [A-Za-z0-9_.:-]+_[a-f0-9]{32}/)
+})
+
+test('the user-level hook file written by the CLI install protects an untrusted folder', { skip: missing, timeout: 300_000 }, async () => {
+  const run = await copilot('Read the notes.', cwd => sequence([{ name: 'view', args: { path: join(cwd, 'CONTRIBUTING.md') } }]),
+    { files: { 'CONTRIBUTING.md': injection }, install: 'user', trusted: false })
+  assert.equal(run.code, 0, run.stderr)
+  assert.ok(!run.seen.includes('IGNORE ALL PREVIOUS INSTRUCTIONS'), 'raw injection reached the model')
+  assert.match(run.tools[0], /"scan_id":"[a-f0-9]{32}"/)
+})
+
+// Drift detector: Copilot 1.0.116 runs plugin hooks only in trusted folders and skips them without a warning.
+// When this starts failing, Copilot changed the gate; update plugins/copilot/README.md.
+test('from Copilot 1.0.116 the plugin\'s hooks are skipped in an untrusted folder', { skip: missing ?? (before('1.0.116') ? `Copilot ${version} runs plugin hooks everywhere` : undefined), timeout: 300_000 }, async () => {
+  const run = await copilot('Read the notes.', cwd => sequence([{ name: 'view', args: { path: join(cwd, 'CONTRIBUTING.md') } }]),
+    { files: { 'CONTRIBUTING.md': injection }, trusted: false })
+  assert.equal(run.code, 0, run.stderr)
+  assert.ok(run.tools[0].includes('IGNORE ALL PREVIOUS INSTRUCTIONS'), 'the plugin hooks ran in an untrusted folder')
 })

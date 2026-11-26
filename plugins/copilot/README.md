@@ -4,7 +4,7 @@ Patronus Runtime Protection adds security hooks to GitHub Copilot CLI (`copilot`
 
 ## Protection level: full (tool and MCP results)
 
-Copilot hands every tool result to one hook as text (`textResultForLlm`), and the hook can replace it before the model sees it. The table was verified against the real `@github/copilot` 1.0.103 binary, re-checked with 1.0.106, 1.0.109 and 1.0.114, running offline with a scripted model ([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)):
+Copilot hands every tool result to one hook as text (`textResultForLlm`), and the hook can replace it before the model sees it. The table was verified against the real `@github/copilot` 1.0.103 binary, re-checked with 1.0.106, 1.0.109, 1.0.114 and 1.0.116, running offline with a scripted model ([hooks reference](https://docs.github.com/en/copilot/reference/hooks-reference)):
 
 | What reaches the agent | Copilot hook | Patronus behavior |
 | --- | --- | --- |
@@ -42,12 +42,15 @@ copilot plugin marketplace add patronus-protect/patronus-security-cli
 copilot plugin install patronus-security@patronus-local
 ```
 
+**Trusted folders (Copilot 1.0.116 and newer):** Copilot runs hooks from plugins (marketplace installs and `--plugin-dir`) only in folders listed in `trustedFolders` (`~/.copilot/config.json`); Copilot adds a folder there when you confirm its first-run trust prompt. In any other folder, for example `copilot -p` in CI or a script, it skips the plugin's hooks without a warning and Patronus is inactive. The hook file written by `integration copilot install` is not affected, so prefer that install where Copilot runs in untrusted folders.
+
 For a single session, `copilot --plugin-dir plugins/copilot` works too. Copilot 1.0.106 deprecates direct installs from a repository path or URL (`copilot plugin install owner/repo:path`); only `plugin@marketplace` installs will stay supported. Install it only one way; otherwise every hook runs twice.
 
 ## Hooks
 
 | Copilot hook | Patronus behavior |
 | --- | --- |
+| `sessionStart` | Starts the local scanner in the background, so the first prompt is not slowed by model loading. |
 | `userPromptTransformed` | Scans the prompt; handles `patronus on`, `patronus off` and `patronus status`. |
 | `preToolUse` | Checks shell command lines before they run (ask) and asks before a PII disclosure. |
 | `postToolUse` | Scans every tool and MCP result; answers Patronus' own MCP tools for this session. |
@@ -91,6 +94,6 @@ patronus-security-scanner integration copilot uninstall
 
 `disable` keeps the hook file but sets `disableAllHooks: true` in it, which switches off only the Patronus hooks.
 
-Requires GitHub Copilot CLI with hooks (the contract was verified with 1.0.103, 1.0.106, 1.0.109 and 1.0.114), Node.js 22.19 or newer, and the matching Patronus Security CLI release.
+Requires GitHub Copilot CLI with hooks (the contract was verified with 1.0.103, 1.0.106, 1.0.109, 1.0.114 and 1.0.116), Node.js 22.19 or newer, and the matching Patronus Security CLI release.
 
 Licensed under Apache-2.0. The release archive includes `LICENSE` and `THIRD_PARTY_NOTICES.md`.

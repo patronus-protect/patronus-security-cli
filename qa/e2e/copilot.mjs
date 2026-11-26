@@ -70,6 +70,8 @@ export async function copilotSession({ root, cwd, env, plugin, binary }) {
   const server = await chatServer(state)
   const home = join(root, 'home')
   await mkdir(join(home, '.copilot'), { recursive: true })
+  // Copilot 1.0.116 runs plugin hooks only in trusted folders; the first-run folder prompt adds the workspace here.
+  await writeFile(join(home, '.copilot/config.json'), JSON.stringify({ trustedFolders: [cwd] }))
   const mcpConfig = join(root, 'tracker-mcp.json')
   await writeFile(mcpConfig, JSON.stringify({ mcpServers: { tracker: { type: 'stdio', command: process.execPath, args: [trackerServer], tools: ['*'] } } }))
   const hostEnv = {
